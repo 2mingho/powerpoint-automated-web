@@ -5,4 +5,4 @@ numpy
 matplotlib
 wordcloud
 Pytz
-pptx
+python-pptx
