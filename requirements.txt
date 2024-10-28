@@ -1,0 +1,8 @@
+Flask
+Werkzeug
+pandas
+numpy
+matplotlib
+wordcloud
+Pytz
+pptx
