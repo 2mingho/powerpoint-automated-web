@@ -127,9 +127,10 @@ def process_report(csv_path, wordcloud_path):
     slide5 = prs.slides[4]
     for shape in slide5.shapes:
         if shape.has_text_frame:
-            for key, value in {"NUMB_PRENSA": platform_counts['Prensa Digital']}.items():
+            for key, value in {"NUMB_PRENSA": platform_counts.get('Prensa Digital', 0)}.items():
                 if key in shape.text:
                     report.set_text_style(shape, str(value), font_size=Pt(28))
+
     try:
         report.add_dataframe_as_table(slide5, top_influencers_prensa, Inches(2.65), Inches(2), Inches(8), Inches(4))
     except Exception as e:
