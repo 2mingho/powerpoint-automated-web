@@ -2,11 +2,19 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Descargar Reportes</title>
+    <title>Download Reports | Data Intel</title>
+    <link
+      rel="shortcut icon"
+      href="../static/img/Logo-Data-Intelligence_01.ico"
+      type="image/x-icon"
+    />
+    <link rel="stylesheet" href="../static/css/style.css" />
 </head>
 <body>
     <h1>Reportes generados</h1>
-    <a href="{{ url_for('download_file', filename=pptx_path) }}">Descargar PPTX</a><br><br>
-    <a href="{{ url_for('download_file', filename=csv_path) }}">Descargar CSV procesado</a>
+    <form>
+        <a href="{{ url_for('download_file', filename=pptx_path) }}">Descargar PPTX</a><br><br>
+        <a href="{{ url_for('download_file', filename=csv_path) }}">Descargar _CSV</a>
+    </form>
 </body>
 </html>

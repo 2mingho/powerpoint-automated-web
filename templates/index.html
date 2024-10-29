@@ -3,32 +3,47 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Subir Archivos</title>
+    <title>Smart Reports | Data Intel</title>
+    <link
+      rel="shortcut icon"
+      href="../static/img/Logo-Data-Intelligence_01.ico"
+      type="image/x-icon"
+    />
+    <link rel="stylesheet" href="../static/css/style.css" />
   </head>
   <body>
-    <h1>Subir Archivos</h1>
+    <h1>Reportes Data Intel</h1>
     <form action="/" method="POST" enctype="multipart/form-data">
+      <h3>Subir Archivos</h3>
       <!-- Input para el archivo CSV, sólo permite .csv -->
-      <label for="csv_file">Archivo CSV (Codificación UTF-16):</label>
-      <input type="file" id="csv_file" name="csv_file" accept=".csv" required />
-      <small>Asegúrese de que el archivo esté en UTF-16</small>
-      <br /><br />
+      <div class="form-group">
+        <label for="csv_file">Archivo CSV (Codificación UTF-16):</label>
+        <input
+          type="file"
+          id="csv_file"
+          name="csv_file"
+          accept=".csv"
+          required
+        />
+        <small>Asegúrese de que el archivo esté en UTF-16</small>
+      </div>
 
       <!-- Input para el archivo de Wordcloud (solo PNG) -->
-      <label for="wordcloud_file">Archivo PNG para Wordcloud:</label>
-      <input
-        type="file"
-        id="wordcloud_file"
-        name="wordcloud_file"
-        accept="image/png"
-      />
-      <small>Solo se permiten archivos PNG</small>
-      <br /><br />
+      <div class="form-group">
+        <label for="wordcloud_file">Archivo PNG para Wordcloud:</label>
+        <input
+          type="file"
+          id="wordcloud_file"
+          name="wordcloud_file"
+          accept="image/png"
+        />
+        <small>Solo se permiten archivos PNG</small>
+      </div>
 
-      <label>
-        Solo fecha
-        <input type="checkbox" name="solo_fecha" value="True" /> </label
-      ><br /><br />
+      <div class="form-group checkbox">
+        <label> Solo fecha </label>
+        <input type="checkbox" name="solo_fecha" value="True" />
+      </div>
 
       <button type="submit">Generar Reporte</button>
     </form>
