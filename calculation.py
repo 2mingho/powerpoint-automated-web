@@ -1,170 +1,203 @@
-import shutil
 import os
-import uuid
-from datetime import datetime
-from flask import Flask, render_template, request, send_file
-from werkzeug.utils import secure_filename
-from pptx import Presentation
+import textwrap
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 from pptx.util import Inches, Pt
-import calculation as report
-
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'scratch'
-
-PPTX_TEMPLATE_PATH = "powerpoints/Reporte_plantilla.pptx"
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.dml.color import RGBColor
 
 # ─────────────────────────────────────────────────────────────
-def clean_scratch_folder():
-    folder = app.config['UPLOAD_FOLDER']
-    try:
-        for file in os.listdir(folder):
-            file_path = os.path.join(folder, file)
-            if os.path.isfile(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-    except Exception as e:
-        print(f"Error al limpiar la carpeta scratch: {e}")
+social_network_sources = {
+    'Twitter': 'Redes Sociales',
+    'Youtube': 'Redes Sociales',
+    'Instagram': 'Redes Sociales',
+    'Facebook': 'Redes Sociales',
+    'Pinterest': 'Redes Sociales',
+    'Reddit': 'Redes Sociales',
+    'TikTok': 'Redes Sociales',
+    'Twitch': 'Redes Sociales',
+}
+
+def format_number(number):
+    if number >= 1_000_000:
+        return f"{number / 1_000_000:.1f}M"
+    elif number >= 1_000:
+        return f"{number / 1_000:.1f}k"
+    return str(number)
+
+def format_reach(number):
+    if pd.isna(number):
+        return number
+    return f"{int(number):,}"
+
+def set_text_style(shape, text, font_name='Effra', font_size=Pt(14), center=True):
+    if shape.has_text_frame:
+        p = shape.text_frame.paragraphs[0] if shape.text_frame.paragraphs else shape.text_frame.add_paragraph()
+        p.clear()
+        p.text = text
+        p.font.name = font_name
+        p.font.size = font_size
+        p.font.color.rgb = RGBColor(0, 0, 0)
+        p.alignment = PP_ALIGN.CENTER if center else PP_ALIGN.LEFT
 
 # ─────────────────────────────────────────────────────────────
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    clean_scratch_folder()
+def load_and_clean_data(file_path):
+    df = pd.read_csv(file_path, encoding='utf-16', sep='\t')
+    columns_to_delete = [
+        'Opening Text', 'Subregion', 'Desktop Reach', 'Mobile Reach',
+        'Twitter Social Echo', 'Facebook Social Echo', 'Reddit Social Echo',
+        'National Viewership', 'AVE', 'State', 'City',
+        'Social Echo Total', 'Editorial Echo', 'Views', 'Estimated Views',
+        'Likes', 'Replies', 'Retweets', 'Comments', 'Shares', 'Reactions',
+        'Threads', 'Is Verified'
+    ]
+    df_cleaned = df.drop(columns=columns_to_delete, errors='ignore')
+    df_cleaned['Hit Sentence'] = df_cleaned['Headline'].where(~df_cleaned['Headline'].isna(), df_cleaned['Hit Sentence'])
+    exclude_sources = list(social_network_sources.keys())
+    mask = ~df_cleaned['Source'].isin(exclude_sources)
+    df_cleaned.loc[mask, 'Influencer'] = df_cleaned.loc[mask, 'Source']
+    df_cleaned['Plataforma'] = df_cleaned['Source'].apply(lambda x: social_network_sources.get(x, 'Prensa Digital'))
+    return df_cleaned
 
-    if request.method == 'POST':
-        csv_file = request.files.get('csv_file')
-        wordcloud_file = request.files.get('wordcloud_file')
+def update_influencer(row):
+    if row['Source'] == 'Facebook' and (row['Reach'] == 0 or pd.isna(row['Reach']) or row['Reach'] == ""):
+        return "Comment on " + row['Influencer']
+    return row['Influencer']
 
-        if not csv_file or not csv_file.filename.endswith('.csv'):
-            return "Archivo CSV no válido.", 400
+def update_sentiment(row):
+    sentiment = row['Sentiment']
+    return "Neutral" if sentiment == "Unknown" or pd.isna(sentiment) else sentiment
 
-        unique_id = uuid.uuid4().hex[:6]
-        csv_filename = secure_filename(csv_file.filename)
-        csv_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_{csv_filename}")
-        csv_file.save(csv_path)
-
-        if wordcloud_file and wordcloud_file.filename.endswith('.png'):
-            wordcloud_path = os.path.join(app.config['UPLOAD_FOLDER'], 'Wordcloud.png')
-            wordcloud_file.save(wordcloud_path)
-        else:
-            wordcloud_path = None
-
-        try:
-            output_pptx_path, processed_csv_path = process_report(csv_path, wordcloud_path, unique_id)
-        except Exception as e:
-            return f"Error al generar el reporte: {e}", 500
-
-        return render_template('download.html', pptx_path=output_pptx_path, csv_path=processed_csv_path)
-
-    return render_template('index.html')
+def calculate_summary_metrics(df):
+    total_mentions = len(df)
+    count_of_authors = df['Influencer'].nunique()
+    estimated_reach = df.groupby('Influencer')['Reach'].max().sum()
+    formatted_estimated_reach = format_number(estimated_reach)
+    return total_mentions, count_of_authors, formatted_estimated_reach
 
 # ─────────────────────────────────────────────────────────────
-def process_report(csv_path, wordcloud_path, unique_id):
-    df_cleaned = report.load_and_clean_data(csv_path)
-    df_cleaned['Influencer'] = df_cleaned.apply(report.update_influencer, axis=1)
-    df_cleaned['Sentiment'] = df_cleaned.apply(report.update_sentiment, axis=1)
+def create_mentions_evolution_chart(df, date_column='Alternate Date Format', time_column='Time', output_path='scratch/convEvolution.png'):
+    df['date'] = pd.to_datetime(df[date_column], format='%d-%b-%y').dt.date
+    df['hour'] = pd.to_datetime(df[time_column], format='%I:%M %p').dt.strftime('%I %p')
+    df_grouped = df.groupby(['date', 'hour']).size().reset_index(name='count')
+    df_grouped['datetime'] = pd.to_datetime(df_grouped['date'].astype(str) + ' ' + df_grouped['hour'])
+    df_grouped = df_grouped.sort_values('datetime')
 
-    total_mentions, count_of_authors, estimated_reach = report.calculate_summary_metrics(df_cleaned)
-    formatted_estimated_reach = estimated_reach
-    processed_csv_path = report.save_cleaned_csv(df_cleaned, csv_path, unique_id)
+    fig, ax = plt.subplots(figsize=(13, 7))
+    ax.plot(df_grouped['datetime'], df_grouped['count'], linewidth=3.5, color='orange')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%b %I %p'))
+    plt.xticks(rotation=90, ha='right')
+    plt.tight_layout()
+    plt.savefig(output_path, transparent=True)
+    plt.close(fig)
 
-    solo_fecha = request.form.get('solo_fecha') is not None
-    if solo_fecha:
-        report.create_mentions_evolution_chart_by_date(df_cleaned)
+def create_mentions_evolution_chart_by_date(df, date_column='Alternate Date Format', output_path='scratch/convEvolution.png'):
+    df['date'] = pd.to_datetime(df[date_column], format='%d-%b-%y').dt.date
+    df_grouped = df.groupby('date').size().reset_index(name='count')
+    df_grouped = df_grouped.sort_values('date')
+
+    fig, ax = plt.subplots(figsize=(13, 7))
+    ax.plot(df_grouped['date'], df_grouped['count'], linewidth=3.5, color='orange')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%b'))
+    plt.xticks(rotation=90, ha='right')
+    plt.tight_layout()
+    plt.savefig(output_path, transparent=True)
+    plt.close(fig)
+
+def create_sentiment_pie_chart(df, output_path='scratch/sentiment_pie_chart.png'):
+    sentiment_counts = df[df['Sentiment'] != 'Not Rated']['Sentiment'].value_counts()
+    sentiment_colors = {'Negative': '#ff0000', 'Positive': '#00b050', 'Neutral': '#BFBFBF'}
+    labels = sentiment_counts.index.to_list()
+    sizes = sentiment_counts.to_list()
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    colors = [sentiment_colors.get(label, 'lightgray') for label in labels]
+    ax.pie(sizes, autopct="%1.1f%%", colors=colors, textprops=dict(backgroundcolor='w', fontsize=14, fontweight='bold'), startangle=140)
+    ax.axis('equal')
+    plt.savefig(output_path, transparent=True)
+    plt.close(fig)
+
+# ─────────────────────────────────────────────────────────────
+def distribucion_plataforma(df):
+    platform_counts = df['Plataforma'].value_counts()
+    max_reach_per_platform = df.groupby('Plataforma')['Reach'].max().apply(format_number)
+    return platform_counts.to_dict(), max_reach_per_platform.to_dict()
+
+def get_top_hit_sentences(df):
+    top_influencers = df[df['Plataforma'] == "Prensa Digital"].sort_values(by='Reach', ascending=False).head(5)['Hit Sentence']
+    return [textwrap.fill(sentence, width=100) for sentence in top_influencers]
+
+def get_top_influencers(df, plataforma, sort_by='Posts', top_n=10, include_source=False):
+    df_filtered = df[df['Plataforma'] == plataforma]
+
+    if include_source:
+        grouped = (
+            df_filtered.groupby('Influencer')[['Reach', 'Source']]
+            .agg(Posts=('Reach', 'count'), Max_Reach=('Reach', 'max'), Source=('Source', 'first'))
+        )
+        grouped.reset_index(inplace=True)
+        grouped['Max_Reach'] = grouped['Max_Reach'].apply(format_reach)
+        grouped = grouped.sort_values(by=sort_by, ascending=False).head(top_n)
+        return grouped[['Influencer', 'Posts', 'Max_Reach', 'Source']]
     else:
-        report.create_mentions_evolution_chart(df_cleaned)
-
-    report.create_sentiment_pie_chart(df_cleaned)
-
-    platform_counts, max_reach_per_platform = report.distribucion_plataforma(df_cleaned)
-    top_sentences = report.get_top_hit_sentences(df_cleaned)
-
-    # NUEVAS LLAMADAS A LA FUNCIÓN UNIFICADA
-    top_influencers_prensa = report.get_top_influencers(df_cleaned, 'Prensa Digital', sort_by='Posts')
-    top_influencers_redes_posts = report.get_top_influencers(df_cleaned, 'Redes Sociales', sort_by='Posts', include_source=True)
-    top_influencers_redes_reach = report.get_top_influencers(df_cleaned, 'Redes Sociales', sort_by='Max Reach')
-
-    current_date = datetime.now().strftime('%d-%b-%Y')
-    current_date_file_name = datetime.now().strftime('%d-%b-%Y, %H %M %S')
-    client_name = os.path.basename(csv_path).split()[0]
-
-    prs = Presentation(PPTX_TEMPLATE_PATH)
-
-    # Slide 1
-    slide1 = prs.slides[0]
-    for shape in slide1.shapes:
-        if shape.has_text_frame:
-            for key, value in {"REPORT_CLIENT": client_name, "REPORT_DATE": current_date}.items():
-                if key in shape.text:
-                    report.set_text_style(shape, str(value), 'Effra Heavy', Pt(28), False)
-
-    # Slide 2
-    slide2 = prs.slides[1]
-    for shape in slide2.shapes:
-        if shape.has_text_frame:
-            for key, value in {
-                "NUMB_MENTIONS": str(total_mentions),
-                "NUMB_ACTORS": str(count_of_authors),
-                "EST_REACH": formatted_estimated_reach
-            }.items():
-                if key in shape.text:
-                    report.set_text_style(shape, str(value), font_size=Pt(22), center=True)
-        elif shape.shape_type == 13:
-            slide2.shapes.add_picture('scratch/convEvolution.png', Inches(0.2), Inches(1.2), width=Inches(10.46), height=Inches(5.63))
-
-    # Slide 3
-    slide3 = prs.slides[2]
-    for shape in slide3.shapes:
-        if shape.has_text_frame and "TOP_NEWS" in shape.text:
-            report.set_text_style(shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
-    try:
-        slide3.shapes.add_picture('scratch/Wordcloud.png', Inches(7.5), Inches(3.5), width=Inches(4.2), height=Inches(2.66))
-    except Exception as e:
-        print(e)
-
-    # Slide 4
-    slide4 = prs.slides[3]
-    for shape in slide4.shapes:
-        if shape.shape_type == 13:
-            slide4.shapes.add_picture('scratch/sentiment_pie_chart.png', Inches(1), Inches(1), width=Inches(6), height=Inches(6))
-
-    # Slide 5
-    slide5 = prs.slides[4]
-    for shape in slide5.shapes:
-        if shape.has_text_frame and "NUMB_PRENSA" in shape.text:
-            report.set_text_style(shape, str(platform_counts.get('Prensa Digital', 0)), font_size=Pt(28))
-    try:
-        report.add_dataframe_as_table(slide5, top_influencers_prensa, Inches(2.65), Inches(2), Inches(8), Inches(4))
-    except Exception as e:
-        print("Error al añadir tabla en slide5:", e)
-
-    # Slide 6
-    slide6 = prs.slides[5]
-    for shape in slide6.shapes:
-        if shape.has_text_frame and "NUMB_REDES" in shape.text:
-            report.set_text_style(shape, str(platform_counts.get('Redes Sociales', 0)), font_size=Pt(28))
-    try:
-        report.add_dataframe_as_table(slide6, top_influencers_redes_posts, Inches(0.56), Inches(2), Inches(7), Inches(4))
-    except Exception as e:
-        print("Error tabla posts:", e)
-    try:
-        report.add_dataframe_as_table(slide6, top_influencers_redes_reach, Inches(8), Inches(2), Inches(5), Inches(4))
-    except Exception as e:
-        print("Error tabla reach:", e)
-
-    output_pptx_path = os.path.join(app.config['UPLOAD_FOLDER'], f"Reporte_{current_date_file_name}_{unique_id}.pptx")
-    prs.save(output_pptx_path)
-
-    return output_pptx_path, processed_csv_path
+        grouped = df_filtered.groupby('Influencer')['Reach'].agg(['count', 'max']).reset_index()
+        grouped.columns = ['Influencer', 'Posts', 'Max Reach']
+        grouped['Max Reach'] = grouped['Max Reach'].apply(format_reach)
+        grouped = grouped.sort_values(by=sort_by, ascending=False).head(top_n)
+        return grouped
 
 # ─────────────────────────────────────────────────────────────
-@app.route('/download/<path:filename>')
-def download_file(filename):
-    response = send_file(filename, as_attachment=True)
-    clean_scratch_folder()
-    return response
+def add_dataframe_as_table(slide, dataframe, x, y, width, height):
+    if dataframe.empty:
+        print("DataFrame está vacío.")
+        return
+
+    rows, cols = dataframe.shape
+    table = slide.shapes.add_table(rows + 1, cols, x, y, width, height).table
+
+    for j in range(cols):
+        cell = table.cell(0, j)
+        cell.text = str(dataframe.columns[j])
+        cell.fill.solid()
+        cell.fill.fore_color.rgb = RGBColor(255, 192, 0)
+        for paragraph in cell.text_frame.paragraphs:
+            paragraph.font.bold = True
+            paragraph.font.size = Pt(14)
+            paragraph.font.name = 'Effra'
+            paragraph.alignment = PP_ALIGN.CENTER
+            cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    for i in range(rows):
+        for j in range(cols):
+            value = dataframe.iat[i, j]
+            cell = table.cell(i + 1, j)
+            cell.text = str(value)
+            for paragraph in cell.text_frame.paragraphs:
+                paragraph.font.size = Pt(11)
+                paragraph.font.name = 'Effra Light'
+                paragraph.alignment = PP_ALIGN.CENTER
+                cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    print("Tabla añadida correctamente.")
 
 # ─────────────────────────────────────────────────────────────
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+def save_cleaned_csv(df, file_path, unique_id=None):
+    base_filename = os.path.basename(file_path).split()[0].split('.')[0]
+    if unique_id:
+        output_filename = os.path.join("scratch", f"{base_filename}_{unique_id}_(resultado).csv")
+    else:
+        output_filename = os.path.join("scratch", f"{base_filename}_(resultado).csv")
+
+    with open(output_filename, 'w', encoding='utf-16', newline='') as f:
+        df.to_csv(f, index=False, sep='\t')
+
+    print(f"CSV data saved to: {output_filename}")
+    return output_filename
