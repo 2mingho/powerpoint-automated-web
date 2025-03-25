@@ -88,7 +88,7 @@ def load_and_clean_data(file_path):
 
 # Función para actualizar la columna 'Influencer' para comentarios en Facebook
 def update_influencer(row):
-    if row['Source'] == 'Facebook' and row['Reach'] == 0:
+    if (row['Source'] == 'Facebook' and row['Reach'] == 0 or pd.isna(row['Reach']) or row['Reach'] == ""):
         return "Comment on " + row['Influencer']
     return row['Influencer']
 
