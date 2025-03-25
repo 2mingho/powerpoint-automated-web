@@ -1,6 +1,7 @@
 import shutil
 import os
 import uuid
+import zipfile
 from datetime import datetime
 from flask import Flask, render_template, request, send_file
 from werkzeug.utils import secure_filename
@@ -14,7 +15,6 @@ app.config['UPLOAD_FOLDER'] = 'scratch'
 PPTX_TEMPLATE_PATH = "powerpoints/Reporte_plantilla.pptx"
 
 # ─────────────────────────────────────────────────────────────
-# 🧼 Función para limpiar archivos temporales
 def clean_scratch_folder():
     folder = app.config['UPLOAD_FOLDER']
     try:
@@ -30,7 +30,7 @@ def clean_scratch_folder():
 # ─────────────────────────────────────────────────────────────
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    clean_scratch_folder()  # Limpieza anticipada
+    clean_scratch_folder()
 
     if request.method == 'POST':
         csv_file = request.files.get('csv_file')
@@ -39,12 +39,11 @@ def index():
         if not csv_file or not csv_file.filename.endswith('.csv'):
             return "Archivo CSV no válido.", 400
 
-        unique_id = uuid.uuid4().hex[:6]  # ID para evitar conflictos
+        unique_id = uuid.uuid4().hex[:6]
         csv_filename = secure_filename(csv_file.filename)
         csv_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_{csv_filename}")
         csv_file.save(csv_path)
 
-        # Validar que sea .png
         if wordcloud_file and wordcloud_file.filename.endswith('.png'):
             wordcloud_path = os.path.join(app.config['UPLOAD_FOLDER'], 'Wordcloud.png')
             wordcloud_file.save(wordcloud_path)
@@ -52,11 +51,11 @@ def index():
             wordcloud_path = None
 
         try:
-            output_pptx_path, processed_csv_path = process_report(csv_path, wordcloud_path, unique_id)
+            zip_path = process_report(csv_path, wordcloud_path, unique_id)
         except Exception as e:
             return f"Error al generar el reporte: {e}", 500
 
-        return render_template('download.html', pptx_path=output_pptx_path, csv_path=processed_csv_path)
+        return render_template('download.html', zip_path=zip_path)
 
     return render_template('index.html')
 
@@ -78,11 +77,12 @@ def process_report(csv_path, wordcloud_path, unique_id):
 
     report.create_sentiment_pie_chart(df_cleaned)
 
-    platform_counts, max_reach_per_platform = report.distribucion_plataforma(df_cleaned)
+    platform_counts, _ = report.distribucion_plataforma(df_cleaned)
     top_sentences = report.get_top_hit_sentences(df_cleaned)
-    top_influencers_prensa = report.top_influencers_prensa_digital(df_cleaned)
-    top_influencers_redes_posts = report.top_influencers_redes_sociales_by_posts(df_cleaned)
-    top_influencers_redes_reach = report.top_influencers_redes_sociales_by_reach(df_cleaned)
+
+    top_influencers_prensa = report.get_top_influencers(df_cleaned, 'Prensa Digital', sort_by='Posts')
+    top_influencers_redes_posts = report.get_top_influencers(df_cleaned, 'Redes Sociales', sort_by='Posts', include_source=True)
+    top_influencers_redes_reach = report.get_top_influencers(df_cleaned, 'Redes Sociales', sort_by='Max Reach')
 
     current_date = datetime.now().strftime('%d-%b-%Y')
     current_date_file_name = datetime.now().strftime('%d-%b-%Y, %H %M %S')
@@ -115,13 +115,12 @@ def process_report(csv_path, wordcloud_path, unique_id):
     # Slide 3
     slide3 = prs.slides[2]
     for shape in slide3.shapes:
-        if shape.has_text_frame:
-            if "TOP_NEWS" in shape.text:
-                report.set_text_style(shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
+        if shape.has_text_frame and "TOP_NEWS" in shape.text:
+            report.set_text_style(shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
     try:
         slide3.shapes.add_picture('scratch/Wordcloud.png', Inches(7.5), Inches(3.5), width=Inches(4.2), height=Inches(2.66))
     except Exception as e:
-        print(e)
+        print("Error al insertar Wordcloud:", e)
 
     # Slide 4
     slide4 = prs.slides[3]
@@ -147,16 +146,25 @@ def process_report(csv_path, wordcloud_path, unique_id):
     try:
         report.add_dataframe_as_table(slide6, top_influencers_redes_posts, Inches(0.56), Inches(2), Inches(7), Inches(4))
     except Exception as e:
-        print("Error tabla posts:", e)
+        print("Error al añadir tabla en slide6 (posts):", e)
     try:
         report.add_dataframe_as_table(slide6, top_influencers_redes_reach, Inches(8), Inches(2), Inches(5), Inches(4))
     except Exception as e:
-        print("Error tabla reach:", e)
+        print("Error al añadir tabla en slide6 (reach):", e)
 
-    output_pptx_path = os.path.join(app.config['UPLOAD_FOLDER'], f"Reporte_{current_date_file_name}_{unique_id}.pptx")
-    prs.save(output_pptx_path)
+    # Guardar PowerPoint
+    pptx_filename = f"Reporte_{current_date_file_name}_{unique_id}.pptx"
+    pptx_path = os.path.join(app.config['UPLOAD_FOLDER'], pptx_filename)
+    prs.save(pptx_path)
 
-    return output_pptx_path, processed_csv_path
+    # Crear ZIP
+    zip_filename = f"Reporte_{unique_id}.zip"
+    zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
+        zipf.write(pptx_path, arcname=pptx_filename)
+        zipf.write(processed_csv_path, arcname=os.path.basename(processed_csv_path))
+
+    return zip_path
 
 # ─────────────────────────────────────────────────────────────
 @app.route('/download/<path:filename>')
