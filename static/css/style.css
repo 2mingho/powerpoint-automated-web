@@ -1,6 +1,7 @@
 * {
     padding: 0;
     margin: 0;
+    box-sizing: border-box;
     font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', sans-serif;
     font-size: 16px;
 }
@@ -10,13 +11,13 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    height: 90vh;       /* Altura total de la ventana */
-    margin: 0;  
+    min-height: 100vh;
+    padding: 20px;
     background-color: #c9af00;
 }
 
 h1, h3 {
-    margin-bottom: 3%;
+    margin-bottom: 1.5rem;
     max-width: 90%;
     font-size: 1.5rem;
 }
@@ -24,22 +25,24 @@ h1, h3 {
 h1 {
     font-size: 2rem;
     text-transform: uppercase;
-    z-index: 1;
     font-weight: bold;
+}
+
+main {
+    width: 100%;
+    max-width: 500px;
+    text-align: center;
 }
 
 form {
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
     padding: 20px 30px;
-    width: 80%;
-    max-width: 400px;
-
-    border-radius: 50px;
+    width: 100%;
+    border-radius: 30px;
     background: #e0e0e0;
-    box-shadow:  10px 10px 60px #3d3d3d
+    box-shadow: 10px 10px 60px #3d3d3d;
 }
 
 .form-group {
@@ -47,36 +50,67 @@ form {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     gap: 5px;
+    width: 100%;
 }
 
 .checkbox {
     flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+
+.checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin-left: 10px;
 }
 
 label {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: bold;
 }
 
-button, a {
-    /* margin-bottom: 15px;
-    margin-top: 10px; */
+input[type="file"] {
+    background-color: #fff;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid #999;
+    width: 100%;
+}
+
+button, .btn, a {
+    margin-top: 10px;
     padding: 10px 20px;
     border-radius: 30px;
     border: none;
     background: #ffdd00;
-    box-shadow: inset 8px 8px 17px #c9af00,
-            inset -8px -8px 17px #ffff00;
+    box-shadow: inset 8px 8px 17px #c9af00, inset -8px -8px 17px #ffff00;
     font-weight: bold;
     text-decoration: none;
     color: #000000;
+    transition: all 0.3s ease-in-out;
+    display: inline-block;
 }
 
-button:hover, a:hover {
+button:hover, .btn:hover, a:hover {
     background: #141414;
-    box-shadow: inset 8px 8px 17px #101010,
-            inset -8px -8px 17px #181818;
+    box-shadow: inset 8px 8px 17px #101010, inset -8px -8px 17px #181818;
     color: #c9af00;
+}
+
+#mensaje-cargando {
+    font-size: 1rem;
+    font-weight: bold;
+    margin-top: 15px;
+}
+
+.download-links {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.download-links a {
+    display: inline-block;
+    margin: 10px 0;
 }
