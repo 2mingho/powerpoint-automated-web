@@ -1,23 +1,12 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <title>Download Report | Data Intel</title>
-  <link
-    rel="shortcut icon"
-    href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}"
-    type="image/x-icon"
-  />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-</head>
-<body>
-  <main>
-    <h1>✅ Reporte generado con éxito</h1>
-    <section class="download-links">
-      <p>Puedes descargar tu reporte en el siguiente archivo comprimido:</p>
-      <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn">⬇️ Descargar ZIP</a><br><br>
-      <a href="{{ url_for('index') }}" class="btn">🔁 Subir otro archivo</a>
-    </section>
-  </main>
-</body>
-</html>
+{% extends 'base.html' %}
+
+{% block title %}Descarga tu reporte | Data Intel{% endblock %}
+
+{% block content %}
+  <h1>✅ Reporte generado con éxito</h1>
+  <section class="download-links">
+    <p>Puedes descargar tu reporte en el siguiente archivo comprimido:</p>
+    <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn">⬇️ Descargar ZIP</a><br><br>
+    <a href="{{ url_for('index') }}" class="btn">🔁 Subir otro archivo</a>
+  </section>
+{% endblock %}

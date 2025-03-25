@@ -1,24 +1,41 @@
-import shutil
 import os
 import uuid
+import shutil
 import zipfile
 from datetime import datetime
 from flask import Flask, render_template, request, send_file
+from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
+
 import calculation as report
+from extensions import db, login_manager
+from models import User
+from auth import auth
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'scratch'
+app.config['SECRET_KEY'] = 'una_clave_super_secreta'
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'users.db')}"
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Crear la carpeta scratch si no existe
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
+# Inicialización de extensiones
+db.init_app(app)
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+app.register_blueprint(auth)
 
 PPTX_TEMPLATE_PATH = "powerpoints/Reporte_plantilla.pptx"
 
-# ─────────────────────────────────────────────────────────────
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
 def clean_scratch_folder():
     folder = app.config['UPLOAD_FOLDER']
     try:
@@ -31,8 +48,8 @@ def clean_scratch_folder():
     except Exception as e:
         print(f"Error al limpiar la carpeta scratch: {e}")
 
-# ─────────────────────────────────────────────────────────────
 @app.route('/', methods=['GET', 'POST'])
+@login_required
 def index():
     clean_scratch_folder()
 
@@ -63,7 +80,6 @@ def index():
 
     return render_template('index.html')
 
-# ─────────────────────────────────────────────────────────────
 def process_report(csv_path, wordcloud_path, unique_id):
     df_cleaned = report.load_and_clean_data(csv_path)
     df_cleaned['Influencer'] = df_cleaned.apply(report.update_influencer, axis=1)
@@ -155,12 +171,10 @@ def process_report(csv_path, wordcloud_path, unique_id):
     except Exception as e:
         print("Error al añadir tabla en slide6 (reach):", e)
 
-    # Guardar PowerPoint
     pptx_filename = f"Reporte_{current_date_file_name}_{unique_id}.pptx"
     pptx_path = os.path.join(app.config['UPLOAD_FOLDER'], pptx_filename)
     prs.save(pptx_path)
 
-    # Crear ZIP
     zip_filename = f"Reporte_{unique_id}.zip"
     zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
     with zipfile.ZipFile(zip_path, 'w') as zipf:
@@ -169,14 +183,14 @@ def process_report(csv_path, wordcloud_path, unique_id):
 
     return zip_path
 
-# ─────────────────────────────────────────────────────────────
 @app.route('/download/<path:filename>')
 def download_file(filename):
     response = send_file(filename, as_attachment=True)
     clean_scratch_folder()
     return response
 
-# ─────────────────────────────────────────────────────────────
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
