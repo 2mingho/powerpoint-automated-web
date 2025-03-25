@@ -243,10 +243,17 @@ def add_dataframe_as_table(slide, dataframe, x, y, width, height):
 
             
 # Función para guardar el dataframe modificado como archivo csv
-def save_cleaned_csv(df, file_path):
+def save_cleaned_csv(df, file_path, unique_id=None):
     base_filename = os.path.basename(file_path).split()[0]
     base_filename = base_filename.split('.')[0]
-    output_filename = f"{base_filename}_(resultado).csv"
+
+    if unique_id:
+        output_filename = os.path.join("scratch", f"{base_filename}_{unique_id}_(resultado).csv")
+    else:
+        output_filename = os.path.join("scratch", f"{base_filename}_(resultado).csv")
+
     with open(output_filename, 'w', encoding='utf-16', newline='') as f:
         df.to_csv(f, index=False, sep='\t')
+
     print(f"CSV data saved to: {output_filename}")
+    return output_filename
