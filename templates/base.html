@@ -9,12 +9,29 @@
 </head>
 <body>
   <header>
-    {% if current_user.is_authenticated %}
-      <div style="text-align: right; padding: 10px 30px;">
-        Bienvenido, {{ current_user.username }} |
-        <a href="{{ url_for('auth.logout') }}" class="btn">Cerrar sesión</a>
-      </div>
-    {% endif %}
+    <div>
+      {% if current_user.is_authenticated %}
+        <span style="color: #fff;">👤 {{ current_user.username }}</span>
+
+        {% if request.path != '/mis-reportes' %}
+          <a href="{{ url_for('mis_reportes') }}" class="btn" data-icon="📁">📁 Mis reportes</a>
+        {% endif %}
+
+        {% if request.path != '/' %}
+          <a href="{{ url_for('index') }}" class="btn" data-icon="🏠">🏠 Inicio</a>
+        {% endif %}
+
+        <a href="{{ url_for('auth.logout') }}" class="btn" data-icon="🚪">🚪 Cerrar sesión</a>
+
+      {% else %}
+        {% if request.path != '/login' %}
+          <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐">🔐 Iniciar sesión</a>
+        {% endif %}
+        {% if request.path != '/register' %}
+          <a href="{{ url_for('auth.register') }}" class="btn" data-icon="📝">📝 Registrarse</a>
+        {% endif %}
+      {% endif %}
+    </div>
   </header>
 
   <main>
@@ -28,8 +45,11 @@
       {% endif %}
     {% endwith %}
 
-
     {% block content %}{% endblock %}
   </main>
+
+  <footer>
+    <p>&copy; {{ current_year }} Data Intelligence</p>
+  </footer>
 </body>
 </html>

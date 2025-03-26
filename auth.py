@@ -48,5 +48,5 @@ def login():
 @login_required
 def logout():
     logout_user()
-    flash('Has cerrado sesión.', category='success')
+    flash('Has cerrado sesión.', category='warning')
     return redirect(url_for('auth.login'))

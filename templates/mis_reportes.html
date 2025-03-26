@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Mis reportes{% endblock %}
+
+{% block content %}
+  <h1>📁 Mis Reportes</h1>
+
+  {% if reports %}
+    <ul style="margin-top: 20px;">
+      {% for r in reports %}
+        <li style="margin: 10px 0;">
+          📄 {{ r.filename }} — <em>{{ r.created_at.strftime('%d-%b-%Y %H:%M') }}</em>
+          |
+          <a href="{{ url_for('download_file', filename=r.filename) }}" class="btn">Descargar</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>Aún no has generado reportes.</p>
+  {% endif %}
+{% endblock %}

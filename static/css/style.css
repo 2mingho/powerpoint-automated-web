@@ -7,49 +7,49 @@
 }
 
 body {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 20px;
     background-color: #c9af00;
+    margin: 0;
+    padding: 0;
 }
 
 header {
-    width: 100%;
-    text-align: right;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: rgb(24, 24, 24);
+    color: white;
+    z-index: 1000;
     padding: 10px 30px;
-    font-weight: bold;
 }
 
-/* 🆕 Para mensajes de flash (como errores o alertas) */
-.flashes {
-    list-style: none;
-    margin: 15px 0;
-    padding: 0;
-    color: red;
-    font-weight: bold;
+header div {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
-/* 🆕 Para inputs de texto, email, password */
-input[type="text"],
-input[type="email"],
-input[type="password"] {
-    background-color: #fff;
-    padding: 8px;
-    border-radius: 8px;
-    border: 1px solid #999;
+footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgb(24, 24, 24);
+    color: white;
+    text-align: center;
+    padding: 10px 0;
+    font-size: 0.9rem;
+}
+
+main {
+    padding-top: 80px;   /* Espacio para el header fijo */
+    padding-bottom: 60px; /* Espacio para el footer fijo */
     width: 100%;
-}
-
-/* Ya existente, reutilizado */
-input[type="file"] {
-    background-color: #fff;
-    padding: 8px;
-    border-radius: 8px;
-    border: 1px solid #999;
-    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    text-align: center;
 }
 
 h1, h3 {
@@ -62,12 +62,6 @@ h1 {
     font-size: 2rem;
     text-transform: uppercase;
     font-weight: bold;
-}
-
-main {
-    width: 100%;
-    max-width: 500px;
-    text-align: center;
 }
 
 form {
@@ -107,6 +101,17 @@ label {
     font-weight: bold;
 }
 
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="file"] {
+    background-color: #fff;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid #999;
+    width: 100%;
+}
+
 button, .btn, a {
     margin-top: 10px;
     padding: 10px 20px;
@@ -143,6 +148,7 @@ button:hover, .btn:hover, a:hover {
     margin: 10px 0;
 }
 
+/* Flash messages */
 .flashes {
     list-style: none;
     margin: 15px 0;
@@ -158,16 +164,57 @@ button:hover, .btn:hover, a:hover {
     text-align: center;
 }
 
-/* Mensajes tipo success (verde) */
 .flashes li.success {
     background-color: #d4edda;
     color: #155724;
     border: 2px solid #c3e6cb;
 }
 
-/* Mensajes tipo error (rojo) */
 .flashes li.error {
     background-color: #f8d7da;
     color: #721c24;
     border: 2px solid #f5c6cb;
+}
+
+/* Página de error */
+.error-container {
+    padding: 40px;
+    text-align: center;
+}
+
+.error-container h1 {
+    font-size: 3rem;
+    color: #b00020;
+}
+
+.error-container p {
+    margin: 20px 0;
+    font-size: 1.2rem;
+}
+
+/* ─────────────── MEDIA QUERIES ─────────────── */
+@media screen and (max-width: 600px) {
+    header div {
+        justify-content: flex-end;
+        gap: 15px;
+    }
+
+    header .btn,
+    header a {
+        font-size: 0;
+        padding: 8px 12px;
+    }
+
+    header .btn::before,
+    header a::before {
+        font-size: 20px;
+        font-weight: bold;
+        content: attr(data-icon);
+        color: #fff;
+    }
+
+    header .btn:hover::before,
+    header a:hover::before {
+        color: #c9af00;
+    }
 }

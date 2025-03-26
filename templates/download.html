@@ -6,7 +6,7 @@
   <h1>✅ Reporte generado con éxito</h1>
   <section class="download-links">
     <p>Puedes descargar tu reporte en el siguiente archivo comprimido:</p>
-    <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn">⬇️ Descargar ZIP</a><br><br>
+    <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn" download>⬇️ Descargar ZIP</a><br><br>
     <a href="{{ url_for('index') }}" class="btn">🔁 Subir otro archivo</a>
   </section>
 {% endblock %}
