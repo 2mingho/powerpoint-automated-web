@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Data Intel{% endblock %}</title>
+  <link rel="shortcut icon" href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}" type="image/x-icon" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <header class="main-header">
+    <div class="logo-area">
+      <span class="logo-full">NEWLINK DOMINICANA</span>
+      <span class="logo-mobile">📊</span>
+    </div>
+  
+    <div class="nav-links">
+      {% if current_user.is_authenticated %}
+        {% if request.path != '/mis-reportes' %}
+          <a href="{{ url_for('mis_reportes') }}" class="btn">📁</a>
+        {% endif %}
+        {% if request.path != '/' %}
+          <a href="{{ url_for('index') }}" class="btn">🏠</a>
+        {% endif %}
+        <a href="{{ url_for('auth.logout') }}" class="btn">🚪</a>
+      {% else %}
+        {% if request.path != '/login' %}
+          <a href="{{ url_for('auth.login') }}" class="btn">🔐</a>
+        {% endif %}
+        {% if request.path != '/register' %}
+          <a href="{{ url_for('auth.register') }}" class="btn">📝</a>
+        {% endif %}
+      {% endif %}
+    </div>
+  </header>
+
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, msg in messages %}
+            <li class="{{ category }}">{{ msg }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <p>&copy; {{ current_year }} Data Intelligence</p>
+  </footer>
+</body>
+</html>

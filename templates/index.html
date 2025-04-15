@@ -1,62 +1,57 @@
-<!DOCTYPE html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smart Reports | Data Intel</title>
-    <link
-      rel="shortcut icon"
-      href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}"
-      type="image/x-icon"
-    />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-  </head>
-  <body>
-    <main>
-      <h1>Reportes Data Intel</h1>
-      <form action="/" method="POST" enctype="multipart/form-data" onsubmit="mostrarCargando()">
-        <h3>Subir Archivos</h3>
+{% extends 'base.html' %}
+{% block title %}Inicio | Data Intel{% endblock %}
 
-        <div class="form-group">
-          <label for="csv_file">Archivo CSV (Codificación UTF-16):</label>
-          <input
-            type="file"
-            id="csv_file"
-            name="csv_file"
-            accept=".csv"
-            required
-          />
-          <small>Asegúrese de que el archivo esté en UTF-16</small>
+{% block content %}
+  <div class="report-container">
+    <h1>Reportes Data Intel</h1>
+
+    <form action="/" method="POST" enctype="multipart/form-data" onsubmit="mostrarCargando()">
+      
+      <!-- Área para subir el archivo -->
+      <div class="upload-box">
+        <div class="upload-icon">📁</div>
+        <div>
+          <strong>Subir archivo</strong>
+          <p>Selecciona o arrastra un archivo para generar un reporte de análisis de datos.</p>
         </div>
+        <input type="file" name="csv_file" accept=".csv" required />
+      </div>
 
-        <div class="form-group">
-          <label for="wordcloud_file">Archivo PNG para Wordcloud:</label>
-          <input
-            type="file"
-            id="wordcloud_file"
-            name="wordcloud_file"
-            accept="image/png"
-          />
-          <small>Solo se permiten archivos PNG</small>
-        </div>
+      <!-- Título del reporte -->
+      <div class="form-group">
+        <label for="report_title">Nombre del reporte</label>
+        <input type="text" id="report_title" name="report_title" placeholder="Ingresa un nombre para tu reporte" />
+      </div>
 
-        <div class="form-group checkbox">
-          <label for="solo_fecha">Solo fecha</label>
-          <input type="checkbox" id="solo_fecha" name="solo_fecha" />
-        </div>
+      <!-- Descripción del reporte -->
+      <div class="form-group">
+        <label for="description">Descripción</label>
+        <textarea id="description" name="description" placeholder="Describe brevemente el contenido del reporte"></textarea>
+      </div>
 
-        <button type="submit">Generar Reporte</button>
+      <!-- Wordcloud opcional -->
+      <div class="form-group">
+        <label for="wordcloud_file">Wordcloud (opcional)</label>
+        <input type="file" id="wordcloud_file" name="wordcloud_file" accept="image/png" />
+      </div>
 
-        <p id="mensaje-cargando" style="display: none; font-weight: bold; margin-top: 15px;">
-          Procesando reporte... Esto puede tardar unos segundos.
-        </p>
-      </form>
-    </main>
+      <!-- Solo fecha -->
+      <div class="form-group checkbox">
+        <input type="checkbox" id="solo_fecha" name="solo_fecha" />
+        <label for="solo_fecha">Solo fecha</label>
+      </div>
 
-    <script>
-      function mostrarCargando() {
-        document.getElementById('mensaje-cargando').style.display = 'block';
-      }
-    </script>
-  </body>
-</html>
+      <button type="submit">Generar reporte</button>
+
+      <p id="mensaje-cargando" style="display: none; font-weight: bold; margin-top: 15px;">
+        Procesando reporte... Esto puede tardar unos segundos.
+      </p>
+    </form>
+  </div>
+
+  <script>
+    function mostrarCargando() {
+      document.getElementById('mensaje-cargando').style.display = 'block';
+    }
+  </script>
+{% endblock %}

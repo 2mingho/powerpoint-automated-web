@@ -1,24 +1,35 @@
-import shutil
 import os
 import uuid
 import zipfile
+import shutil
 from datetime import datetime
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, redirect, url_for, abort, after_this_request
+from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
+from babel.dates import format_datetime
+
+from auth import auth
+from extensions import db, login_manager
+from models import User, Report
 import calculation as report
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'scratch'
 
-# Crear la carpeta scratch si no existe
+# Configuración general
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SECRET_KEY'] = 'super-secret-key'
+
+# Inicializar extensiones
+db.init_app(app)
+login_manager.init_app(app)
+
+# Crear carpeta scratch si no existe
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-PPTX_TEMPLATE_PATH = "powerpoints/Reporte_plantilla.pptx"
-
-# ─────────────────────────────────────────────────────────────
 def clean_scratch_folder():
     folder = app.config['UPLOAD_FOLDER']
     try:
@@ -31,46 +42,56 @@ def clean_scratch_folder():
     except Exception as e:
         print(f"Error al limpiar la carpeta scratch: {e}")
 
-# ─────────────────────────────────────────────────────────────
 @app.route('/', methods=['GET', 'POST'])
+@login_required
 def index():
     clean_scratch_folder()
 
     if request.method == 'POST':
         csv_file = request.files.get('csv_file')
         wordcloud_file = request.files.get('wordcloud_file')
+        report_title = request.form.get('report_title', '').strip()
+        description = request.form.get('description', '').strip()
 
         if not csv_file or not csv_file.filename.endswith('.csv'):
-            return "Archivo CSV no válido.", 400
+            return redirect(url_for('error_archivo_invalido'))
 
         unique_id = uuid.uuid4().hex[:6]
         csv_filename = secure_filename(csv_file.filename)
         csv_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_{csv_filename}")
         csv_file.save(csv_path)
 
+        wordcloud_path = None
         if wordcloud_file and wordcloud_file.filename.endswith('.png'):
             wordcloud_path = os.path.join(app.config['UPLOAD_FOLDER'], 'Wordcloud.png')
             wordcloud_file.save(wordcloud_path)
-        else:
-            wordcloud_path = None
 
         try:
-            zip_path = process_report(csv_path, wordcloud_path, unique_id)
+            zip_path = process_report(csv_path, wordcloud_path, unique_id, report_title, description)
         except Exception as e:
-            return f"Error al generar el reporte: {e}", 500
+            print(f"Error generando el reporte: {e}")
+            abort(500)
 
-        return render_template('download.html', zip_path=zip_path)
+        zip_filename = os.path.basename(zip_path)
+        file_size_mb = round(os.path.getsize(zip_path) / (1024 * 1024), 2)
+        current_time = datetime.now()
+        formatted_datetime = format_datetime(current_time, "d 'de' MMMM, yyyy - HH:mm", locale='es')
+
+        return render_template(
+            'download.html',
+            zip_path=zip_filename,
+            file_size=file_size_mb,
+            formatted_datetime=formatted_datetime
+        )
 
     return render_template('index.html')
 
-# ─────────────────────────────────────────────────────────────
-def process_report(csv_path, wordcloud_path, unique_id):
+def process_report(csv_path, wordcloud_path, unique_id, report_title=None, description=None):
     df_cleaned = report.load_and_clean_data(csv_path)
     df_cleaned['Influencer'] = df_cleaned.apply(report.update_influencer, axis=1)
     df_cleaned['Sentiment'] = df_cleaned.apply(report.update_sentiment, axis=1)
 
     total_mentions, count_of_authors, estimated_reach = report.calculate_summary_metrics(df_cleaned)
-    formatted_estimated_reach = estimated_reach
     processed_csv_path = report.save_cleaned_csv(df_cleaned, csv_path, unique_id)
 
     solo_fecha = request.form.get('solo_fecha') is not None
@@ -91,7 +112,7 @@ def process_report(csv_path, wordcloud_path, unique_id):
     current_date_file_name = datetime.now().strftime('%d-%b-%Y, %H %M %S')
     client_name = os.path.basename(csv_path).split()[0]
 
-    prs = Presentation(PPTX_TEMPLATE_PATH)
+    prs = Presentation("powerpoints/Reporte_plantilla.pptx")
 
     # Slide 1
     slide1 = prs.slides[0]
@@ -108,10 +129,10 @@ def process_report(csv_path, wordcloud_path, unique_id):
             for key, value in {
                 "NUMB_MENTIONS": str(total_mentions),
                 "NUMB_ACTORS": str(count_of_authors),
-                "EST_REACH": formatted_estimated_reach
+                "EST_REACH": estimated_reach
             }.items():
                 if key in shape.text:
-                    report.set_text_style(shape, str(value), font_size=Pt(22), center=True)
+                    report.set_text_style(shape, value, font_size=Pt(22), center=True)
         elif shape.shape_type == 13:
             slide2.shapes.add_picture('scratch/convEvolution.png', Inches(0.2), Inches(1.2), width=Inches(10.46), height=Inches(5.63))
 
@@ -148,35 +169,76 @@ def process_report(csv_path, wordcloud_path, unique_id):
             report.set_text_style(shape, str(platform_counts.get('Redes Sociales', 0)), font_size=Pt(28))
     try:
         report.add_dataframe_as_table(slide6, top_influencers_redes_posts, Inches(0.56), Inches(2), Inches(7), Inches(4))
-    except Exception as e:
-        print("Error al añadir tabla en slide6 (posts):", e)
-    try:
         report.add_dataframe_as_table(slide6, top_influencers_redes_reach, Inches(8), Inches(2), Inches(5), Inches(4))
     except Exception as e:
-        print("Error al añadir tabla en slide6 (reach):", e)
+        print("Error en slide6:", e)
 
-    # Guardar PowerPoint
-    pptx_filename = f"Reporte_{current_date_file_name}_{unique_id}.pptx"
+    safe_title = secure_filename(report_title) if report_title else f"Reporte_{unique_id}"
+    pptx_filename = f"{safe_title}.pptx"
     pptx_path = os.path.join(app.config['UPLOAD_FOLDER'], pptx_filename)
     prs.save(pptx_path)
 
-    # Crear ZIP
-    zip_filename = f"Reporte_{unique_id}.zip"
+    zip_filename = f"{safe_title}.zip"
     zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
     with zipfile.ZipFile(zip_path, 'w') as zipf:
         zipf.write(pptx_path, arcname=pptx_filename)
         zipf.write(processed_csv_path, arcname=os.path.basename(processed_csv_path))
 
+    new_report = Report(
+        filename=zip_filename,
+        user_id=current_user.id,
+        title=report_title,
+        description=description
+    )
+    db.session.add(new_report)
+    db.session.commit()
+
     return zip_path
 
-# ─────────────────────────────────────────────────────────────
 @app.route('/download/<path:filename>')
+@login_required
 def download_file(filename):
-    response = send_file(filename, as_attachment=True)
-    clean_scratch_folder()
-    return response
+    full_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.exists(full_path):
+        abort(404)
 
-# ─────────────────────────────────────────────────────────────
+    @after_this_request
+    def cleanup(response):
+        clean_scratch_folder()
+        return response
+
+    return send_file(full_path, as_attachment=True)
+
+@app.route('/mis-reportes')
+@login_required
+def mis_reportes():
+    user_reports = Report.query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
+    return render_template('mis_reportes.html', reports=user_reports)
+
+@app.context_processor
+def inject_current_year():
+    from datetime import datetime
+    return {'current_year': datetime.now().year}
+
+@app.route('/error/archivo-invalido')
+def error_archivo_invalido():
+    return render_template('error.html',
+                           title="Archivo inválido",
+                           message="El archivo que subiste no es válido o tiene un formato incorrecto.")
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('error.html',
+                           title="Error 404 - Página no encontrada",
+                           message="La página que estás buscando no existe."), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    return render_template('error.html',
+                           title="Error 500 - Problema del servidor",
+                           message="Ocurrió un error inesperado. Por favor, intenta más tarde."), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
+    app.register_blueprint(auth)
     app.run(debug=True, host='0.0.0.0', port=port)

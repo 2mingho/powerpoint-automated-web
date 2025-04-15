@@ -1,23 +1,51 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <title>Download Report | Data Intel</title>
-  <link
-    rel="shortcut icon"
-    href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}"
-    type="image/x-icon"
-  />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-</head>
-<body>
-  <main>
-    <h1>✅ Reporte generado con éxito</h1>
-    <section class="download-links">
-      <p>Puedes descargar tu reporte en el siguiente archivo comprimido:</p>
-      <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn">⬇️ Descargar ZIP</a><br><br>
-      <a href="{{ url_for('index') }}" class="btn">🔁 Subir otro archivo</a>
-    </section>
-  </main>
-</body>
-</html>
+{% extends 'base.html' %}
+{% block title %}Reporte generado | Data Intel{% endblock %}
+
+{% block content %}
+<div class="report-container">
+  <h1>Reporte Generado Exitosamente</h1>
+
+  <div class="upload-box">
+    <div class="upload-icon">✅</div>
+    <div>
+      <strong>Reporte completado</strong>
+      <p>
+        Tu reporte ha sido generado y está listo para ser descargado. Puedes descargarlo ahora o acceder a él más tarde desde la sección ‘Mis reportes’.
+      </p>
+    </div>
+    <div style="margin-top: 15px;">
+      <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn">📥 Descargar Reporte</a>
+      <a href="{{ url_for('index') }}" class="btn">🔁 Generar nuevo reporte</a>
+    </div>
+  </div>
+
+  <!-- Detalles del reporte -->
+  <div class="report-details" style="margin-top: 40px; text-align: left;">
+    <h3>Detalles del reporte</h3>
+
+    <div class="report-item">
+      <div class="upload-icon">📄</div>
+      <div class="report-details">
+        <p class="report-title">Nombre del reporte</p>
+        <p class="report-date">{{ zip_path.replace(".zip", "").replace("_", " ") }}</p>
+      </div>
+    </div>
+
+    <div class="report-item">
+      <div class="upload-icon">📅</div>
+      <div class="report-details">
+        <p class="report-title">Fecha de generación</p>
+        <p class="report-date">{{ formatted_datetime }}</p>
+      </div>
+    </div>
+
+    <div class="report-item">
+      <div class="upload-icon">⏱️</div>
+      <div class="report-details">
+        <p class="report-title">Tamaño del archivo</p>
+        <p class="report-date">{{ file_size }} MB</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
