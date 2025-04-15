@@ -8,6 +8,7 @@ from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
+from babel.dates import format_datetime
 
 from auth import auth
 from extensions import db, login_manager
@@ -29,7 +30,6 @@ login_manager.init_app(app)
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-# ─────────────────────────────────────────────────────────────
 def clean_scratch_folder():
     folder = app.config['UPLOAD_FOLDER']
     try:
@@ -42,7 +42,6 @@ def clean_scratch_folder():
     except Exception as e:
         print(f"Error al limpiar la carpeta scratch: {e}")
 
-# ─────────────────────────────────────────────────────────────
 @app.route('/', methods=['GET', 'POST'])
 @login_required
 def index():
@@ -51,6 +50,8 @@ def index():
     if request.method == 'POST':
         csv_file = request.files.get('csv_file')
         wordcloud_file = request.files.get('wordcloud_file')
+        report_title = request.form.get('report_title', '').strip()
+        description = request.form.get('description', '').strip()
 
         if not csv_file or not csv_file.filename.endswith('.csv'):
             return redirect(url_for('error_archivo_invalido'))
@@ -66,18 +67,26 @@ def index():
             wordcloud_file.save(wordcloud_path)
 
         try:
-            zip_path = process_report(csv_path, wordcloud_path, unique_id)
+            zip_path = process_report(csv_path, wordcloud_path, unique_id, report_title, description)
         except Exception as e:
             print(f"Error generando el reporte: {e}")
             abort(500)
 
         zip_filename = os.path.basename(zip_path)
-        return render_template('download.html', zip_path=zip_filename)
+        file_size_mb = round(os.path.getsize(zip_path) / (1024 * 1024), 2)
+        current_time = datetime.now()
+        formatted_datetime = format_datetime(current_time, "d 'de' MMMM, yyyy - HH:mm", locale='es')
+
+        return render_template(
+            'download.html',
+            zip_path=zip_filename,
+            file_size=file_size_mb,
+            formatted_datetime=formatted_datetime
+        )
 
     return render_template('index.html')
 
-# ─────────────────────────────────────────────────────────────
-def process_report(csv_path, wordcloud_path, unique_id):
+def process_report(csv_path, wordcloud_path, unique_id, report_title=None, description=None):
     df_cleaned = report.load_and_clean_data(csv_path)
     df_cleaned['Influencer'] = df_cleaned.apply(report.update_influencer, axis=1)
     df_cleaned['Sentiment'] = df_cleaned.apply(report.update_sentiment, axis=1)
@@ -164,24 +173,28 @@ def process_report(csv_path, wordcloud_path, unique_id):
     except Exception as e:
         print("Error en slide6:", e)
 
-    pptx_filename = f"Reporte_{current_date_file_name}_{unique_id}.pptx"
+    safe_title = secure_filename(report_title) if report_title else f"Reporte_{unique_id}"
+    pptx_filename = f"{safe_title}.pptx"
     pptx_path = os.path.join(app.config['UPLOAD_FOLDER'], pptx_filename)
     prs.save(pptx_path)
 
-    zip_filename = f"Reporte_{unique_id}.zip"
+    zip_filename = f"{safe_title}.zip"
     zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
     with zipfile.ZipFile(zip_path, 'w') as zipf:
         zipf.write(pptx_path, arcname=pptx_filename)
         zipf.write(processed_csv_path, arcname=os.path.basename(processed_csv_path))
 
-    # Guardar en base de datos
-    new_report = Report(filename=os.path.basename(zip_path), user_id=current_user.id)
+    new_report = Report(
+        filename=zip_filename,
+        user_id=current_user.id,
+        title=report_title,
+        description=description
+    )
     db.session.add(new_report)
     db.session.commit()
 
     return zip_path
 
-# ─────────────────────────────────────────────────────────────
 @app.route('/download/<path:filename>')
 @login_required
 def download_file(filename):
@@ -202,13 +215,11 @@ def mis_reportes():
     user_reports = Report.query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
     return render_template('mis_reportes.html', reports=user_reports)
 
-# Añadir año actual al contexto global de las plantillas
 @app.context_processor
 def inject_current_year():
     from datetime import datetime
     return {'current_year': datetime.now().year}
 
-# ─────────────────────────────────────────────────────────────
 @app.route('/error/archivo-invalido')
 def error_archivo_invalido():
     return render_template('error.html',
@@ -227,7 +238,6 @@ def internal_error(e):
                            title="Error 500 - Problema del servidor",
                            message="Ocurrió un error inesperado. Por favor, intenta más tarde."), 500
 
-# ─────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.register_blueprint(auth)

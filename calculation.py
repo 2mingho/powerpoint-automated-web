@@ -1,6 +1,8 @@
 import os
 import textwrap
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Evita errores GUI en matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator

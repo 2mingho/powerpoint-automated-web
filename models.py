@@ -19,13 +19,15 @@ class Report(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255), nullable=False)
+    title = db.Column(db.String(255), nullable=True)
+    description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     user = db.relationship('User', backref='reports')
 
     def __repr__(self):
-        return f"<Report {self.filename}>"
+        return f"<Report {self.title or self.filename}>"
 
 @login_manager.user_loader
 def load_user(user_id):

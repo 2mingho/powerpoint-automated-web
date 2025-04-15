@@ -1,20 +1,25 @@
 {% extends 'base.html' %}
-{% block title %}Mis reportes{% endblock %}
+{% block title %}Mis reportes | Data Intel{% endblock %}
 
 {% block content %}
+<div class="report-list-container">
   <h1>📁 Mis Reportes</h1>
+  <h3>Reportes generados recientemente</h3>
 
   {% if reports %}
-    <ul style="margin-top: 20px;">
-      {% for r in reports %}
-        <li style="margin: 10px 0;">
-          📄 {{ r.filename }} — <em>{{ r.created_at.strftime('%d-%b-%Y %H:%M') }}</em>
-          |
-          <a href="{{ url_for('download_file', filename=r.filename) }}" class="btn">Descargar</a>
-        </li>
-      {% endfor %}
-    </ul>
+    {% for r in reports %}
+      <div class="report-item">
+        <div class="report-details">
+          <div class="report-title">{{ r.filename }}</div>
+          <div class="report-date">{{ r.created_at.strftime('%d de %B, %Y - %H:%M') }}</div>
+        </div>
+        <a href="{{ url_for('download_file', filename=r.filename) }}" class="download-btn" title="Descargar">⬇️</a>
+      </div>
+    {% endfor %}
   {% else %}
-    <p>Aún no has generado reportes.</p>
+    <p style="margin-top: 20px;">Aún no has generado reportes.</p>
   {% endif %}
+
+  <a href="{{ url_for('index') }}" class="generate-btn">+ Generar nuevo reporte</a>
+</div>
 {% endblock %}
