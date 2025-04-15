@@ -8,27 +8,27 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body>
-  <header>
-    <div>
+  <header class="main-header">
+    <div class="logo-area">
+      <span class="logo-full">NEWLINK DOMINICANA</span>
+      <span class="logo-mobile">📊</span>
+    </div>
+  
+    <div class="nav-links">
       {% if current_user.is_authenticated %}
-        <span style="color: #fff;">👤 {{ current_user.username }}</span>
-
         {% if request.path != '/mis-reportes' %}
-          <a href="{{ url_for('mis_reportes') }}" class="btn" data-icon="📁">📁 Mis reportes</a>
+          <a href="{{ url_for('mis_reportes') }}" class="btn">📁</a>
         {% endif %}
-
         {% if request.path != '/' %}
-          <a href="{{ url_for('index') }}" class="btn" data-icon="🏠">🏠 Inicio</a>
+          <a href="{{ url_for('index') }}" class="btn">🏠</a>
         {% endif %}
-
-        <a href="{{ url_for('auth.logout') }}" class="btn" data-icon="🚪">🚪 Cerrar sesión</a>
-
+        <a href="{{ url_for('auth.logout') }}" class="btn">🚪</a>
       {% else %}
         {% if request.path != '/login' %}
-          <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐">🔐 Iniciar sesión</a>
+          <a href="{{ url_for('auth.login') }}" class="btn">🔐</a>
         {% endif %}
         {% if request.path != '/register' %}
-          <a href="{{ url_for('auth.register') }}" class="btn" data-icon="📝">📝 Registrarse</a>
+          <a href="{{ url_for('auth.register') }}" class="btn">📝</a>
         {% endif %}
       {% endif %}
     </div>
