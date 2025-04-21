@@ -1,29 +1,25 @@
 @echo off
 SETLOCAL
 
-echo ==============================
-echo   Configurando entorno venv...
-echo ==============================
+echo ----------------------------------------------
+echo 🧠 Ejecutando app Flask de Data Intelligence
+echo ----------------------------------------------
 
-REM Crear entorno si no existe
-IF NOT EXIST "venv" (
-    echo ➤ Creando entorno virtual...
+REM Verificar si existe el entorno virtual
+IF NOT EXIST "venv\Scripts\activate" (
+    echo ⚙️ Entorno virtual no encontrado. Creando entorno virtual...
     python -m venv venv
 )
 
-REM Activar entorno
-echo ➤ Activando entorno virtual...
-call venv\Scripts\activate.bat
+REM Activar entorno virtual
+call venv\Scripts\activate
 
 REM Instalar dependencias
-echo ➤ Instalando dependencias...
-pip install --upgrade pip >nul
+echo 📦 Instalando librerías desde requirements.txt...
 pip install -r requirements.txt
 
-echo ==============================
-echo   Ejecutando app.py...
-echo ==============================
-
+REM Ejecutar la app
+echo 🚀 Iniciando la aplicación...
 python app.py
 
 ENDLOCAL
