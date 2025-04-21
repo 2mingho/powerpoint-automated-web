@@ -315,6 +315,14 @@
   
   /* ─────────────── RESPONSIVE ─────────────── */
   @media screen and (max-width: 600px) {
+    header .btn {
+      padding: 8px 12px;
+    }
+  
+    header .btn span {
+      display: none;
+    }
+    
     .logo-full {
       display: none;
     }
