@@ -27,20 +27,26 @@
     align-items: center;
   }
   
-  .logo-area {
-    display: flex;
-    align-items: center;
-  }
-  
-  .logo-full {
-    display: block;
-    height: 30px;
-  }
-  
-  .logo-mobile {
-    display: none;
-    height: 28px;
-  }
+  /* Logo dentro del header */
+.logo-img {
+  height: 40px;
+  margin-right: 10px;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  font-weight: bold;
+}
+
+.logo-full {
+  font-size: 1.2rem;
+  color: white;
+}
+
+.logo-mobile {
+  display: none;
+}
   
   /* ─────────────── NAV LINKS ─────────────── */
   .nav-links {
@@ -327,8 +333,9 @@
       display: none;
     }
   
-    .logo-mobile {
-      display: block;
+    .logo-img {
+      height: 36px;
+      margin-right: 0;
     }
   
     .nav-links a {
