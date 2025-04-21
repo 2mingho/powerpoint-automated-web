@@ -10,25 +10,26 @@
 <body>
   <header class="main-header">
     <div class="logo-area">
+      <!-- Logo como imagen -->
+      <a href="{{ url_for('index') }}"> <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" class="logo-img" /> </a>
       <span class="logo-full">NEWLINK DOMINICANA</span>
-      <span class="logo-mobile">📊</span>
     </div>
-  
+
     <div class="nav-links">
       {% if current_user.is_authenticated %}
         {% if request.path != '/mis-reportes' %}
-          <a href="{{ url_for('mis_reportes') }}" class="btn">📁</a>
+          <a href="{{ url_for('mis_reportes') }}" class="btn" data-icon="📁">📁 <span>Mis reportes</span></a>
         {% endif %}
         {% if request.path != '/' %}
-          <a href="{{ url_for('index') }}" class="btn">🏠</a>
+          <a href="{{ url_for('index') }}" class="btn" data-icon="🏠">🏠 <span>Inicio</span></a>
         {% endif %}
-        <a href="{{ url_for('auth.logout') }}" class="btn">🚪</a>
+        <a href="{{ url_for('auth.logout') }}" class="btn" data-icon="🚪">🚪 <span>Cerrar sesión</span></a>
       {% else %}
         {% if request.path != '/login' %}
-          <a href="{{ url_for('auth.login') }}" class="btn">🔐</a>
+          <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐">🔐 <span>Iniciar sesión</span></a>
         {% endif %}
         {% if request.path != '/register' %}
-          <a href="{{ url_for('auth.register') }}" class="btn">📝</a>
+          <a href="{{ url_for('auth.register') }}" class="btn" data-icon="📝">📝 <span>Registrarse</span></a>
         {% endif %}
       {% endif %}
     </div>

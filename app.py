@@ -14,6 +14,7 @@ from auth import auth
 from extensions import db, login_manager
 from models import User, Report
 import calculation as report
+from groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'scratch'
@@ -22,11 +23,9 @@ app.config['UPLOAD_FOLDER'] = 'scratch'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SECRET_KEY'] = 'super-secret-key'
 
-# Inicializar extensiones
 db.init_app(app)
 login_manager.init_app(app)
 
-# Crear carpeta scratch si no existe
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
@@ -110,7 +109,7 @@ def process_report(csv_path, wordcloud_path, unique_id, report_title=None, descr
 
     current_date = datetime.now().strftime('%d-%b-%Y')
     current_date_file_name = datetime.now().strftime('%d-%b-%Y, %H %M %S')
-    client_name = os.path.basename(csv_path).split()[0]
+    client_name = report_title if report_title else os.path.basename(csv_path).split()[0]
 
     prs = Presentation("powerpoints/Reporte_plantilla.pptx")
 
@@ -132,15 +131,28 @@ def process_report(csv_path, wordcloud_path, unique_id, report_title=None, descr
                 "EST_REACH": estimated_reach
             }.items():
                 if key in shape.text:
-                    report.set_text_style(shape, value, font_size=Pt(22), center=True)
+                    report.set_text_style(shape, value, font_name='Effra Heavy' ,font_size=Pt(24), center=True)
         elif shape.shape_type == 13:
-            slide2.shapes.add_picture('scratch/convEvolution.png', Inches(0.2), Inches(1.2), width=Inches(10.46), height=Inches(5.63))
+            slide2.shapes.add_picture('scratch/convEvolution.png', Inches(0.9), Inches(1.2), width=Inches(9.55), height=Inches(5.14))
 
     # Slide 3
     slide3 = prs.slides[2]
     for shape in slide3.shapes:
-        if shape.has_text_frame and "TOP_NEWS" in shape.text:
-            report.set_text_style(shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
+        if shape.has_text_frame:
+            if "TOP_NEWS" in shape.text:
+                report.set_text_style(shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
+            if "CONVERSATION_ANALISIS" in shape.text:
+                # Realizar análisis automático
+                parrafos = "\n".join(df_cleaned['Hit Sentence'].dropna().astype(str).tolist()[:80])
+                prompt = construir_prompt(client_name, parrafos)
+                respuesta = llamar_groq(prompt)
+                analisis_texto = "No disponible"
+                if respuesta:
+                    resultado_json = extraer_json(respuesta)
+                    if resultado_json:
+                        analisis_texto = formatear_analisis_social_listening(resultado_json)
+                report.set_text_style(shape, analisis_texto, 'Effra Light', Pt(11), False)
+
     try:
         slide3.shapes.add_picture('scratch/Wordcloud.png', Inches(7.5), Inches(3.5), width=Inches(4.2), height=Inches(2.66))
     except Exception as e:
@@ -152,7 +164,7 @@ def process_report(csv_path, wordcloud_path, unique_id, report_title=None, descr
         if shape.shape_type == 13:
             slide4.shapes.add_picture('scratch/sentiment_pie_chart.png', Inches(1), Inches(1), width=Inches(6), height=Inches(6))
 
-    # Slide 5
+    # Slide 5 y 6 (como estaban antes)
     slide5 = prs.slides[4]
     for shape in slide5.shapes:
         if shape.has_text_frame and "NUMB_PRENSA" in shape.text:
@@ -162,7 +174,6 @@ def process_report(csv_path, wordcloud_path, unique_id, report_title=None, descr
     except Exception as e:
         print("Error al añadir tabla en slide5:", e)
 
-    # Slide 6
     slide6 = prs.slides[5]
     for shape in slide6.shapes:
         if shape.has_text_frame and "NUMB_REDES" in shape.text:
@@ -217,7 +228,6 @@ def mis_reportes():
 
 @app.context_processor
 def inject_current_year():
-    from datetime import datetime
     return {'current_year': datetime.now().year}
 
 @app.route('/error/archivo-invalido')

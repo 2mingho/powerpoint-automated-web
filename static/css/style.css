@@ -13,6 +13,11 @@
   }
   
   /* ─────────────── HEADER ─────────────── */
+  .page-title {
+    font-size: 2rem;
+    margin: 20px 0;
+  }
+  
   header {
     position: fixed;
     top: 0;
@@ -27,20 +32,26 @@
     align-items: center;
   }
   
-  .logo-area {
-    display: flex;
-    align-items: center;
-  }
-  
-  .logo-full {
-    display: block;
-    height: 30px;
-  }
-  
-  .logo-mobile {
-    display: none;
-    height: 28px;
-  }
+  /* Logo dentro del header */
+.logo-img {
+  height: 40px;
+  margin-right: 10px;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  font-weight: bold;
+}
+
+.logo-full {
+  font-size: 1.2rem;
+  color: white;
+}
+
+.logo-mobile {
+  display: none;
+}
   
   /* ─────────────── NAV LINKS ─────────────── */
   .nav-links {
@@ -175,7 +186,7 @@
     padding: 40px 30px;
     text-align: center;
     max-width: 400px;
-    margin: 100px auto;
+    margin: 0px auto;
   }
   
   .auth-container h1 {
@@ -204,7 +215,7 @@
   .report-container {
     padding: 30px 20px;
     max-width: 600px;
-    margin: 100px auto 80px;
+    margin: 0px auto 0px;
   }
   
   .upload-box {
@@ -250,7 +261,7 @@
   
   /* ─────────────── MIS REPORTES ─────────────── */
   .report-list-container {
-    margin: 100px auto 80px;
+    margin: 0px auto 0px;
     max-width: 700px;
     padding: 20px;
   }
@@ -312,54 +323,142 @@
   .generate-btn:hover {
     background-color: #2c2ccc;
   }
+
+  /* ─── INPUT CON ÍCONO INTERNO ─── */
+.icon-input {
+  position: relative;
+  width: 100%;
+}
+
+.icon-input input {
+  padding-left: 40px;
+  padding-right: 10px;
+  font-size: 14px;
+  height: 40px;
+}
+
+.icon-input .icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: #888;
+  pointer-events: none;
+  transition: color 0.3s ease;
+}
+
+.icon-input input:focus + .icon {
+  color: #3f3fff;
+}
   
-  /* ─────────────── RESPONSIVE ─────────────── */
-  @media screen and (max-width: 600px) {
-    .logo-full {
-      display: none;
-    }
-  
-    .logo-mobile {
-      display: block;
-    }
-  
-    .nav-links a {
-      font-size: 0;
-      padding: 8px;
-    }
-  
-    .nav-links a::before {
-      content: attr(data-icon);
-      font-size: 1.3rem;
-      color: white;
-    }
-  
-    .auth-container {
-      margin-top: 100px;
-      margin-bottom: 80px;
-      width: 90%;
-    }
-  
-    .report-container,
-    .report-list-container {
-      width: 90%;
-    }
-  
-    .upload-box {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-  
-    .report-item {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-  
-    .download-btn {
-      align-self: flex-end;
-      margin-top: 10px;
-    }
+ /* ─────────────── RESPONSIVE ─────────────── */
+@media screen and (max-width: 600px) {
+  html {
+    font-size: 14px;
   }
+
+  body {
+    padding: 10px;
+  }
+
+  header .btn {
+    padding: 8px 12px;
+  }
+
+  header .btn span {
+    display: none;
+  }
+
+  .logo-full {
+    display: none;
+  }
+
+  .logo-img {
+    height: 36px;
+    margin-right: 0;
+  }
+
+  .nav-links a {
+    font-size: 0;
+    padding: 8px;
+  }
+
+  .nav-links a::before {
+    content: attr(data-icon);
+    font-size: 1.3rem;
+    color: white;
+  }
+
+  .auth-container {
+    width: 95%;
+    margin-top: 70px;
+    margin-bottom: 50px;
+    padding: 20px;
+  }
+
+  .icon-input {
+    position: relative;
+    width: 100%;
+  }
+
+  .icon-input input {
+    font-size: 14px;
+    height: 42px;
+    padding-right: 38px;
+  }
+
+  .icon-input .icon {
+    position: absolute;
+    /* right: 10px; */
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 16px;
+    color: #555;
+    pointer-events: none;
+  }
+
+  .report-container,
+  .report-list-container {
+    width: 95%;
+    margin: auto auto;
+    padding: 20px;
+  }
+
+  .report-container h1 {
+    font-size: 1.5rem;
+    margin: 10px 0;
+  }
+
+  .upload-box {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .report-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .download-btn {
+    align-self: flex-end;
+    margin-top: 10px;
+  }
+
+  button,
+  .btn {
+    font-size: 0.9rem;
+    padding: 10px 16px;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  textarea {
+    font-size: 14px;
+    /* padding: 10px; */
+  }
+}
 
 /* ─────────────── DOWNLOAD REPORTS ─────────────── */
 .report-generated-container {

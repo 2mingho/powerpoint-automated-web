@@ -1,9 +1,10 @@
 Flask
 Flask-Login
 Flask-SQLAlchemy
-Werkzeug
-python-pptx
+python-dotenv
+requests
 pandas
 matplotlib
+python-pptx
+babel
 wordcloud
-Babel
