@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Menú Principal | Data Intel{% endblock %}
+
+{% block content %}
+<div class="menu-container">
+  <h1>Bienvenido a Data Intelligence</h1>
+  <p class="coming-soon">Selecciona una herramienta para comenzar:</p>
+
+  <div class="menu-options">
+    <!-- Generar Reportes -->
+    <a href="{{ url_for('index') }}" class="tool-card">
+      <div class="icon">📊</div>
+      <h2>Generar Reportes</h2>
+      <p>Automatiza la creación de reportes desde archivos CSV con análisis de menciones y visuales.</p>
+    </a>
+
+    <!-- Clasificación de Data -->
+    <a href="{{ url_for('clasificacion') }}" class="tool-card">
+      <div class="icon">🧠</div>
+      <h2>Clasificación de Data</h2>
+      <p>Organiza las menciones automáticamente por temática, tono, plataforma y más.</p>
+    </a>
+
+    <!-- Unión de Archivos -->
+    <a href="{{ url_for('union_archivos') }}" class="tool-card">
+      <div class="icon">🔗</div>
+      <h2>Unión de Archivos</h2>
+      <p>Combina múltiples archivos de redes y prensa digital en una única fuente estandarizada.</p>
+    </a>
+  </div>
+</div>
+{% endblock %}

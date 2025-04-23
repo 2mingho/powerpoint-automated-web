@@ -10,20 +10,24 @@
 <body>
   <header class="main-header">
     <div class="logo-area">
-      <!-- Logo como imagen -->
-      <a href="{{ url_for('index') }}"> <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" class="logo-img" /> </a>
+      <a href="{{ url_for('menu') }}">
+        <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" class="logo-img" />
+      </a>
       <span class="logo-full">NEWLINK DOMINICANA</span>
     </div>
 
     <div class="nav-links">
       {% if current_user.is_authenticated %}
-        {% if request.path != '/mis-reportes' %}
-          <a href="{{ url_for('mis_reportes') }}" class="btn" data-icon="📁">📁 <span>Mis reportes</span></a>
-        {% endif %}
-        {% if request.path != '/' %}
-          <a href="{{ url_for('index') }}" class="btn" data-icon="🏠">🏠 <span>Inicio</span></a>
-        {% endif %}
-        <a href="{{ url_for('auth.logout') }}" class="btn" data-icon="🚪">🚪 <span>Cerrar sesión</span></a>
+        <div class="nav-user">
+          <div class="nav-user-btn">👤 <span>Usuario</span></div>
+          <div class="dropdown-content">
+            <a href="{{ url_for('index') }}">📊 Generar Reporte</a>
+            <a href="{{ url_for('clasificacion') }}">🧠 Clasificación</a>
+            <a href="{{ url_for('union_archivos') }}">🔗 Unión de Archivos</a>
+            <a href="{{ url_for('mis_reportes') }}">📁 Mis reportes</a>
+            <a href="{{ url_for('auth.logout') }}">🚪 Cerrar sesión</a>
+          </div>
+        </div>
       {% else %}
         {% if request.path != '/login' %}
           <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐">🔐 <span>Iniciar sesión</span></a>
@@ -52,5 +56,8 @@
   <footer>
     <p>&copy; {{ current_year }} Data Intelligence</p>
   </footer>
+
+  <!-- Script principal -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

@@ -41,6 +41,11 @@ def clean_scratch_folder():
     except Exception as e:
         print(f"Error al limpiar la carpeta scratch: {e}")
 
+@app.route('/menu')
+@login_required
+def menu():
+    return render_template('menu.html')
+
 @app.route('/', methods=['GET', 'POST'])
 @login_required
 def index():
@@ -235,6 +240,16 @@ def error_archivo_invalido():
     return render_template('error.html',
                            title="Archivo inválido",
                            message="El archivo que subiste no es válido o tiene un formato incorrecto.")
+    
+@app.route('/clasificacion')
+@login_required
+def clasificacion():
+    return render_template('clasificacion.html')
+
+@app.route('/union')
+@login_required
+def union_archivos():
+    return render_template('union.html')
 
 @app.errorhandler(404)
 def page_not_found(e):
