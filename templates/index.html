@@ -2,11 +2,12 @@
 {% block title %}Inicio | Data Intel{% endblock %}
 
 {% block content %}
+<div class="preview-flex">
+  <!-- Formulario principal -->
   <div class="report-container">
     <h1 class="page-title">Reportes Data Intel</h1>
 
     <form action="/" method="POST" enctype="multipart/form-data" onsubmit="mostrarCargando()">
-      
       <!-- Área para subir el archivo -->
       <div class="upload-box">
         <div class="upload-icon">📁</div>
@@ -14,7 +15,7 @@
           <strong>Subir archivo</strong>
           <p>Selecciona o arrastra un archivo para generar un reporte de análisis de datos.</p>
         </div>
-        <input type="file" name="csv_file" accept=".csv" required />
+        <input type="file" name="csv_file" id="csv_file" accept=".csv" required />
       </div>
 
       <!-- Título del reporte -->
@@ -49,9 +50,37 @@
     </form>
   </div>
 
-  <script>
-    function mostrarCargando() {
-      document.getElementById('mensaje-cargando').style.display = 'block';
-    }
-  </script>
+  <!-- Contenedor de vista previa -->
+  <div class="preview-container" id="preview-container" style="display: none;">
+    <div class="preview-header">
+      <label for="numRows">Vista previa del archivo</label>
+      <select id="numRows">
+        <option value="5">5 filas</option>
+        <option value="10" selected>10 filas</option>
+        <option value="25">25 filas</option>
+        <option value="50">50 filas</option>
+      </select>
+    </div>
+
+    <table class="preview-table" id="preview-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th></th>
+          <th>Hit Sentence</th>
+          <th>Sentiment</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Filas se llenan dinámicamente con JS -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  function mostrarCargando() {
+    document.getElementById('mensaje-cargando').style.display = 'block';
+  }
+</script>
 {% endblock %}

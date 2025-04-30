@@ -688,3 +688,71 @@
     padding: 10px 12px;
   }
 }
+
+/* ─────────────── VISTA PREVIA CSV ─────────────── */
+.preview-container {
+  background: #fff;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  margin-top: 30px;
+  flex: 1;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.preview-header label {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.preview-header select {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.preview-table th,
+.preview-table td {
+  border: 1px solid #ddd;
+  padding: 8px 10px;
+  font-size: 14px;
+  text-align: left;
+}
+
+.preview-table th {
+  background-color: #f0f0f0;
+  font-weight: bold;
+}
+
+.preview-table td:nth-child(1),
+.preview-table td:nth-child(2) {
+  text-align: center;
+  width: 40px;
+}
+
+/* ───── Desktop: mostrar a la derecha ───── */
+@media screen and (min-width: 768px) {
+  .preview-flex {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+  }
+
+  .report-container {
+    flex: 1;
+  }
+}

@@ -8,6 +8,7 @@ from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
 from babel.dates import format_datetime
 
 from auth import auth
@@ -90,6 +91,70 @@ def index():
 
     return render_template('index.html')
 
+def add_sentiment_card(slide, mention, top_position, border_color):
+    # Estilo de texto (puedes modificar aquí)
+    font_name = 'Calibri'
+    font_size = Pt(12)
+    label_color = RGBColor(80, 80, 80)
+    text_color = RGBColor(0, 0, 0)
+
+    # Crear shape
+    left = Inches(0.5)
+    top = Inches(top_position)
+    width = Inches(9)
+    height = Inches(2.2)
+    card = slide.shapes.add_shape(
+        autoshape_type_id=1,  # Rectángulo redondeado
+        left=left,
+        top=top,
+        width=width,
+        height=height
+    )
+
+    # Borde de color por sentimiento
+    border_rgb = {
+        "Positivo": RGBColor(40, 167, 69),    # Verde
+        "Neutral": RGBColor(108, 117, 125),   # Gris
+        "Negativo": RGBColor(220, 53, 69)     # Rojo
+    }.get(mention['Sentiment'], border_color)
+
+    card.line.color.rgb = border_rgb
+    card.fill.background()
+
+    # Texto dentro del card
+    tf = card.text_frame
+    tf.clear()
+
+    # Fila de datos izquierda
+    left_text = "\n".join([
+        f"Influencer: {mention.get('Influencer', '')}",
+        f"Source: {mention.get('Source', '')}",
+        f"Hit Sentence: {mention.get('Hit Sentence', '')}",
+        f"URL: {mention.get('URL', '')}",
+        f"Reach: {mention.get('Reach', '')}"
+    ])
+
+    # Fila de datos derecha
+    right_text = "\n".join([
+        f"Fecha: {mention.get('Alternate Date Format', '')}",
+        f"Hora: {mention.get('Time', '')}",
+        f"Sentiment: {mention.get('Sentiment', '')}"
+    ])
+
+    # Añadir dos párrafos: izquierda y derecha
+    p_left = tf.add_paragraph()
+    p_left.text = left_text
+    p_left.font.name = font_name
+    p_left.font.size = font_size
+    p_left.font.color.rgb = text_color
+
+    p_right = tf.add_paragraph()
+    p_right.text = right_text
+    p_right.alignment = 2  # derecha
+    p_right.font.name = font_name
+    p_right.font.size = font_size
+    p_right.font.color.rgb = text_color
+
 def process_report(csv_path, wordcloud_path, unique_id, report_title=None, description=None):
     df_cleaned = report.load_and_clean_data(csv_path)
     df_cleaned['Influencer'] = df_cleaned.apply(report.update_influencer, axis=1)
@@ -165,11 +230,26 @@ def process_report(csv_path, wordcloud_path, unique_id, report_title=None, descr
 
     # Slide 4
     slide4 = prs.slides[3]
+    # Añadir gráfico de pastel
     for shape in slide4.shapes:
         if shape.shape_type == 13:
             slide4.shapes.add_picture('scratch/sentiment_pie_chart.png', Inches(1), Inches(1), width=Inches(6), height=Inches(6))
 
-    # Slide 5 y 6 (como estaban antes)
+    # Añadir tarjetas de sentimientos
+    sentiments = ['Positivo', 'Neutral', 'Negativo']
+    colors = {
+        'Positivo': RGBColor(40, 167, 69),
+        'Neutral': RGBColor(108, 117, 125),
+        'Negativo': RGBColor(220, 53, 69)
+    }
+
+    top_base = 0.5
+    for idx, sentiment in enumerate(sentiments):
+        match = df_cleaned[df_cleaned['Sentiment'] == sentiment].head(1)
+        if not match.empty:
+            add_sentiment_card(slide4, match.iloc[0], top_base + idx * 2.4, colors[sentiment])
+
+    # Slide 5 y 6
     slide5 = prs.slides[4]
     for shape in slide5.shapes:
         if shape.has_text_frame and "NUMB_PRENSA" in shape.text:
