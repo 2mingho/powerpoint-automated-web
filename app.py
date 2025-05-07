@@ -2,8 +2,9 @@ import os
 import uuid
 import zipfile
 import shutil
+import pandas as pd
 from datetime import datetime
-from flask import Flask, render_template, request, send_file, redirect, url_for, abort, after_this_request
+from flask import Flask, render_template, request, send_file, redirect, url_for, abort, after_this_request, session
 from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
@@ -61,35 +62,44 @@ def index():
         if not csv_file or not csv_file.filename.endswith('.csv'):
             return redirect(url_for('error_archivo_invalido'))
 
-        unique_id = uuid.uuid4().hex[:6]
+        unique_id = f"{current_user.id}_{uuid.uuid4().hex[:6]}"
         csv_filename = secure_filename(csv_file.filename)
-        csv_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_{csv_filename}")
-        csv_file.save(csv_path)
+        temp_csv_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_{csv_filename}")
+        csv_file.save(temp_csv_path)
 
-        wordcloud_path = None
+        session['csv_temp_path'] = temp_csv_path
+        session['wordcloud_temp_path'] = None
+        session['report_title'] = report_title
+        session['description'] = description
+
         if wordcloud_file and wordcloud_file.filename.endswith('.png'):
-            wordcloud_path = os.path.join(app.config['UPLOAD_FOLDER'], 'Wordcloud.png')
-            wordcloud_file.save(wordcloud_path)
+            temp_wordcloud_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_Wordcloud.png")
+            wordcloud_file.save(temp_wordcloud_path)
+            session['wordcloud_temp_path'] = temp_wordcloud_path
 
-        try:
-            zip_path = process_report(csv_path, wordcloud_path, unique_id, report_title, description)
-        except Exception as e:
-            print(f"Error generando el reporte: {e}")
-            abort(500)
-
-        zip_filename = os.path.basename(zip_path)
-        file_size_mb = round(os.path.getsize(zip_path) / (1024 * 1024), 2)
-        current_time = datetime.now()
-        formatted_datetime = format_datetime(current_time, "d 'de' MMMM, yyyy - HH:mm", locale='es')
-
-        return render_template(
-            'download.html',
-            zip_path=zip_filename,
-            file_size=file_size_mb,
-            formatted_datetime=formatted_datetime
-        )
+        return redirect(url_for('vista_previa'))
 
     return render_template('index.html')
+
+@app.route('/vista-previa')
+@login_required
+def vista_previa():
+    temp_csv_path = session.get('csv_temp_path')
+    if not temp_csv_path or not os.path.exists(temp_csv_path):
+        return redirect(url_for('index'))
+
+    try:
+        df = pd.read_csv(temp_csv_path, encoding='utf-16', sep='\t')
+        if 'Hit Sentence' not in df.columns or 'Sentiment' not in df.columns:
+            return render_template('error.html', title="Columnas faltantes", message="El archivo debe contener las columnas 'Hit Sentence' y 'Sentiment'.")
+
+        df = df[~df['Hit Sentence'].str.startswith(('RT ', 'QT '), na=False)]
+        preview_data = df[['Hit Sentence', 'Sentiment']].head(10).to_dict(orient='records')
+        return render_template('vista_previa.html', preview_data=preview_data)
+
+    except Exception as e:
+        print("Error al cargar CSV para vista previa:", e)
+        return render_template('error.html', title="Error de lectura", message="Hubo un problema al procesar el archivo CSV.")
 
 def add_sentiment_card(slide, mention, top_position, border_color):
     # Estilo de texto (puedes modificar aquí)
