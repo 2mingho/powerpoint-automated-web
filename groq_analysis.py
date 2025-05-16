@@ -63,7 +63,8 @@ def extraer_json(respuesta):
         except json.JSONDecodeError:
             print("⚠️ Error al parsear el JSON.")
             print(raw_json)
-            return None
+            # return None   # TEMPORAL FIX
+            return raw_json
     else:
         print("⚠️ No se encontró ningún JSON en la respuesta.")
         print(respuesta)
