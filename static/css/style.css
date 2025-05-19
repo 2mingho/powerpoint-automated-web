@@ -688,3 +688,108 @@
     padding: 10px 12px;
   }
 }
+
+/* ───────────── ADMIN TABLE STYLES ───────────── */
+.report-container table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  background-color: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.report-container th,
+.report-container td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.report-container th {
+  background-color: #3f3fff;
+  color: white;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.report-container td {
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.report-container tr:hover {
+  background-color: #f9f9f9;
+}
+
+/* Botón dentro de la tabla */
+.report-container table .btn {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  background-color: #ffdd00;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  color: #000;
+}
+
+.report-container table .btn:hover {
+  background-color: #141414;
+  color: #ffdd00;
+}
+
+@media screen and (max-width: 768px) {
+  .report-container table,
+  .report-container thead,
+  .report-container tbody,
+  .report-container th,
+  .report-container td,
+  .report-container tr {
+    display: block;
+    width: 100%;
+  }
+
+  .report-container thead {
+    display: none;
+  }
+
+  .report-container tr {
+    margin-bottom: 15px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  .report-container td {
+    padding: 12px 16px;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+    font-size: 0.9rem;
+    border: none;
+    border-bottom: 1px solid #eee;
+  }
+
+  .report-container td::before {
+    content: attr(data-label);
+    font-weight: bold;
+    color: #555;
+    flex-shrink: 0;
+    width: 45%;
+  }
+
+  .report-container td:last-child {
+    border-bottom: none;
+  }
+
+  .report-container table .btn {
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+}

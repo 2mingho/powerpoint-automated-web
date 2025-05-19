@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Panel Admin | Data Intel{% endblock %}
+
+{% block content %}
+  <div class="report-container">
+    <h1>Panel de Administración</h1>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Usuario</th>
+          <th>Email</th>
+          <th>Rol Actual</th>
+          <th>Contraseña</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>{{ user.id }}</td>
+          <td>{{ user.username }}</td>
+          <td>{{ user.email }}</td>
+          <td>{{ user.rol }}</td>
+          <td>🔒 No visible</td>
+          <td>
+            {% if user.id != current_user.id and user.email != 'admin@admin.com' %}
+              <form action="{{ url_for('cambiar_rol', user_id=user.id) }}" method="post" style="display:inline;">
+                <input type="hidden" name="nuevo_rol" value="{{ 'admin' if user.rol == 'user' else 'user' }}">
+                <button type="submit" class="btn">Cambiar a {{ 'admin' if user.rol == 'user' else 'user' }}</button>
+              </form>
+
+              <form action="{{ url_for('eliminar_usuario', user_id=user.id) }}" method="post" onsubmit="return confirm('¿Estás seguro de eliminar este usuario?');" style="display:inline;">
+                <button type="submit" class="btn" style="background-color: #ff4d4d; color: white;">Eliminar</button>
+              </form>
+            {% else %}
+              <em>(tú)</em>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

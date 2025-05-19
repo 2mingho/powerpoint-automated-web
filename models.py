@@ -10,9 +10,13 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(150), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
+    rol = db.Column(db.String(50), default='user', nullable=False)
+
+    def is_admin(self):
+        return self.rol == 'admin'
 
     def __repr__(self):
-        return f'<User {self.username}>'
+        return f'<User {self.username} ({self.rol})>'
 
 class Report(db.Model):
     __tablename__ = 'reports'

@@ -3,18 +3,19 @@ import uuid
 import zipfile
 import shutil
 from datetime import datetime
-from flask import Flask, render_template, request, send_file, redirect, url_for, abort, after_this_request
+from flask import Flask, render_template, request, send_file, redirect, url_for, abort, after_this_request, Blueprint, flash
 from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from babel.dates import format_datetime
 
-from auth import auth
+from auth import auth, admin_required
 from extensions import db, login_manager
 from models import User, Report
 import calculation as report
 from groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
+from functools import wraps
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'scratch'
@@ -250,6 +251,45 @@ def clasificacion():
 @login_required
 def union_archivos():
     return render_template('union.html')
+
+@app.route('/admin')
+@login_required
+@admin_required
+def admin_dashboard():
+    users = User.query.all()
+    return render_template('admin.html', users=users)
+
+@app.route('/admin/cambiar-rol/<int:user_id>', methods=['POST'])
+@admin_required
+def cambiar_rol(user_id):
+    nuevo_rol = request.form.get('nuevo_rol')
+    user = User.query.get_or_404(user_id)
+
+    if user.id == current_user.id:
+        flash("No puedes cambiar tu propio rol.", "error")
+        return redirect(url_for('admin'))
+
+    user.rol = nuevo_rol
+    db.session.commit()
+    flash(f"Rol actualizado a {nuevo_rol} para {user.username}.", "success")
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/eliminar/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def eliminar_usuario(user_id):
+    from models import User
+    user = User.query.get(user_id)
+    if user:
+        if user.email == 'admin@admin.com':
+            flash('No puedes eliminar al administrador principal.', 'error')
+        else:
+            db.session.delete(user)
+            db.session.commit()
+            flash('Usuario eliminado correctamente.', 'success')
+    else:
+        flash('Usuario no encontrado.', 'error')
+    return redirect(url_for('admin'))
 
 @app.errorhandler(404)
 def page_not_found(e):
