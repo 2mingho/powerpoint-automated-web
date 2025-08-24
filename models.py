@@ -1,3 +1,4 @@
+# models.py
 from flask_login import UserMixin
 from extensions import db
 from extensions import login_manager
@@ -14,6 +15,7 @@ class User(UserMixin, db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
+
 class Report(db.Model):
     __tablename__ = 'reports'
 
@@ -23,11 +25,14 @@ class Report(db.Model):
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    template_name = db.Column(db.String(255), nullable=True)  # ← NUEVO
+
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     user = db.relationship('User', backref='reports')
 
     def __repr__(self):
         return f"<Report {self.title or self.filename}>"
+
 
 @login_manager.user_loader
 def load_user(user_id):

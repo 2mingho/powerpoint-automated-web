@@ -1,3 +1,4 @@
+<!-- templates/download.html -->
 {% extends 'base.html' %}
 {% block title %}Reporte generado | Data Intel{% endblock %}
 
@@ -36,6 +37,14 @@
       <div class="report-details">
         <p class="report-title">Fecha de generación</p>
         <p class="report-date">{{ formatted_datetime }}</p>
+      </div>
+    </div>
+
+    <div class="report-item">
+      <div class="upload-icon">🧩</div>
+      <div class="report-details">
+        <p class="report-title">Plantilla utilizada</p>
+        <p class="report-date">{{ template_used }}</p>
       </div>
     </div>
 
