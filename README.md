@@ -77,4 +77,3 @@ POWERPOINT-AUTOMATED-WEB/
 
 * Los reportes se eliminan del servidor después de su descarga.
 * Asegúrate de que los archivos CSV estén codificados en UTF-16.
-* Puedes personalizar el diseño desde style.css o las plantillas HTML.
