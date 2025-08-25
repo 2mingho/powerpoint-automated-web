@@ -1,3 +1,4 @@
+# init_db.py
 import os
 import sys
 import sqlite3
@@ -29,6 +30,7 @@ def update_structure_if_needed():
     conn = sqlite3.connect(DB_PATH)
     add_column_if_not_exists(conn, "reports", "title", "TEXT")
     add_column_if_not_exists(conn, "reports", "description", "TEXT")
+    add_column_if_not_exists(conn, "reports", "template_name", "TEXT")  # ← NUEVO
     conn.commit()
     conn.close()
     print("✅ Verificación de estructura completada.")

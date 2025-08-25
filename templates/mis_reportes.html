@@ -1,3 +1,4 @@
+<!-- templates/mis_reportes.html -->
 {% extends 'base.html' %}
 {% block title %}Mis reportes | Data Intel{% endblock %}
 
@@ -11,7 +12,10 @@
       <div class="report-item">
         <div class="report-details">
           <div class="report-title">{{ r.filename }}</div>
-          <div class="report-date">{{ r.created_at.strftime('%d de %B, %Y - %H:%M') }}</div>
+          <div class="report-date">
+            {{ r.created_at.strftime('%d de %B, %Y - %H:%M') }}
+            • Plantilla: {{ r.template_name or 'N/D' }}
+          </div>
         </div>
         <a href="{{ url_for('download_file', filename=r.filename) }}" class="download-btn" title="Descargar">⬇️</a>
       </div>
