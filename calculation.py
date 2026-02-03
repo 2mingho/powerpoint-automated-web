@@ -34,7 +34,7 @@ def format_reach(number):
         return number
     return f"{int(number):,}"
 
-def set_text_style(shape, text, font_name='Effra', font_size=Pt(14), center=True):
+def set_text_style(shape, text, font_name='Poppins', font_size=Pt(14), center=True):
     if shape.has_text_frame:
         p = shape.text_frame.paragraphs[0] if shape.text_frame.paragraphs else shape.text_frame.add_paragraph()
         p.clear()
@@ -50,7 +50,7 @@ def load_and_clean_data(file_path):
     columns_to_delete = [
         'Opening Text', 'Subregion', 'Desktop Reach', 'Mobile Reach',
         'Twitter Social Echo', 'Facebook Social Echo', 'Reddit Social Echo',
-        'National Viewership', 'AVE', 'State', 'City',
+        'National Viewership', 'State', 'City',
         'Social Echo Total', 'Editorial Echo', 'Views', 'Estimated Views',
         'Likes', 'Replies', 'Retweets', 'Comments', 'Shares', 'Reactions',
         'Threads', 'Is Verified'
@@ -88,7 +88,7 @@ def create_mentions_evolution_chart(df, date_column='Alternate Date Format', tim
     df_grouped = df_grouped.sort_values('datetime')
 
     fig, ax = plt.subplots(figsize=(13, 7))
-    ax.plot(df_grouped['datetime'], df_grouped['count'], linewidth=3.5, color='orange')
+    ax.plot(df_grouped['datetime'], df_grouped['count'], linewidth=4.5, color='orange')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
@@ -104,7 +104,7 @@ def create_mentions_evolution_chart_by_date(df, date_column='Alternate Date Form
     df_grouped = df_grouped.sort_values('date')
 
     fig, ax = plt.subplots(figsize=(13, 7))
-    ax.plot(df_grouped['date'], df_grouped['count'], linewidth=3.5, color='orange')
+    ax.plot(df_grouped['date'], df_grouped['count'], linewidth=4.5, color='orange')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
@@ -116,7 +116,7 @@ def create_mentions_evolution_chart_by_date(df, date_column='Alternate Date Form
 
 def create_sentiment_pie_chart(df, output_path='scratch/sentiment_pie_chart.png'):
     sentiment_counts = df[df['Sentiment'] != 'Not Rated']['Sentiment'].value_counts()
-    sentiment_colors = {'Negative': '#ff0000', 'Positive': '#00b050', 'Neutral': '#BFBFBF'}
+    sentiment_colors = {'Negative': "#ad0303", 'Positive': "#07ab50", 'Neutral': "#D3D1D1"}
     labels = sentiment_counts.index.to_list()
     sizes = sentiment_counts.to_list()
 
@@ -173,7 +173,7 @@ def add_dataframe_as_table(slide, dataframe, x, y, width, height):
         for paragraph in cell.text_frame.paragraphs:
             paragraph.font.bold = True
             paragraph.font.size = Pt(14)
-            paragraph.font.name = 'Effra'
+            paragraph.font.name = 'Poppins Semibold'
             paragraph.alignment = PP_ALIGN.CENTER
             cell.vertical_anchor = MSO_ANCHOR.MIDDLE
 
@@ -184,7 +184,7 @@ def add_dataframe_as_table(slide, dataframe, x, y, width, height):
             cell.text = str(value)
             for paragraph in cell.text_frame.paragraphs:
                 paragraph.font.size = Pt(11)
-                paragraph.font.name = 'Effra Light'
+                paragraph.font.name = 'Poppins'
                 paragraph.alignment = PP_ALIGN.CENTER
                 cell.vertical_anchor = MSO_ANCHOR.MIDDLE
 
