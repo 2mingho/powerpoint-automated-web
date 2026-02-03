@@ -8,35 +8,35 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body>
-  <header class="main-header">
-    <div class="logo-area">
-      <a href="{{ url_for('menu') }}">
-        <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" class="logo-img" />
-      </a>
-      <span class="logo-full">NEWLINK DOMINICANA</span>
-    </div>
+  
+  <header>
+    <a href="{{ url_for('menu') if current_user.is_authenticated else url_for('auth.login') }}" class="logo-area">
+      <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo" class="logo-img" />
+      <span class="logo-full">Data Intel</span>
+    </a>
 
-    <div class="nav-links">
+    <nav class="nav-links">
       {% if current_user.is_authenticated %}
         <div class="nav-user">
-          <div class="nav-user-btn">👤 <span>Usuario</span></div>
-          <div class="dropdown-content">
+          <div class="user-avatar">👤</div>
+          <div class="dropdown-menu">
+            <div style="padding: 10px 12px; font-weight: bold; font-size: 0.8rem; color: #aaa; text-transform: uppercase;">Menú</div>
             <a href="{{ url_for('index') }}">📊 Generar Reporte</a>
             <a href="{{ url_for('clasificacion') }}">🧠 Clasificación</a>
-            <a href="{{ url_for('union_archivos') }}">🔗 Unión de Archivos</a>
             <a href="{{ url_for('mis_reportes') }}">📁 Mis reportes</a>
-            <a href="{{ url_for('auth.logout') }}">🚪 Cerrar sesión</a>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 5px 0;">
+            <a href="{{ url_for('auth.logout') }}" style="color: #ef4444;">🚪 Cerrar sesión</a>
           </div>
         </div>
       {% else %}
         {% if request.path != '/login' %}
-          <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐">🔐 <span>Iniciar sesión</span></a>
+          <a href="{{ url_for('auth.login') }}" class="btn-nav">Iniciar sesión</a>
         {% endif %}
         {% if request.path != '/register' %}
-          <a href="{{ url_for('auth.register') }}" class="btn" data-icon="📝">📝 <span>Registrarse</span></a>
+          <a href="{{ url_for('auth.register') }}" class="btn-primary">Registrarse</a>
         {% endif %}
       {% endif %}
-    </div>
+    </nav>
   </header>
 
   <main>
@@ -54,10 +54,9 @@
   </main>
 
   <footer>
-    <p>&copy; {{ current_year }} Data Intelligence</p>
+    <p>&copy; {{ current_year }} Data Intelligence | Newlink Dominicana</p>
   </footer>
 
-  <!-- Script principal -->
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

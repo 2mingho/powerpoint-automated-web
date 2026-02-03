@@ -1,33 +1,32 @@
 {% extends 'base.html' %}
 
-{% block title %}Iniciar sesión | Data Intel{% endblock %}
+{% block title %}Iniciar Sesión | Data Intel{% endblock %}
 
 {% block content %}
-  <div class="auth-container">
-    <h1 class="page-title">Iniciar Sesión</h1>
+  <div style="max-width: 400px; margin: 40px auto;">
+    
+    <div class="card-container" style="padding: 40px 30px;">
+      <h1 style="text-align: center; font-size: 1.8rem; margin-bottom: 30px;">Bienvenido</h1>
 
-    <form method="POST" action="{{ url_for('auth.login') }}">
-      <!-- Email -->
-      <div class="form-group icon-input">
-        <label for="email">Correo electrónico:</label>
-        <input type="email" id="email" name="email" placeholder="Ingresa tu correo electrónico" required />
-        <span class="icon">📧</span>
-      </div>
+      <form method="POST" action="{{ url_for('auth.login') }}">
+        
+        <div class="form-group">
+          <label for="email">Correo electrónico</label>
+          <input type="email" id="email" name="email" placeholder="nombre@empresa.com" required />
+        </div>
 
-      <!-- Contraseña -->
-      <div class="form-group icon-input">
-        <label for="password">Contraseña:</label>
-        <input type="password" id="password" name="password" placeholder="Ingresa tu contraseña" required />
-        <span class="icon">🔒</span>
-      </div>
+        <div class="form-group">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" name="password" placeholder="••••••••" required />
+        </div>
 
-      <!-- Botón de enviar -->
-      <button type="submit">Entrar</button>
+        <button type="submit" class="btn-submit">Iniciar Sesión</button>
+      </form>
 
-      <!-- Link a registro -->
-      <p class="auth-link">¿No tienes cuenta?
-        <a href="{{ url_for('auth.register') }}">Regístrate aquí</a>
+      <p style="text-align: center; margin-top: 20px; font-size: 0.9rem; color: var(--text-muted);">
+        ¿No tienes cuenta? <a href="{{ url_for('auth.register') }}" style="color: var(--primary); font-weight: 600; text-decoration: none;">Regístrate</a>
       </p>
-    </form>
+    </div>
+
   </div>
 {% endblock %}

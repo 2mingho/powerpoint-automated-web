@@ -1,16 +1,16 @@
-<!-- templates/index.html -->
 {% extends 'base.html' %}
-{% block title %}Inicio | Data Intel{% endblock %}
+{% block title %}Generar Reporte | Data Intel{% endblock %}
 
 {% block content %}
-  <div class="report-container">
-    <h1 class="page-title">Reportes Data Intel</h1>
+  
+  <h1 class="page-title">Nuevo Reporte</h1>
+  <p class="page-subtitle">Sube tu CSV para generar análisis automáticos y presentaciones.</p>
 
+  <div class="card-container">
     <form action="/" method="POST" enctype="multipart/form-data" onsubmit="mostrarCargando()">
       
-      <!-- Selector de plantilla -->
       <div class="form-group">
-        <label for="template_name">Plantilla de reporte</label>
+        <label for="template_name">Plantilla</label>
         <select id="template_name" name="template_name" required>
           {% if available_templates %}
             {% for tpl in available_templates %}
@@ -20,57 +20,73 @@
             <option value="" disabled selected>No hay plantillas disponibles</option>
           {% endif %}
         </select>
-        <div class="form-group checkbox" style="margin-top:8px;">
+        
+        <div class="checkbox-group">
           <input type="checkbox" id="fallback_default" name="fallback_default" checked />
-          <label for="fallback_default">Usar la plantilla predeterminada si la seleccionada no existe</label>
+          <label for="fallback_default">Usar plantilla por defecto si falla</label>
         </div>
       </div>
 
-      <!-- Área para subir el archivo -->
-      <div class="upload-box">
-        <div class="upload-icon">📁</div>
-        <div>
-          <strong>Subir archivo</strong>
-          <p>Selecciona o arrastra un archivo para generar un reporte de análisis de datos.</p>
+      <div class="form-group">
+        <label>Archivo de Datos (CSV)</label>
+        <div class="upload-area">
+          <input type="file" name="csv_file" accept=".csv" required onchange="actualizarNombreArchivo(this)" />
+          <div class="upload-icon">☁️</div>
+          <div class="upload-text">
+            <strong id="file-label">Haz clic o arrastra tu archivo aquí</strong>
+            <span>Soporta archivos .CSV (UTF-16)</span>
+          </div>
         </div>
-        <input type="file" name="csv_file" accept=".csv" required />
       </div>
 
-      <!-- Título del reporte -->
       <div class="form-group">
-        <label for="report_title">Nombre del reporte</label>
-        <input type="text" id="report_title" name="report_title" placeholder="Ingresa un nombre para tu reporte" />
+        <label for="report_title">Título del Reporte</label>
+        <input type="text" id="report_title" name="report_title" placeholder="Ej: Análisis Mensual Octubre" />
       </div>
 
-      <!-- Descripción del reporte -->
       <div class="form-group">
-        <label for="description">Descripción</label>
-        <textarea id="description" name="description" placeholder="Describe brevemente el contenido del reporte"></textarea>
+        <label for="description">Descripción (Opcional)</label>
+        <textarea id="description" name="description" placeholder="Notas adicionales para la diapositiva de introducción..."></textarea>
       </div>
 
-      <!-- Wordcloud opcional -->
-      <div class="form-group">
-        <label for="wordcloud_file">Wordcloud (opcional)</label>
-        <input type="file" id="wordcloud_file" name="wordcloud_file" accept="image/png" />
+      <div class="form-group" style="display: flex; gap: 20px;">
+        <div style="flex: 1;">
+            <label for="wordcloud_file">Wordcloud (Imagen PNG)</label>
+            <input type="file" id="wordcloud_file" name="wordcloud_file" accept="image/png" style="padding: 8px;" />
+        </div>
       </div>
 
-      <!-- Solo fecha -->
-      <div class="form-group checkbox">
+      <div class="checkbox-group" style="margin-bottom: 20px;">
         <input type="checkbox" id="solo_fecha" name="solo_fecha" />
-        <label for="solo_fecha">Solo fecha</label>
+        <label for="solo_fecha">Mostrar solo fecha (sin hora)</label>
       </div>
 
-      <button type="submit">Generar reporte</button>
+      <button type="submit" class="btn-submit">✨ Generar Presentación</button>
 
-      <p id="mensaje-cargando" style="display: none; font-weight: bold; margin-top: 15px;">
-        Procesando reporte... Esto puede tardar unos segundos.
+      <p id="mensaje-cargando" style="display: none; text-align: center; color: var(--text-muted); margin-top: 15px; font-size: 0.9rem;">
+        <span style="display:inline-block; animation: spin 1s infinite;">⏳</span> Procesando datos...
       </p>
     </form>
   </div>
 
   <script>
     function mostrarCargando() {
+      const btn = document.querySelector('.btn-submit');
+      btn.disabled = true;
+      btn.style.opacity = '0.7';
+      btn.innerText = 'Procesando...';
       document.getElementById('mensaje-cargando').style.display = 'block';
+    }
+
+    function actualizarNombreArchivo(input) {
+      const label = document.getElementById('file-label');
+      if (input.files && input.files.length > 0) {
+        label.innerText = "✅ " + input.files[0].name;
+        label.style.color = 'var(--primary)';
+      } else {
+        label.innerText = "Haz clic o arrastra tu archivo aquí";
+        label.style.color = 'inherit';
+      }
     }
   </script>
 {% endblock %}
