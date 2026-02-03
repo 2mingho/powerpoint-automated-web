@@ -30,35 +30,35 @@ setup_env.bat
 
 ## 🧩 Estructura del proyecto
 
-POWERPOINT-AUTOMATED-WEB/
-│
-├── app.py                   # Lógica principal y rutas
-├── auth.py                  # Login, registro, logout
-├── calculation.py           # Procesamiento de datos y gráficos
-├── models.py                # Modelos de base de datos
-├── extensions.py            # DB y login manager
-├── requirements.txt         # Librerías necesarias
-├── setup_env.bat            # Script de entorno virtual + ejecución
-├── users.db                 # Base de datos SQLite
-│
-├── scratch/                 # Archivos generados temporalmente
-├── powerpoints/
-│   └── Reporte_plantilla.pptx
-│
-├── static/
-│   ├── css/
-│   │   └── style.css        # Estilos globales
-│   └── img/
-│       └── logo.ico
-│
-├── templates/
-│   ├── base.html
-│   ├── index.html
+POWERPOINT-AUTOMATED-WEB/  
+│  
+├── app.py                   # Lógica principal y rutas  
+├── auth.py                  # Login, registro, logout  
+├── calculation.py           # Procesamiento de datos y gráficos  
+├── models.py                # Modelos de base de datos  
+├── extensions.py            # DB y login manager  
+├── requirements.txt         # Librerías necesarias  
+├── setup_env.bat            # Script de entorno virtual + ejecución  
+├── users.db                 # Base de datos SQLite  
+│  
+├── scratch/                 # Archivos generados temporalmente  
+├── powerpoints/  
+│   └── Reporte_plantilla.pptx  
+│  
+├── static/  
+│   ├── css/  
+│   │   └── style.css        # Estilos globales  
+│   └── img/  
+│       └── logo.ico  
+│  
+├── templates/  
+│   ├── base.html  
+│   ├── index.html  
 │   ├── login.html
-│   ├── register.html
-│   ├── download.html
-│   ├── mis_reportes.html
-│   └── error.html
+│   ├── register.html  
+│   ├── download.html  
+│   ├── mis_reportes.html  
+│   └── error.html  
 
 ---
 
