@@ -231,146 +231,179 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
 
     prs = Presentation(tpl_path)
 
-    # Helper interno para reemplazar placeholders y marcar faltantes
-    def replace_placeholders(slide, mapping, missing):
-        found_keys = set()
-        for shape in slide.shapes:
-            if shape.has_text_frame:
-                for key, value in mapping.items():
+    # --- Nuevo enfoque: buscar placeholders en CUALQUIER slide ---
+    def find_shape_for_key(key):
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                try:
+                    if shape.has_text_frame and key in shape.text:
+                        return slide, shape
+                except Exception:
+                    continue
+        return None, None
+
+    # Reemplazo de textos genéricos
+    text_mapping = {
+        "REPORT_CLIENT": client_name,
+        "REPORT_DATE": current_date,
+        "NUMB_MENTIONS": str(total_mentions),
+        "NUMB_ACTORS": str(count_of_authors),
+        "EST_REACH": estimated_reach
+    }
+
+    # Trackear claves encontradas para evitar marcar como faltantes
+    found_text_keys = set()
+    for key, value in text_mapping.items():
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if not getattr(shape, 'has_text_frame', False):
+                    continue
+                try:
                     if key in shape.text:
+                        # reutiliza helper existente para estilo
                         report.set_text_style(shape, str(value), 'Effra Heavy', Pt(28), False if key not in ("NUMB_MENTIONS", "NUMB_ACTORS", "EST_REACH") else True)
-                        found_keys.add(key)
-        for key in mapping.keys():
-            if key not in found_keys:
-                missing.append(key)
+                        found_text_keys.add(key)
+                except Exception:
+                    continue
+    for key in text_mapping.keys():
+        if key not in found_text_keys:
+            missing_fields.append(key)
 
-    # Slide 1
-    if len(prs.slides) > 0:
-        slide1 = prs.slides[0]
-        replace_placeholders(slide1, {"REPORT_CLIENT": client_name, "REPORT_DATE": current_date}, missing_fields)
-    else:
-        missing_fields.extend(["REPORT_CLIENT", "REPORT_DATE"])
+    # Charts / imágenes: buscar placeholder y añadir imagen en la ubicación del placeholder
+    def place_image_at_placeholder(key, image_path, default_size=None):
+        slide, shape = find_shape_for_key(key)
+        if slide and shape:
+            try:
+                left = shape.left
+                top = shape.top
+                width = shape.width
+                height = shape.height
+                # eliminar texto para evitar superposición
+                try:
+                    shape.text = ""
+                except Exception:
+                    pass
+                if default_size:
+                    width, height = default_size
+                slide.shapes.add_picture(image_path, left, top, width=width, height=height)
+                return True
+            except Exception:
+                return False
+        return False
 
-    # Slide 2
-    if len(prs.slides) > 1:
-        slide2 = prs.slides[1]
-        # KPIs
-        replace_placeholders(slide2, {
-            "NUMB_MENTIONS": str(total_mentions),
-            "NUMB_ACTORS": str(count_of_authors),
-            "EST_REACH": estimated_reach
-        }, missing_fields)
-        # Evolución de conversación
+    # Conversación (chart)
+    conv_added = place_image_at_placeholder('CONVERSATION_CHART', 'scratch/convEvolution.png', default_size=(Inches(9.55), Inches(5.14)))
+    if not conv_added:
+        missing_fields.append('CONVERSATION_CHART')
+
+    # Sentiment pie
+    sent_added = place_image_at_placeholder('SENTIMENT_PIE', 'scratch/sentiment_pie_chart.png', default_size=(Inches(6), Inches(6)))
+    if not sent_added:
+        missing_fields.append('SENTIMENT_PIE')
+
+    # Wordcloud
+    wc_added = False
+    if wordcloud_path and os.path.exists(wordcloud_path):
+        wc_added = place_image_at_placeholder('WORDCLOUD', wordcloud_path, default_size=(Inches(4.2), Inches(2.66)))
+    if not wc_added:
+        missing_fields.append('WORDCLOUD')
+
+    # Top news (texto grande)
+    topnews_slide, topnews_shape = find_shape_for_key('TOP_NEWS')
+    if topnews_shape:
         try:
-            slide2.shapes.add_picture('scratch/convEvolution.png', Inches(0.9), Inches(1.2), width=Inches(9.55), height=Inches(5.14))
+            report.set_text_style(topnews_shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
         except Exception:
-            missing_fields.append("CONVERSATION_CHART")
+            missing_fields.append('TOP_NEWS')
     else:
-        missing_fields.extend(["NUMB_MENTIONS", "NUMB_ACTORS", "EST_REACH", "CONVERSATION_CHART"])
+        missing_fields.append('TOP_NEWS')
 
-    # Slide 3
-    if len(prs.slides) > 2:
-        slide3 = prs.slides[2]
-        # Top news
-        try:
-            for shape in slide3.shapes:
-                if shape.has_text_frame:
-                    if "TOP_NEWS" in shape.text:
-                        report.set_text_style(shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
-                        break
-            else:
-                missing_fields.append("TOP_NEWS")
-        except Exception:
-            missing_fields.append("TOP_NEWS")
-
-        # Análisis Groq
+    # Análisis Groq
+    analisis_texto = "No disponible"
+    try:
+        parrafos = "\n".join(df_cleaned['Hit Sentence'].dropna().astype(str).tolist()[:80])
+        prompt = construir_prompt(client_name, parrafos)
+        respuesta = llamar_groq(prompt)
+        if respuesta:
+            resultado_json = extraer_json(respuesta)
+            if isinstance(resultado_json, dict):
+                analisis_texto = formatear_analisis_social_listening(resultado_json)
+    except Exception:
         analisis_texto = "No disponible"
-        try:
-            parrafos = "\n".join(df_cleaned['Hit Sentence'].dropna().astype(str).tolist()[:80])
-            prompt = construir_prompt(client_name, parrafos)
-            respuesta = llamar_groq(prompt)
-            if respuesta:
-                resultado_json = extraer_json(respuesta)
-                if isinstance(resultado_json, dict):
-                    analisis_texto = formatear_analisis_social_listening(resultado_json)
-        except Exception:
-            analisis_texto = "No disponible"
 
+    analisis_slide, analisis_shape = find_shape_for_key('CONVERSATION_ANALISIS')
+    if analisis_shape:
         try:
-            for shape in slide3.shapes:
-                if shape.has_text_frame and "CONVERSATION_ANALISIS" in shape.text:
-                    report.set_text_style(shape, analisis_texto, 'Effra Light', Pt(11), False)
-                    break
-            else:
-                missing_fields.append("CONVERSATION_ANALISIS")
+            report.set_text_style(analisis_shape, analisis_texto, 'Effra Light', Pt(11), False)
         except Exception:
-            missing_fields.append("CONVERSATION_ANALISIS")
-
-        # Wordcloud opcional
-        try:
-            if wordcloud_path and os.path.exists(wordcloud_path):
-                slide3.shapes.add_picture(wordcloud_path, Inches(7.5), Inches(3.5), width=Inches(4.2), height=Inches(2.66))
-            else:
-                missing_fields.append("WORDCLOUD")
-        except Exception:
-            missing_fields.append("WORDCLOUD")
+            missing_fields.append('CONVERSATION_ANALISIS')
     else:
-        missing_fields.extend(["TOP_NEWS", "CONVERSATION_ANALISIS", "WORDCLOUD"])
+        missing_fields.append('CONVERSATION_ANALISIS')
 
-    # Slide 4
-    if len(prs.slides) > 3:
-        slide4 = prs.slides[3]
+    # KPI NUMB_PRENSA / NUMB_REDES and tables: localizar placeholder y ubicar tabla
+    prensa_shape_key = 'NUMB_PRENSA'
+    prensa_slide, prensa_shape = find_shape_for_key(prensa_shape_key)
+    if prensa_shape:
         try:
-            slide4.shapes.add_picture('scratch/sentiment_pie_chart.png', Inches(1), Inches(1), width=Inches(6), height=Inches(6))
+            report.set_text_style(prensa_shape, str(platform_counts.get('Prensa Digital', 0)), font_size=Pt(28))
         except Exception:
-            missing_fields.append("SENTIMENT_PIE")
+            missing_fields.append(prensa_shape_key)
     else:
-        missing_fields.append("SENTIMENT_PIE")
+        missing_fields.append(prensa_shape_key)
 
-    # Slide 5
-    if len(prs.slides) > 4:
-        slide5 = prs.slides[4]
-        try:
-            for shape in slide5.shapes:
-                if shape.has_text_frame and "NUMB_PRENSA" in shape.text:
-                    report.set_text_style(shape, str(platform_counts.get('Prensa Digital', 0)), font_size=Pt(28))
-                    break
-            else:
-                missing_fields.append("NUMB_PRENSA")
-
+    try:
+        table_added = False
+        slide_for_table, shape_for_table = find_shape_for_key('TOP_INFLUENCERS_PRENSA_TABLE')
+        if slide_for_table and shape_for_table:
+            left, top, width, height = shape_for_table.left, shape_for_table.top, shape_for_table.width, shape_for_table.height
             try:
-                report.add_dataframe_as_table(slide5, top_influencers_prensa, Inches(2.65), Inches(2), Inches(8), Inches(4))
+                report.add_dataframe_as_table(slide_for_table, top_influencers_prensa, left, top, width, height)
+                table_added = True
             except Exception:
-                missing_fields.append("TOP_INFLUENCERS_PRENSA_TABLE")
-        except Exception:
-            missing_fields.extend(["NUMB_PRENSA", "TOP_INFLUENCERS_PRENSA_TABLE"])
-    else:
-        missing_fields.extend(["NUMB_PRENSA", "TOP_INFLUENCERS_PRENSA_TABLE"])
+                table_added = False
+        if not table_added:
+            missing_fields.append('TOP_INFLUENCERS_PRENSA_TABLE')
+    except Exception:
+        missing_fields.append('TOP_INFLUENCERS_PRENSA_TABLE')
 
-    # Slide 6
-    if len(prs.slides) > 5:
-        slide6 = prs.slides[5]
+    redes_shape_key = 'NUMB_REDES'
+    redes_slide, redes_shape = find_shape_for_key(redes_shape_key)
+    if redes_shape:
         try:
-            for shape in slide6.shapes:
-                if shape.has_text_frame and "NUMB_REDES" in shape.text:
-                    report.set_text_style(shape, str(platform_counts.get('Redes Sociales', 0)), font_size=Pt(28))
-                    break
-            else:
-                missing_fields.append("NUMB_REDES")
-
-            try:
-                report.add_dataframe_as_table(slide6, top_influencers_redes_posts, Inches(0.56), Inches(2), Inches(7), Inches(4))
-            except Exception:
-                missing_fields.append("TOP_INFLUENCERS_REDES_POSTS_TABLE")
-
-            try:
-                report.add_dataframe_as_table(slide6, top_influencers_redes_reach, Inches(8), Inches(2), Inches(5), Inches(4))
-            except Exception:
-                missing_fields.append("TOP_INFLUENCERS_REDES_REACH_TABLE")
+            report.set_text_style(redes_shape, str(platform_counts.get('Redes Sociales', 0)), font_size=Pt(28))
         except Exception:
-            missing_fields.extend(["NUMB_REDES", "TOP_INFLUENCERS_REDES_POSTS_TABLE", "TOP_INFLUENCERS_REDES_REACH_TABLE"])
+            missing_fields.append(redes_shape_key)
     else:
-        missing_fields.extend(["NUMB_REDES", "TOP_INFLUENCERS_REDES_POSTS_TABLE", "TOP_INFLUENCERS_REDES_REACH_TABLE"])
+        missing_fields.append(redes_shape_key)
+
+    # Two tables for redes (posts and reach)
+    try:
+        table1_added = False
+        slide_t1, shape_t1 = find_shape_for_key('TOP_INFLUENCERS_REDES_POSTS_TABLE')
+        if slide_t1 and shape_t1:
+            try:
+                report.add_dataframe_as_table(slide_t1, top_influencers_redes_posts, shape_t1.left, shape_t1.top, shape_t1.width, shape_t1.height)
+                table1_added = True
+            except Exception:
+                table1_added = False
+        if not table1_added:
+            missing_fields.append('TOP_INFLUENCERS_REDES_POSTS_TABLE')
+    except Exception:
+        missing_fields.append('TOP_INFLUENCERS_REDES_POSTS_TABLE')
+
+    try:
+        table2_added = False
+        slide_t2, shape_t2 = find_shape_for_key('TOP_INFLUENCERS_REDES_REACH_TABLE')
+        if slide_t2 and shape_t2:
+            try:
+                report.add_dataframe_as_table(slide_t2, top_influencers_redes_reach, shape_t2.left, shape_t2.top, shape_t2.width, shape_t2.height)
+                table2_added = True
+            except Exception:
+                table2_added = False
+        if not table2_added:
+            missing_fields.append('TOP_INFLUENCERS_REDES_REACH_TABLE')
+    except Exception:
+        missing_fields.append('TOP_INFLUENCERS_REDES_REACH_TABLE')
 
     # Guardado de archivos
     safe_title = secure_filename(report_title) if report_title else f"Reporte_{unique_id}"
