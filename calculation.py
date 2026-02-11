@@ -18,6 +18,8 @@ def format_number(number):
         return f"{number / 1_000:.1f}k"
     return str(number)
 
+# calculation.py (Solo actualiza la función clean_dataframe, el resto queda igual)
+
 def clean_dataframe(file_path):
     """Carga, limpia y clasifica el DataFrame."""
     try:
@@ -36,7 +38,11 @@ def clean_dataframe(file_path):
     ]
     df = df.drop(columns=columns_to_delete, errors='ignore')
 
-    # Lógica de negocio
+    # --- CORRECCIÓN: Asegurar que existe Hit Sentence antes de usarla ---
+    if 'Hit Sentence' not in df.columns:
+        df['Hit Sentence'] = None # O pd.NA
+    
+    # Lógica de negocio: Rellenar Hit Sentence con Headline si está vacío
     df['Hit Sentence'] = df['Headline'].where(~df['Headline'].isna(), df['Hit Sentence'])
     
     # Clasificación de Fuentes
