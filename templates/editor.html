@@ -80,7 +80,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <h3 class="text-lg font-semibold mb-4 text-gray-800">Top Influencers (Prensa)</h3>
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">Top Influencers (Redes)</h3>
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-sm text-left text-gray-500">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50">
@@ -91,7 +91,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in context.tables.top_prensa %}
+                            {% for item in context.tables.top_redes %}
                             <tr class="border-b hover:bg-gray-50">
                                 <td class="px-4 py-3 font-medium text-gray-900">{{ item.Influencer }}</td>
                                 <td class="px-4 py-3 text-center">{{ item.Posts }}</td>

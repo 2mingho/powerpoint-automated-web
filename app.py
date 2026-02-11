@@ -476,39 +476,38 @@ def union_archivos():
     return render_template('union.html')
 
 @app.route('/upload_csv', methods=['POST'])
+@login_required
 def upload_csv():
-    """
-    Ruta temporal para la Fase 2:
-    Sube el archivo, lo procesa a JSON y renderiza el Editor.
-    """
-    if 'file' not in request.files:
+    if 'csv_file' not in request.files:
         flash('No se seleccionó ningún archivo')
-        return redirect(request.url)
+        return redirect(url_for('index'))
     
-    file = request.files['file']
+    file = request.files['csv_file']
+    
     if file.filename == '':
         flash('Nombre de archivo vacío')
-        return redirect(request.url)
+        return redirect(url_for('index'))
 
     if file:
-        # 1. Guardar archivo temporalmente
-        upload_folder = 'scratch' # Asegúrate que esta carpeta exista
-        os.makedirs(upload_folder, exist_ok=True)
-        file_path = os.path.join(upload_folder, file.filename)
-        file.save(file_path)
-
-        # 2. Procesar datos usando el nuevo motor
-        # (Capturamos errores para robustez)
         try:
-            report_context = Report.create_report_context(
-                file_path, 
-                report_title=request.form.get('report_title', 'Mi Reporte')
-            )
-        except Exception as e:
-            return f"Error procesando el archivo: {str(e)}", 500
+            upload_folder = 'scratch'
+            os.makedirs(upload_folder, exist_ok=True)
+            file_path = os.path.join(upload_folder, file.filename)
+            file.save(file_path)
+            
+            # Capturamos el título del formulario HTML también
+            titulo = request.form.get('report_title', 'Mi Reporte')
 
-        # 3. Renderizar el Editor Web en lugar de generar el PPTX directo
-        return render_template('editor.html', context=report_context)
+            report_context = report.create_report_context(
+                file_path, 
+                report_title=titulo
+            )
+            return render_template('editor.html', context=report_context)
+            
+        except Exception as e:
+            print(f"ERROR: {e}") # Para ver el error en consola si ocurre
+            flash(f"Error procesando el archivo: {str(e)}")
+            return redirect(url_for('index'))
 
     return redirect(url_for('index'))
 
@@ -530,3 +529,5 @@ def internal_error(e):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
+    
+print(app.url_map)
