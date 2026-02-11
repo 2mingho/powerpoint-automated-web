@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de Reporte - {{ context.meta.client_name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .editable { border: 1px dashed transparent; padding: 2px; transition: all 0.2s; }
+        .editable:hover { border-color: #cbd5e1; background-color: #f8fafc; cursor: text; }
+        .editable:focus { outline: 2px solid #3b82f6; background-color: white; border-color: transparent; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fa-solid fa-chart-pie text-blue-600 text-2xl mr-3"></i>
+                    <h1 class="text-xl font-bold text-gray-900">Reporte Automatizado</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">Editando: <strong id="fileNameDisplay">{{ context.meta.file_name }}</strong></span>
+                    <button onclick="generarReporte()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-lg flex items-center transition">
+                        <i class="fa-solid fa-download mr-2"></i> Generar PPTX
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="mb-8 text-center">
+            <h2 contenteditable="true" id="reportTitle" class="text-4xl font-extrabold text-gray-900 editable inline-block px-2">
+                {{ context.meta.client_name }}
+            </h2>
+            <p class="mt-2 text-gray-500">Datos generados el: {{ context.meta.date_generated }}</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-gray-500">Menciones Totales</p>
+                <p class="text-3xl font-bold text-gray-900 mt-2">{{ context.kpis.total_mentions }}</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-gray-500">Autores Únicos</p>
+                <p class="text-3xl font-bold text-blue-600 mt-2">{{ context.kpis.unique_authors }}</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-gray-500">Alcance Estimado</p>
+                <p class="text-3xl font-bold text-green-600 mt-2">{{ context.kpis.estimated_reach_fmt }}</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-gray-500">Prensa vs Redes</p>
+                <div class="flex justify-between items-end mt-2">
+                    <span class="text-lg font-semibold text-gray-700"><i class="fa-regular fa-newspaper"></i> {{ context.kpis.mentions_prensa }}</span>
+                    <span class="text-lg font-semibold text-gray-700"><i class="fa-solid fa-hashtag"></i> {{ context.kpis.mentions_redes }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">Evolución de la Conversación</h3>
+                <div class="relative h-64">
+                    <canvas id="evolutionChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">Sentimiento</h3>
+                <div class="relative h-64">
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">Top Influencers (Prensa)</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3">Nombre</th>
+                                <th class="px-4 py-3 text-center">Posts</th>
+                                <th class="px-4 py-3 text-right">Alcance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in context.tables.top_prensa %}
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="px-4 py-3 font-medium text-gray-900">{{ item.Influencer }}</td>
+                                <td class="px-4 py-3 text-center">{{ item.Posts }}</td>
+                                <td class="px-4 py-3 text-right">{{ item.Reach }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">Frases Destacadas (Editables)</h3>
+                <ul class="space-y-3">
+                    {% for sentence in context.tables.top_sentences %}
+                    <li class="p-3 bg-yellow-50 rounded-lg border border-yellow-100 text-gray-700 text-sm">
+                        <div contenteditable="true" class="editable outline-none">{{ sentence }}</div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
+            <h3 class="text-lg font-semibold mb-2 text-gray-800 flex items-center">
+                <i class="fa-solid fa-robot mr-2 text-purple-600"></i> Análisis de Conversación
+            </h3>
+            <div contenteditable="true" class="editable w-full p-4 bg-gray-50 rounded-lg text-gray-600 leading-relaxed min-h-[100px]">
+                {{ context.ai_analysis.summary }}
+                <br><br>
+                (Escribe aquí tus conclusiones manuales o el resumen ejecutivo...)
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // 1. Recibir los datos desde Python de forma segura
+        const reportData = {{ context | tojson }};
+
+        // 2. Configurar Gráfico de Evolución
+        const ctxEvo = document.getElementById('evolutionChart').getContext('2d');
+        new Chart(ctxEvo, {
+            type: 'line',
+            data: {
+                labels: reportData.charts.evolution.labels,
+                datasets: [{
+                    label: 'Menciones',
+                    data: reportData.charts.evolution.values,
+                    borderColor: '#f59e0b', // Orange-500
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+
+        // 3. Configurar Gráfico de Sentimiento
+        const ctxSent = document.getElementById('sentimentChart').getContext('2d');
+        const sentData = reportData.charts.sentiment;
+        new Chart(ctxSent, {
+            type: 'doughnut',
+            data: {
+                labels: sentData.map(d => d.label),
+                datasets: [{
+                    data: sentData.map(d => d.value),
+                    backgroundColor: sentData.map(d => d.color),
+                    borderWidth: 0
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        // 4. Función Placeholder para Generar (Fase 3)
+        function generarReporte() {
+            alert("¡Fase 2 Completada! \n\nAquí capturaremos el HTML editado y lo enviaremos a Python para generar el PPTX/PDF.");
+            // Aquí irá la lógica para recolectar los datos editados
+        }
+    </script>
+</body>
+</html>
