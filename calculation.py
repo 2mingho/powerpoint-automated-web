@@ -126,7 +126,10 @@ def get_top_tables(df):
         Posts=('Reach', 'count'),
         Reach_Raw=('Reach', 'max'),
         Source=('Source', 'first')
-    ).reset_index().sort_values('Posts', ascending=False).head(10)
+    ).reset_index()
+    
+    # Orden por lista: Primero 'Posts' (desc), luego 'Reach_Raw' (desc)
+    top_redes = top_redes.sort_values(by=['Posts', 'Reach_Raw'], ascending=[False, False]).head(10)
     top_redes['Reach'] = top_redes['Reach_Raw'].apply(lambda x: f"{int(x):,}")
 
     # 3. Hit Sentences
