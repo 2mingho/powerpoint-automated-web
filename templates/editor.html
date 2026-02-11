@@ -71,9 +71,19 @@
                 </div>
             </div>
             <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 class="text-lg font-semibold mb-4 text-gray-800">Sentimiento</h3>
-                <div class="relative h-64">
-                    <canvas id="sentimentChart"></canvas>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Sentimiento</h3>
+                    <span class="text-xs font-bold text-white bg-blue-600 px-2 py-1 rounded">EDITABLE</span>
+                </div>
+                
+                <div class="flex flex-col space-y-6">
+                    <div class="relative h-48 w-full">
+                        <canvas id="sentimentChart"></canvas>
+                    </div>
+                    
+                    <div id="sentiment-controls" class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <p class="text-xs text-gray-400 uppercase font-bold mb-3">Modificar Valores:</p>
+                        </div>
                 </div>
             </div>
         </div>
@@ -153,80 +163,84 @@
 
         // 3. Configurar Gráfico de Sentimiento (INTERACTIVO)
         const ctxSent = document.getElementById('sentimentChart').getContext('2d');
-        const sentimentRawData = reportData.charts.sentiment; // Datos originales
-        
-        // Mapeo de colores fijos para asegurar consistencia visual
-        const colorMap = {
-            'Positive': '#07ab50', // Verde
-            'Negative': '#ad0303', // Rojo
-            'Neutral': '#D3D1D1'   // Gris
+        const rawData = reportData.charts.sentiment; 
+
+        // Definimos orden y colores fijos para evitar errores visuales
+        const sentimentConfig = {
+            'Positive': { color: '#07ab50', label: 'Positivo' }, // Verde
+            'Neutral':  { color: '#D3D1D1', label: 'Neutral' },  // Gris
+            'Negative': { color: '#ad0303', label: 'Negativo' }  // Rojo
         };
 
-        // Crear inputs dinámicamente
-        const controlsContainer = document.getElementById('sentimentControls');
-        
-        // Ordenamos para que siempre salga: Positivo, Neutral, Negativo (opcional, por estética)
+        // Ordenamos los datos: Positive -> Neutral -> Negative
         const order = ['Positive', 'Neutral', 'Negative'];
-        sentimentRawData.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
+        rawData.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
 
-        // Inicializar arrays para Chart.js
-        let sentLabels = sentimentRawData.map(d => d.label);
-        let sentValues = sentimentRawData.map(d => d.value);
-        let sentColors = sentimentRawData.map(d => colorMap[d.label] || '#cccccc');
+        // Preparamos arrays para Chart.js
+        let chartLabels = rawData.map(d => d.label);
+        let chartValues = rawData.map(d => d.value);
+        let chartColors = rawData.map(d => sentimentConfig[d.label]?.color || '#cccccc');
 
-        // Renderizar el gráfico
+        // Renderizar Gráfico Inicial
         const sentimentChart = new Chart(ctxSent, {
             type: 'doughnut',
             data: {
-                labels: sentLabels,
+                labels: chartLabels,
                 datasets: [{
-                    data: sentValues,
-                    backgroundColor: sentColors,
+                    data: chartValues,
+                    backgroundColor: chartColors,
                     borderWidth: 0,
-                    hoverOffset: 4
+                    hoverOffset: 10
                 }]
             },
             options: { 
                 responsive: true, 
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false } // Ocultamos leyenda porque usaremos los inputs como leyenda
-                }
+                cutout: '60%', // Hace el anillo más fino
+                plugins: { legend: { display: false } }
             }
         });
 
-        // Generar Inputs HTML
-        sentimentRawData.forEach((item, index) => {
+        // GENERAR INPUTS EN EL HTML
+        const controlsDiv = document.getElementById('sentiment-controls');
+        controlsDiv.innerHTML = ''; // Limpiar por si acaso
+
+        rawData.forEach((item, index) => {
+            // Crear fila para cada sentimiento
             const row = document.createElement('div');
-            row.className = "flex justify-between items-center mb-2 last:mb-0";
+            row.className = "flex justify-between items-center mb-3 last:mb-0";
+            
+            const color = sentimentConfig[item.label]?.color || '#ccc';
+            const displayLabel = sentimentConfig[item.label]?.label || item.label;
+
             row.innerHTML = `
                 <div class="flex items-center">
-                    <span class="w-3 h-3 rounded-full mr-2" style="background-color: ${colorMap[item.label] || '#ccc'}"></span>
-                    <span class="text-sm text-gray-700 font-medium w-20">${item.label}</span>
+                    <div class="w-3 h-3 rounded-full mr-2" style="background-color: ${color};"></div>
+                    <span class="text-sm font-medium text-gray-700">${displayLabel}</span>
                 </div>
                 <input 
                     type="number" 
-                    min="0"
+                    min="0" 
                     value="${item.value}" 
                     data-index="${index}"
-                    class="sentiment-input w-20 px-2 py-1 text-right text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    class="sentiment-input w-20 p-1 text-right border border-gray-300 rounded shadow-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 >
             `;
-            controlsContainer.appendChild(row);
+            controlsDiv.appendChild(row);
         });
 
-        // Event Listener: Actualizar gráfico cuando cambian los números
+        // EVENT LISTENER: Escuchar cambios en los inputs
         document.querySelectorAll('.sentiment-input').forEach(input => {
-            input.addEventListener('change', (e) => {
+            input.addEventListener('input', (e) => {
                 const idx = e.target.getAttribute('data-index');
-                const newValue = parseInt(e.target.value) || 0;
-                
-                // 1. Actualizar el gráfico visualmente
-                sentimentChart.data.datasets[0].data[idx] = newValue;
+                const val = parseInt(e.target.value) || 0;
+
+                // 1. Actualizar gráfico en tiempo real
+                sentimentChart.data.datasets[0].data[idx] = val;
                 sentimentChart.update();
 
-                // 2. Actualizar el objeto de datos original (para cuando enviemos a guardar)
-                reportData.charts.sentiment[idx].value = newValue;
+                // 2. Actualizar datos globales (para el reporte final)
+                reportData.charts.sentiment[idx].value = val;
             });
         });
 
