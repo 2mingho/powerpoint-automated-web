@@ -24,7 +24,7 @@
                 </div>
                 <div class="flex items-center space-x-4">
                     <span class="text-sm text-gray-500">Editando: <strong id="fileNameDisplay">{{ context.meta.file_name }}</strong></span>
-                    <button onclick="generarReporte()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-lg flex items-center transition">
+                    <button id="btnGenerar" onclick="generarReporte()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-lg flex items-center transition">
                         <i class="fa-solid fa-download mr-2"></i> Generar PPTX
                     </button>
                 </div>
@@ -244,10 +244,63 @@
             });
         });
 
-        // 4. Función Placeholder para Generar (Fase 3)
-        function generarReporte() {
-            alert("¡Fase 2 Completada! \n\nAquí capturaremos el HTML editado y lo enviaremos a Python para generar el PPTX/PDF.");
-            // Aquí irá la lógica para recolectar los datos editados
+        // 4. Lógica de Envío al Servidor
+        async function generarReporte() {
+            // 1. Referencia directa por ID (Mucho más seguro)
+            const btn = document.getElementById('btnGenerar');
+            const originalContent = btn.innerHTML; // Guardamos el icono y texto original
+            
+            try {
+                // 2. FEEDBACK INSTANTÁNEO
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-not-allowed'); // Estilo visual de deshabilitado
+                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Generando...';
+                
+                // Recopilar datos
+                const tituloEditado = document.getElementById('reportTitle').innerText;
+                reportData.meta.client_name = tituloEditado;
+
+                console.log("Enviando datos a Python...", reportData); // Debug para ti
+
+                // 3. Petición al Servidor
+                const response = await fetch('/generate_pptx', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reportData)
+                });
+
+                if (response.ok) {
+                    // Descarga del archivo
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Reporte_${tituloEditado}.pptx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    
+                    // Éxito visual
+                    btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> ¡Listo!';
+                    setTimeout(() => {
+                        btn.innerHTML = originalContent;
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                    }, 3000); // Volver a la normalidad en 3 segundos
+
+                } else {
+                    throw new Error(await response.text());
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Hubo un error al generar el reporte: ' + error.message);
+                
+                // Restaurar botón en caso de error
+                btn.innerHTML = originalContent;
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
         }
     </script>
 </body>

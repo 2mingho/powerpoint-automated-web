@@ -3,7 +3,7 @@ import uuid
 import zipfile
 import shutil
 from datetime import datetime
-from flask import Flask, render_template, request, send_file, redirect, url_for, abort, after_this_request, flash
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
@@ -15,6 +15,9 @@ from extensions import db, login_manager
 from models import User, Report
 import calculation as report
 from groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
+
+import ppt_engine
+import json
 
 # ✅ NUEVO: importar herramientas de SQLAlchemy para inspección/DDL controlado
 from sqlalchemy import inspect, text
@@ -525,6 +528,33 @@ def internal_error(e):
                            title="Error 500 - Problema del servidor",
                            message="Ocurrió un error inesperado. Por favor, intenta más tarde."), 500
 
+@app.route('/generate_pptx', methods=['POST'])
+def generate_pptx_route():
+    try:
+        # 1. Recibir el JSON con los datos editados
+        data = request.json
+        if not data:
+            return "No se recibieron datos JSON", 400
+
+        # 2. Definir rutas
+        template_path = os.path.join('powerpoints', 'Reporte_plantilla.pptx') 
+        
+        # Verificar que la plantilla existe
+        if not os.path.exists(template_path):
+            return f"Error: No se encuentra la plantilla en {template_path}", 500
+
+        filename = f"Reporte_{data['meta']['client_name']}.pptx"
+        output_path = os.path.join('scratch', filename)
+
+        # 3. Llamar al motor de generación
+        ppt_engine.generate_pptx(data, template_path, output_path)
+
+        # 4. Enviar el archivo al usuario
+        return send_file(output_path, as_attachment=True, download_name=filename)
+
+    except Exception as e:
+        print(f"ERROR GENERANDO PPT: {e}")
+        return str(e), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
