@@ -1,307 +1,409 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor de Reporte - {{ context.meta.client_name }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        .editable { border: 1px dashed transparent; padding: 2px; transition: all 0.2s; }
-        .editable:hover { border-color: #cbd5e1; background-color: #f8fafc; cursor: text; }
-        .editable:focus { outline: 2px solid #3b82f6; background-color: white; border-color: transparent; }
-    </style>
-</head>
-<body class="bg-gray-50 text-gray-800 font-sans">
+{% extends 'base.html' %}
+{% block title %}Editor - {{ context.meta.client_name }}{% endblock %}
 
-    <nav class="bg-white shadow-sm sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <i class="fa-solid fa-chart-pie text-blue-600 text-2xl mr-3"></i>
-                    <h1 class="text-xl font-bold text-gray-900">Reporte Automatizado</h1>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <span class="text-sm text-gray-500">Editando: <strong id="fileNameDisplay">{{ context.meta.file_name }}</strong></span>
-                    <button id="btnGenerar" onclick="generarReporte()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-lg flex items-center transition">
-                        <i class="fa-solid fa-download mr-2"></i> Generar PPTX
-                    </button>
-                </div>
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+<style>
+    /* ─── ESTILOS ESPECÍFICOS DEL EDITOR ─── */
+    
+    /* Anular el ancho máximo de base.html solo para esta página */
+    main {
+        max-width: 1200px !important; 
+        padding-top: 80px;
+    }
+
+    /* Sistema de Grillas */
+    .editor-grid {
+        display: grid;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .cols-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .cols-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .cols-2 { grid-template-columns: 1fr 1fr; }
+    
+    @media (max-width: 768px) {
+        .cols-2, .cols-3, .cols-4 { grid-template-columns: 1fr; }
+    }
+
+    /* Tarjetas (Estilo consistente con tu app) */
+    .card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        border: 1px solid #e0e0e0;
+        text-align: left;
+    }
+
+    /* Tipografía y Colores */
+    .card-title {
+        color: #141414;
+        font-size: 1.1rem;
+        font-weight: bold;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #ffdd00;
+        display: inline-block;
+        padding-bottom: 5px;
+    }
+
+    .kpi-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #3f3fff;
+        margin-top: 10px;
+    }
+
+    .kpi-sub {
+        font-size: 0.9rem;
+        color: #666;
+    }
+
+    /* Campos Editables */
+    .editable {
+        border: 1px dashed #ccc;
+        padding: 10px;
+        border-radius: 8px;
+        transition: all 0.3s;
+        background-color: #fcfcfc;
+    }
+    .editable:hover, .editable:focus {
+        background-color: #fff;
+        border-color: #3f3fff;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(63, 63, 255, 0.1);
+    }
+    .editable-sentence {
+        margin-bottom: 10px;
+    }
+
+    /* Tablas personalizadas */
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    .custom-table th {
+        background-color: #f5f7ff;
+        color: #3f3fff;
+        padding: 10px;
+        text-align: left;
+    }
+    .custom-table td {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+    }
+    .custom-table tr:last-child td { border-bottom: none; }
+
+    /* Botón Flotante de Acción */
+    .action-bar {
+        background: #fff;
+        padding: 15px 30px;
+        border-radius: 50px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        display: inline-flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+</style>
+
+<div class="action-bar">
+    <div>
+        <span style="color:#777; font-size: 0.9rem;">Reporte para:</span>
+        <strong id="fileNameDisplay" style="color:#3f3fff;">{{ context.meta.file_name }}</strong>
+    </div>
+    <div style="width: 1px; height: 20px; background: #ddd;"></div>
+    <button id="btnGenerar" onclick="generarReporte()" class="btn" style="margin:0;">
+        <i class="fa-solid fa-download"></i> Generar PPTX
+    </button>
+</div>
+
+<div style="margin-bottom: 40px;">
+    <h1 contenteditable="true" id="reportTitle" class="page-title editable" style="display: inline-block; min-width: 300px;">
+        {{ context.meta.client_name }}
+    </h1>
+    <p style="color:#777;">Datos generados el: {{ context.meta.date_generated }}</p>
+</div>
+
+<div class="editor-grid cols-4">
+    <div class="card">
+        <div class="card-title">Menciones Totales</div>
+        <div class="kpi-value" style="color:#141414;">{{ context.kpis.total_mentions }}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Autores Únicos</div>
+        <div class="kpi-value">{{ context.kpis.unique_authors }}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Alcance Estimado</div>
+        <div class="kpi-value" style="color:#07ab50;">{{ context.kpis.estimated_reach_fmt }}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Distribución</div>
+        <div style="margin-top: 15px; display: flex; justify-content: space-between;">
+            <div>
+                <i class="fa-regular fa-newspaper"></i> Prensa
+                <div style="font-weight:bold; font-size:1.2rem;">{{ context.kpis.mentions_prensa }}</div>
+            </div>
+            <div>
+                <i class="fa-solid fa-hashtag"></i> Redes
+                <div style="font-weight:bold; font-size:1.2rem;">{{ context.kpis.mentions_redes }}</div>
             </div>
         </div>
-    </nav>
+    </div>
+</div>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="editor-grid" style="grid-template-columns: 2fr 1fr;">
+    <div class="card">
+        <div class="card-title">Evolución de la Conversación</div>
+        <div style="position: relative; height: 300px; width: 100%;">
+            <canvas id="evolutionChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="card-title">Sentimiento</div>
+            <span style="background:#ffdd00; font-size:0.7rem; padding:2px 6px; border-radius:4px; font-weight:bold;">EDITABLE</span>
+        </div>
         
-        <div class="mb-8 text-center">
-            <h2 contenteditable="true" id="reportTitle" class="text-4xl font-extrabold text-gray-900 editable inline-block px-2">
-                {{ context.meta.client_name }}
-            </h2>
-            <p class="mt-2 text-gray-500">Datos generados el: {{ context.meta.date_generated }}</p>
+        <div style="position: relative; height: 200px; margin-bottom: 20px;">
+            <canvas id="sentimentChart"></canvas>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <p class="text-sm font-medium text-gray-500">Menciones Totales</p>
-                <p class="text-3xl font-bold text-gray-900 mt-2">{{ context.kpis.total_mentions }}</p>
+        <div id="sentiment-controls" style="background:#f9f9f9; padding:10px; border-radius:8px;">
             </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <p class="text-sm font-medium text-gray-500">Autores Únicos</p>
-                <p class="text-3xl font-bold text-blue-600 mt-2">{{ context.kpis.unique_authors }}</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <p class="text-sm font-medium text-gray-500">Alcance Estimado</p>
-                <p class="text-3xl font-bold text-green-600 mt-2">{{ context.kpis.estimated_reach_fmt }}</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <p class="text-sm font-medium text-gray-500">Prensa vs Redes</p>
-                <div class="flex justify-between items-end mt-2">
-                    <span class="text-lg font-semibold text-gray-700"><i class="fa-regular fa-newspaper"></i> {{ context.kpis.mentions_prensa }}</span>
-                    <span class="text-lg font-semibold text-gray-700"><i class="fa-solid fa-hashtag"></i> {{ context.kpis.mentions_redes }}</span>
-                </div>
-            </div>
-        </div>
+    </div>
+</div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2">
-                <h3 class="text-lg font-semibold mb-4 text-gray-800">Evolución de la Conversación</h3>
-                <div class="relative h-64">
-                    <canvas id="evolutionChart"></canvas>
-                </div>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-gray-800">Sentimiento</h3>
-                    <span class="text-xs font-bold text-white bg-blue-600 px-2 py-1 rounded">EDITABLE</span>
-                </div>
-                
-                <div class="flex flex-col space-y-6">
-                    <div class="relative h-48 w-full">
-                        <canvas id="sentimentChart"></canvas>
-                    </div>
-                    
-                    <div id="sentiment-controls" class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <p class="text-xs text-gray-400 uppercase font-bold mb-3">Modificar Valores:</p>
-                        </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <h3 class="text-lg font-semibold mb-4 text-gray-800">Top Influencers (Redes)</h3>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3">Nombre</th>
-                                <th class="px-4 py-3 text-center">Posts</th>
-                                <th class="px-4 py-3 text-right">Alcance</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in context.tables.top_redes %}
-                            <tr class="border-b hover:bg-gray-50">
-                                <td class="px-4 py-3 font-medium text-gray-900">{{ item.Influencer }}</td>
-                                <td class="px-4 py-3 text-center">{{ item.Posts }}</td>
-                                <td class="px-4 py-3 text-right">{{ item.Reach }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 class="text-lg font-semibold mb-4 text-gray-800">Frases Destacadas (Editables)</h3>
-                <ul class="space-y-3">
-                    {% for sentence in context.tables.top_sentences %}
-                    <li class="p-3 bg-yellow-50 rounded-lg border border-yellow-100 text-gray-700 text-sm">
-                        <div contenteditable="true" class="editable outline-none">{{ sentence }}</div>
-                    </li>
+<div class="editor-grid cols-2">
+    <div class="card">
+        <div class="card-title">Top Influencers (Redes Sociales)</div>
+        <div style="overflow-x:auto;">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Fuente</th> <th style="text-align:center;">Posts</th>
+                        <th style="text-align:right;">Alcance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in context.tables.top_redes %}
+                    <tr>
+                        <td style="font-weight:bold;">{{ item.Influencer }}</td>
+                        <td>
+                            {% if item.Source == 'Twitter' %}<i class="fa-brands fa-twitter" style="color:#1DA1F2;"></i>
+                            {% elif item.Source == 'Facebook' %}<i class="fa-brands fa-facebook" style="color:#1877F2;"></i>
+                            {% elif item.Source == 'Youtube' %}<i class="fa-brands fa-youtube" style="color:#FF0000;"></i>
+                            {% elif item.Source == 'Instagram' %}<i class="fa-brands fa-instagram" style="color:#E1306C;"></i>
+                            {% else %}{{ item.Source }}{% endif %}
+                        </td>
+                        <td style="text-align:center;">{{ item.Posts }}</td>
+                        <td style="text-align:right;">{{ item.Reach }}</td>
+                    </tr>
                     {% endfor %}
-                </ul>
-            </div>
+                </tbody>
+            </table>
         </div>
+    </div>
 
-        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
-            <h3 class="text-lg font-semibold mb-2 text-gray-800 flex items-center">
-                <i class="fa-solid fa-robot mr-2 text-purple-600"></i> Análisis de Conversación
-            </h3>
-            <div contenteditable="true" class="editable w-full p-4 bg-gray-50 rounded-lg text-gray-600 leading-relaxed min-h-[100px]">
-                {{ context.ai_analysis.summary }}
-                <br><br>
-                (Escribe aquí tus conclusiones manuales o el resumen ejecutivo...)
+    <div class="card">
+        <div class="card-title">Frases Destacadas</div>
+        <div id="sentencesList">
+            {% for sentence in context.tables.top_sentences %}
+            <div contenteditable="true" class="editable editable-sentence">
+                {{ sentence }}
             </div>
+            {% endfor %}
         </div>
+    </div>
+</div>
 
-    </main>
+<div class="card" style="margin-bottom: 40px;">
+    <div class="card-title"><i class="fa-solid fa-robot" style="color:#3f3fff;"></i> Análisis de Conversación</div>
+    <div id="analysisInput" contenteditable="true" class="editable" style="min-height: 100px; line-height: 1.6;">
+        {{ context.ai_analysis.summary }}
+        <br><br>
+        (Escribe aquí tus conclusiones o ajusta el resumen...)
+    </div>
+</div>
 
-    <script>
-        // 1. Recibir los datos desde Python de forma segura
-        const reportData = {{ context | tojson }};
+<script>
+    // 1. Recibir datos
+    const reportData = {{ context | tojson }};
 
-        // 2. Configurar Gráfico de Evolución
-        const ctxEvo = document.getElementById('evolutionChart').getContext('2d');
-        new Chart(ctxEvo, {
-            type: 'line',
-            data: {
-                labels: reportData.charts.evolution.labels,
-                datasets: [{
-                    label: 'Menciones',
-                    data: reportData.charts.evolution.values,
-                    borderColor: '#f59e0b', // Orange-500
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-        });
-
-        // 3. Configurar Gráfico de Sentimiento (INTERACTIVO)
-        const ctxSent = document.getElementById('sentimentChart').getContext('2d');
-        const rawData = reportData.charts.sentiment; 
-
-        // Definimos orden y colores fijos para evitar errores visuales
-        const sentimentConfig = {
-            'Positive': { color: '#07ab50', label: 'Positivo' }, // Verde
-            'Neutral':  { color: '#D3D1D1', label: 'Neutral' },  // Gris
-            'Negative': { color: '#ad0303', label: 'Negativo' }  // Rojo
-        };
-
-        // Ordenamos los datos: Positive -> Neutral -> Negative
-        const order = ['Positive', 'Neutral', 'Negative'];
-        rawData.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
-
-        // Preparamos arrays para Chart.js
-        let chartLabels = rawData.map(d => d.label);
-        let chartValues = rawData.map(d => d.value);
-        let chartColors = rawData.map(d => sentimentConfig[d.label]?.color || '#cccccc');
-
-        // Renderizar Gráfico Inicial
-        const sentimentChart = new Chart(ctxSent, {
-            type: 'doughnut',
-            data: {
-                labels: chartLabels,
-                datasets: [{
-                    data: chartValues,
-                    backgroundColor: chartColors,
-                    borderWidth: 0,
-                    hoverOffset: 10
-                }]
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false,
-                cutout: '60%', // Hace el anillo más fino
-                plugins: { legend: { display: false } }
-            }
-        });
-
-        // GENERAR INPUTS EN EL HTML
-        const controlsDiv = document.getElementById('sentiment-controls');
-        controlsDiv.innerHTML = ''; // Limpiar por si acaso
-
-        rawData.forEach((item, index) => {
-            // Crear fila para cada sentimiento
-            const row = document.createElement('div');
-            row.className = "flex justify-between items-center mb-3 last:mb-0";
-            
-            const color = sentimentConfig[item.label]?.color || '#ccc';
-            const displayLabel = sentimentConfig[item.label]?.label || item.label;
-
-            row.innerHTML = `
-                <div class="flex items-center">
-                    <div class="w-3 h-3 rounded-full mr-2" style="background-color: ${color};"></div>
-                    <span class="text-sm font-medium text-gray-700">${displayLabel}</span>
-                </div>
-                <input 
-                    type="number" 
-                    min="0" 
-                    value="${item.value}" 
-                    data-index="${index}"
-                    class="sentiment-input w-20 p-1 text-right border border-gray-300 rounded shadow-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-            `;
-            controlsDiv.appendChild(row);
-        });
-
-        // EVENT LISTENER: Escuchar cambios en los inputs
-        document.querySelectorAll('.sentiment-input').forEach(input => {
-            input.addEventListener('input', (e) => {
-                const idx = e.target.getAttribute('data-index');
-                const val = parseInt(e.target.value) || 0;
-
-                // 1. Actualizar gráfico en tiempo real
-                sentimentChart.data.datasets[0].data[idx] = val;
-                sentimentChart.update();
-
-                // 2. Actualizar datos globales (para el reporte final)
-                reportData.charts.sentiment[idx].value = val;
-            });
-        });
-
-        // 4. Lógica de Envío al Servidor
-        async function generarReporte() {
-            // 1. Referencia directa por ID (Mucho más seguro)
-            const btn = document.getElementById('btnGenerar');
-            const originalContent = btn.innerHTML; // Guardamos el icono y texto original
-            
-            try {
-                // 2. FEEDBACK INSTANTÁNEO
-                btn.disabled = true;
-                btn.classList.add('opacity-75', 'cursor-not-allowed'); // Estilo visual de deshabilitado
-                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Generando...';
-                
-                // Recopilar datos
-                const tituloEditado = document.getElementById('reportTitle').innerText;
-                reportData.meta.client_name = tituloEditado;
-
-                console.log("Enviando datos a Python...", reportData); // Debug para ti
-
-                // 3. Petición al Servidor
-                const response = await fetch('/generate_pptx', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(reportData)
-                });
-
-                if (response.ok) {
-                    // Descarga del archivo
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `Reporte_${tituloEditado}.pptx`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    
-                    // Éxito visual
-                    btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> ¡Listo!';
-                    setTimeout(() => {
-                        btn.innerHTML = originalContent;
-                        btn.disabled = false;
-                        btn.classList.remove('opacity-75', 'cursor-not-allowed');
-                    }, 3000); // Volver a la normalidad en 3 segundos
-
-                } else {
-                    throw new Error(await response.text());
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Hubo un error al generar el reporte: ' + error.message);
-                
-                // Restaurar botón en caso de error
-                btn.innerHTML = originalContent;
-                btn.disabled = false;
-                btn.classList.remove('opacity-75', 'cursor-not-allowed');
-            }
+    // 2. Gráfico Evolución
+    const ctxEvo = document.getElementById('evolutionChart').getContext('2d');
+    new Chart(ctxEvo, {
+        type: 'line',
+        data: {
+            labels: reportData.charts.evolution.labels,
+            datasets: [{
+                label: 'Menciones',
+                data: reportData.charts.evolution.values,
+                borderColor: '#ffdd00', /* Amarillo marca */
+                backgroundColor: 'rgba(255, 221, 0, 0.1)',
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
+                pointBackgroundColor: '#141414'
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
         }
-    </script>
-</body>
-</html>
+    });
+
+    // 3. Gráfico Sentimiento (Interactiva v2.0)
+    const ctxSent = document.getElementById('sentimentChart').getContext('2d');
+    const rawData = reportData.charts.sentiment; 
+
+    const sentimentConfig = {
+        'Positive': { color: '#07ab50', label: 'Positivo' },
+        'Neutral':  { color: '#d1d1d1', label: 'Neutral' },
+        'Negative': { color: '#ad0303', label: 'Negativo' }
+    };
+
+    const order = ['Positive', 'Neutral', 'Negative'];
+    rawData.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
+
+    let chartLabels = rawData.map(d => d.label);
+    let chartValues = rawData.map(d => d.value);
+    let chartColors = rawData.map(d => sentimentConfig[d.label]?.color || '#ccc');
+
+    const sentimentChart = new Chart(ctxSent, {
+        type: 'doughnut',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                data: chartValues,
+                backgroundColor: chartColors,
+                borderWidth: 0,
+                hoverOffset: 10
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            cutout: '60%', 
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // Generar Inputs HTML
+    const controlsDiv = document.getElementById('sentiment-controls');
+    controlsDiv.innerHTML = ''; 
+
+    rawData.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.justifyContent = 'space-between';
+        row.style.alignItems = 'center';
+        row.style.marginBottom = '8px';
+        
+        const color = sentimentConfig[item.label]?.color || '#ccc';
+        const displayLabel = sentimentConfig[item.label]?.label || item.label;
+
+        row.innerHTML = `
+            <div style="display:flex; align-items:center;">
+                <div style="width:12px; height:12px; border-radius:50%; background:${color}; margin-right:8px;"></div>
+                <span style="font-size:0.9rem; font-weight:bold; color:#555;">${displayLabel}</span>
+            </div>
+            <input 
+                type="number" 
+                min="0" 
+                value="${item.value}" 
+                data-index="${index}"
+                class="sentiment-input"
+                style="width:60px; padding:5px; text-align:right; border:1px solid #ccc; border-radius:4px;"
+            >
+        `;
+        controlsDiv.appendChild(row);
+    });
+
+    document.querySelectorAll('.sentiment-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const idx = e.target.getAttribute('data-index');
+            const val = parseInt(e.target.value) || 0;
+            sentimentChart.data.datasets[0].data[idx] = val;
+            sentimentChart.update();
+            reportData.charts.sentiment[idx].value = val;
+        });
+    });
+
+    // 4. Función Generar Reporte
+    async function generarReporte() {
+        const btn = document.getElementById('btnGenerar');
+        const originalContent = btn.innerHTML;
+        
+        try {
+            btn.disabled = true;
+            btn.style.opacity = "0.7";
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generando...';
+            
+            // Capturar Título
+            const tituloEditado = document.getElementById('reportTitle').innerText.trim();
+            reportData.meta.client_name = tituloEditado;
+
+            // Capturar Análisis
+            const analisisEditado = document.getElementById('analysisInput').innerText.trim();
+            if (!reportData.ai_analysis) reportData.ai_analysis = {};
+            reportData.ai_analysis.summary = analisisEditado;
+
+            // Capturar Frases
+            const frasesElements = document.querySelectorAll('.editable-sentence');
+            const frasesActualizadas = [];
+            frasesElements.forEach(el => {
+                if(el.innerText.trim().length > 0) {
+                    frasesActualizadas.push(el.innerText.trim());
+                }
+            });
+            reportData.tables.top_sentences = frasesActualizadas;
+
+            console.log("Enviando:", reportData);
+
+            const response = await fetch('/generate_pptx', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(reportData)
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Reporte_${tituloEditado}.pptx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                
+                btn.innerHTML = '<i class="fa-solid fa-check"></i> ¡Listo!';
+                setTimeout(() => {
+                    btn.innerHTML = originalContent;
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                }, 3000);
+
+            } else {
+                throw new Error(await response.text());
+            }
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error: ' + error.message);
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+            btn.style.opacity = "1";
+        }
+    }
+</script>
+{% endblock %}
