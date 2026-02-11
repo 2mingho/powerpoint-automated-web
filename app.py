@@ -1,4 +1,3 @@
-# app.py
 import os
 import uuid
 import zipfile
@@ -475,6 +474,43 @@ def clasificacion():
 @login_required
 def union_archivos():
     return render_template('union.html')
+
+@app.route('/upload_csv', methods=['POST'])
+def upload_csv():
+    """
+    Ruta temporal para la Fase 2:
+    Sube el archivo, lo procesa a JSON y renderiza el Editor.
+    """
+    if 'file' not in request.files:
+        flash('No se seleccionó ningún archivo')
+        return redirect(request.url)
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('Nombre de archivo vacío')
+        return redirect(request.url)
+
+    if file:
+        # 1. Guardar archivo temporalmente
+        upload_folder = 'scratch' # Asegúrate que esta carpeta exista
+        os.makedirs(upload_folder, exist_ok=True)
+        file_path = os.path.join(upload_folder, file.filename)
+        file.save(file_path)
+
+        # 2. Procesar datos usando el nuevo motor
+        # (Capturamos errores para robustez)
+        try:
+            report_context = Report.create_report_context(
+                file_path, 
+                report_title=request.form.get('report_title', 'Mi Reporte')
+            )
+        except Exception as e:
+            return f"Error procesando el archivo: {str(e)}", 500
+
+        # 3. Renderizar el Editor Web en lugar de generar el PPTX directo
+        return render_template('editor.html', context=report_context)
+
+    return redirect(url_for('index'))
 
 
 @app.errorhandler(404)
