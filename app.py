@@ -20,6 +20,7 @@ from models import User, Report
 import calculation as report
 from groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 import ppt_engine
+from csv_analysis import analyze_csv, generate_summary_csv
 
 # Load environment variables
 load_dotenv()
@@ -606,6 +607,87 @@ def download_classified(file_id, original_name):
 @login_required
 def union_archivos():
     return render_template('union.html')
+
+
+@app.route('/analisis-csv', methods=['GET', 'POST'])
+@login_required
+def analisis_csv():
+    if request.method == 'POST':
+        # Get file and parameters
+        file = request.files.get('csv_file')
+        encoding = request.form.get('encoding', 'utf-8')
+        separator = request.form.get('separator', ',')
+        
+        if not file:
+            return jsonify({'success': False, 'error': 'No se proporcionó ningún archivo'}), 400
+        
+        # Save file temporarily
+        unique_id = str(uuid.uuid4())
+        filename = f"{unique_id}_{secure_filename(file.filename)}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        
+        try:
+            # Run analysis
+            result = analyze_csv(file_path, encoding, separator)
+            
+            if result['success']:
+                # Generate summary CSV for download
+                summary_filename = f"summary_{unique_id}.csv"
+                summary_path = os.path.join(app.config['UPLOAD_FOLDER'], summary_filename)
+                generate_summary_csv(result, summary_path)
+                
+                # Add download URL to result
+                result['download_url'] = url_for('download_csv_summary', file_id=unique_id)
+                result['original_filename'] = file.filename
+                
+                return jsonify(result)
+            else:
+                return jsonify(result), 400
+                
+        except Exception as e:
+            app.logger.error(f"Error en análisis CSV: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Error procesando el archivo: {str(e)}'
+            }), 500
+        finally:
+            # Clean up uploaded file
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    app.logger.error(f"Error eliminando archivo temporal: {e}")
+    
+    return render_template('analisis_csv.html')
+
+
+@app.route('/analisis-csv/download/<file_id>')
+@login_required
+def download_csv_summary(file_id):
+    # Path sanitization
+    safe_id = secure_filename(file_id)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"summary_{safe_id}.csv")
+    
+    # Verify path is within UPLOAD_FOLDER
+    if not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+        app.logger.warning(f"Path traversal attempt: {file_id}")
+        abort(403)
+    
+    @after_this_request
+    def cleanup(response):
+        try:
+            if os.path.exists(file_path):
+                # Delete file after download
+                os.remove(file_path)
+        except Exception as e:
+            app.logger.error(f"Error limpiando archivo de resumen: {e}")
+        return response
+    
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True, download_name=f"analisis_resumen_{safe_id}.csv")
+    else:
+        abort(404)
 
 @app.route('/upload_csv', methods=['POST'])
 @login_required

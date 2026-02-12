@@ -1,63 +1,73 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Data Intel{% endblock %}</title>
-  <link rel="shortcut icon" href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}" type="image/x-icon" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-</head>
-<body>
-  <header class="main-header">
-    <div class="logo-area">
-      <a href="{{ url_for('menu') }}">
-        <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" class="logo-img" />
-      </a>
-      <span class="logo-full">NEWLINK DOMINICANA</span>
-    </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Data Intel{% endblock %}</title>
+    <link
+      rel="shortcut icon"
+      href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}"
+      type="image/x-icon"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <header class="main-header">
+      <div class="logo-area">
+        <a href="{{ url_for('menu') }}">
+          <img
+            src="{{ url_for('static', filename='img/Newlink_logo.png') }}"
+            alt="Logo Newlink"
+            class="logo-img"
+          />
+        </a>
+        <span class="logo-full">NEWLINK DOMINICANA</span>
+      </div>
 
-    <div class="nav-links">
-      {% if current_user.is_authenticated %}
+      <div class="nav-links">
+        {% if current_user.is_authenticated %}
         <div class="nav-user">
           <div class="nav-user-btn">👤 <span>Usuario</span></div>
           <div class="dropdown-content">
             <a href="{{ url_for('index') }}">📊 Generar Reporte</a>
             <a href="{{ url_for('clasificacion') }}">🧠 Clasificación</a>
             <a href="{{ url_for('union_archivos') }}">🔗 Unión de Archivos</a>
+            <a href="{{ url_for('analisis_csv') }}">⚡ Análisis Rápido</a>
             <a href="{{ url_for('mis_reportes') }}">📁 Mis reportes</a>
             <a href="{{ url_for('auth.logout') }}">🚪 Cerrar sesión</a>
           </div>
         </div>
-      {% else %}
-        {% if request.path != '/login' %}
-          <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐">🔐 <span>Iniciar sesión</span></a>
-        {% endif %}
-        {% if request.path != '/register' %}
-          <a href="{{ url_for('auth.register') }}" class="btn" data-icon="📝">📝 <span>Registrarse</span></a>
-        {% endif %}
-      {% endif %}
-    </div>
-  </header>
+        {% else %} {% if request.path != '/login' %}
+        <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐"
+          >🔐 <span>Iniciar sesión</span></a
+        >
+        {% endif %} {% if request.path != '/register' %}
+        <a href="{{ url_for('auth.register') }}" class="btn" data-icon="📝"
+          >📝 <span>Registrarse</span></a
+        >
+        {% endif %} {% endif %}
+      </div>
+    </header>
 
-  <main>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <ul class="flashes">
-          {% for category, msg in messages %}
-            <li class="{{ category }}">{{ msg }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
+    <main>
+      {% with messages = get_flashed_messages(with_categories=true) %} {% if
+      messages %}
+      <ul class="flashes">
+        {% for category, msg in messages %}
+        <li class="{{ category }}">{{ msg }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %} {% endwith %} {% block content %}{% endblock %}
+    </main>
 
-    {% block content %}{% endblock %}
-  </main>
+    <footer>
+      <p>&copy; {{ current_year }} Data Intelligence</p>
+    </footer>
 
-  <footer>
-    <p>&copy; {{ current_year }} Data Intelligence</p>
-  </footer>
-
-  <!-- Script principal -->
-  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</body>
+    <!-- Script principal -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  </body>
 </html>
