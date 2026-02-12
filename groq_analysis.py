@@ -11,6 +11,11 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama3-70b-8192"
 
+# Startup validation (R1)
+if not GROQ_API_KEY or GROQ_API_KEY == "no_api_key_provided":
+    import warnings
+    warnings.warn("GROQ_API_KEY not configured. AI analysis will fail. Set it in .env file.")
+
 def construir_prompt(entidad, menciones):
     return f"""Analiza las siguientes menciones de redes sociales sobre {entidad}. Devuelve **solo un objeto JSON válido**. No incluyas explicaciones, encabezados ni formato de Markdown.
 
@@ -44,7 +49,7 @@ def llamar_groq(prompt):
         "temperature": 0.3
     }
 
-    response = requests.post(GROQ_URL, headers=headers, json=data)
+    response = requests.post(GROQ_URL, headers=headers, json=data, timeout=30)
 
     if response.status_code == 200:
         content = response.json()["choices"][0]["message"]["content"]

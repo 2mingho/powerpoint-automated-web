@@ -7,30 +7,33 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
 from classifier import classify_mentions
-from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from babel.dates import format_datetime
+from sqlalchemy import inspect, text
+from dotenv import load_dotenv
 
 from auth import auth
 from extensions import db, login_manager
 from models import User, Report
 import calculation as report
 from groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
-
 import ppt_engine
-import json
 
-# ✅ NUEVO: importar herramientas de SQLAlchemy para inspección/DDL controlado
-from sqlalchemy import inspect, text
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'scratch'
 
-# Configuración general
+# Security configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+if not app.config['SECRET_KEY']:
+    raise RuntimeError("SECRET_KEY must be set in .env file. Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'")
+
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SECRET_KEY'] = 'super-secret-key'
 
 db.init_app(app)
 login_manager.init_app(app)
@@ -97,16 +100,26 @@ def template_path_from_name(template_name):
 
 
 def clean_scratch_folder():
+    """Clean only old files (>1 hour) to prevent race conditions (P6)"""
     folder = app.config['UPLOAD_FOLDER']
     try:
+        import time
+        current_time = time.time()
+        one_hour_ago = current_time - 3600
+        
         for file in os.listdir(folder):
             file_path = os.path.join(folder, file)
-            if os.path.isfile(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
+            try:
+                # Only delete files/folders older than 1 hour
+                if os.path.getmtime(file_path) < one_hour_ago:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+            except Exception:
+                continue
     except Exception as e:
-        print(f"Error al limpiar la carpeta scratch: {e}")
+        app.logger.error(f"Error al limpiar la carpeta scratch: {e}")
 
 
 @app.route('/menu')
@@ -118,6 +131,7 @@ def menu():
 @app.route('/', methods=['GET', 'POST'])
 @login_required
 def index():
+    # Only clean old files, not all files (P6)
     clean_scratch_folder()
 
     available_templates = get_available_templates()
@@ -171,7 +185,7 @@ def index():
                 description=description
             )
         except Exception as e:
-            print(f"Error generando el reporte: {e}")
+            app.logger.error(f"Error generando el reporte: {e}")
             abort(500)
 
         if missing_fields:
@@ -236,16 +250,20 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
 
     prs = Presentation(tpl_path)
 
-    # --- Nuevo enfoque: buscar placeholders en CUALQUIER slide ---
+    # --- OPTIMIZED: Single-pass placeholder indexing (P3) ---
+    # Build index once instead of scanning slides multiple times
+    placeholder_index = {}
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            try:
+                if shape.has_text_frame and shape.text.strip():
+                    placeholder_index[shape.text.strip()] = (slide, shape)
+            except Exception:
+                continue
+
     def find_shape_for_key(key):
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                try:
-                    if shape.has_text_frame and key in shape.text:
-                        return slide, shape
-                except Exception:
-                    continue
-        return None, None
+        """Fast lookup using pre-built index"""
+        return placeholder_index.get(key, (None, None))
 
     # Reemplazo de textos genéricos
     text_mapping = {
@@ -256,20 +274,18 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
         "EST_REACH": estimated_reach
     }
 
-    # Trackear claves encontradas para evitar marcar como faltantes
+    # Apply text replacements using index
     found_text_keys = set()
     for key, value in text_mapping.items():
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                if not getattr(shape, 'has_text_frame', False):
-                    continue
-                try:
-                    if key in shape.text:
-                        # reutiliza helper existente para estilo
-                        report.set_text_style(shape, str(value), 'Effra Heavy', Pt(28), False if key not in ("NUMB_MENTIONS", "NUMB_ACTORS", "EST_REACH") else True)
-                        found_text_keys.add(key)
-                except Exception:
-                    continue
+        slide, shape = find_shape_for_key(key)
+        if shape:
+            try:
+                report.set_text_style(shape, str(value), 'Effra Heavy', Pt(28), 
+                                     False if key not in ("NUMB_MENTIONS", "NUMB_ACTORS", "EST_REACH") else True)
+                found_text_keys.add(key)
+            except Exception:
+                pass
+    
     for key in text_mapping.keys():
         if key not in found_text_keys:
             missing_fields.append(key)
@@ -439,7 +455,15 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
 @app.route('/download/<path:filename>')
 @login_required
 def download_file(filename):
-    full_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    # Path sanitization (S7)
+    safe_filename = secure_filename(filename)
+    full_path = os.path.join(app.config['UPLOAD_FOLDER'], safe_filename)
+    
+    # Verify path is within UPLOAD_FOLDER
+    if not os.path.abspath(full_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+        app.logger.warning(f"Path traversal attempt: {filename}")
+        abort(403)
+    
     if not os.path.exists(full_path):
         abort(404)
 
@@ -501,20 +525,22 @@ def clasificacion():
             print(f"DEBUG: Iniciando clasificación con default_val='{default_val}', use_keywords={use_keywords}")
             df_classified = classify_mentions(file_path, rules, default_val=default_val, use_keywords=use_keywords)
             
-            # 4. Calcular Estadísticas (Distribución e Insights)
+            # 4. Calcular Estadísticas (Distribución e Insights) - Optimized (P2)
             stats = {}
             if df_classified is not None and not df_classified.empty:
-                for index, row in df_classified.iterrows():
-                    cat = str(row.get('Categoria', default_val))
-                    tem = str(row.get('Tematica', default_val))
+                # Vectorized approach: much faster than iterrows()
+                grouped = df_classified.groupby(['Categoria', 'Tematica']).size().reset_index(name='count')
+                
+                for _, row in grouped.iterrows():
+                    cat = str(row['Categoria'])
+                    tem = str(row['Tematica'])
+                    count = row['count']
                     
                     if cat not in stats:
                         stats[cat] = {"total": 0, "tematicas": {}}
                     
-                    stats[cat]["total"] += 1
-                    if tem not in stats[cat]["tematicas"]:
-                        stats[cat]["tematicas"][tem] = 0
-                    stats[cat]["tematicas"][tem] += 1
+                    stats[cat]["total"] += count
+                    stats[cat]["tematicas"][tem] = count
             
             # Insights adicionales para el visual
             top_category = "N/A"
@@ -541,15 +567,23 @@ def clasificacion():
             })
             
         except Exception as e:
-            print(f"Error en clasificación: {e}")
-            return jsonify({"success": False, "error": str(e)}), 500
+            app.logger.error(f"Error en clasificación: {e}")
+            return jsonify({"success": False, "error": "Error procesando la clasificación. Por favor intenta nuevamente."}), 500
             
     return render_template('clasificacion.html')
 
 @app.route('/download_classified/<file_id>/<original_name>')
 @login_required
 def download_classified(file_id, original_name):
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{file_id}.csv")
+    # Path sanitization (S7)
+    safe_id = secure_filename(file_id)
+    safe_name = secure_filename(original_name)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{safe_id}.csv")
+    
+    # Verify path is within UPLOAD_FOLDER
+    if not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+        app.logger.warning(f"Path traversal attempt: {file_id}")
+        abort(403)
     
     @after_this_request
     def cleanup(response):
@@ -559,11 +593,11 @@ def download_classified(file_id, original_name):
                 # os.remove(file_path) 
                 pass
         except Exception as e:
-            print(f"Error limpiando archivo clasificado: {e}")
+            app.logger.error(f"Error limpiando archivo clasificado: {e}")
         return response
 
     if os.path.exists(file_path):
-        return send_file(file_path, as_attachment=True, download_name=original_name)
+        return send_file(file_path, as_attachment=True, download_name=safe_name)
     else:
         abort(404)
 
@@ -603,7 +637,7 @@ def upload_csv():
             return render_template('editor.html', context=report_context)
             
         except Exception as e:
-            print(f"ERROR: {e}") # Para ver el error en consola si ocurre
+            app.logger.error(f"ERROR: {e}")
             flash(f"Error procesando el archivo: {str(e)}")
             return redirect(url_for('index'))
 
@@ -624,6 +658,7 @@ def internal_error(e):
                            message="Ocurrió un error inesperado. Por favor, intenta más tarde."), 500
 
 @app.route('/generate_pptx', methods=['POST'])
+@login_required
 def generate_pptx_route():
     try:
         # 1. Recibir el JSON con los datos editados
@@ -648,11 +683,10 @@ def generate_pptx_route():
         return send_file(output_path, as_attachment=True, download_name=filename)
 
     except Exception as e:
-        print(f"ERROR GENERANDO PPT: {e}")
-        return str(e), 500
+        app.logger.error(f"ERROR GENERANDO PPT: {e}")
+        return "Error generando el reporte. Por favor intenta nuevamente.", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
-    
-print(app.url_map)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)

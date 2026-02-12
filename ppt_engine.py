@@ -45,7 +45,7 @@ def create_temp_charts(data):
     plt.setp(texts, size=10)
     
     sent_path = 'scratch/temp_sentiment.png'
-    plt.savefig(sent_path, transparent=True, dpi=300, bbox_inches='tight')
+    plt.savefig(sent_path, transparent=True, dpi=150, bbox_inches='tight')
     plt.close(fig)
     paths['sentiment'] = sent_path
 
@@ -65,7 +65,7 @@ def create_temp_charts(data):
     plt.tight_layout()
     
     evo_path = 'scratch/temp_evolution.png'
-    plt.savefig(evo_path, transparent=True, dpi=300)
+    plt.savefig(evo_path, transparent=True, dpi=150)
     plt.close(fig)
     paths['evolution'] = evo_path
 
