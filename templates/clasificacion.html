@@ -2,9 +2,240 @@
 {% block title %}Clasificación de Data | Data Intel{% endblock %}
 
 {% block content %}
-<div class="report-container">
-  <h1>Clasificación de Data</h1>
-  <p class="coming-soon">🚧 Esta herramienta estará disponible próximamente...</p>
-  <p>Aquí podrás clasificar menciones según temáticas, categorías u otros criterios.</p>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+<div class="classifier-dashboard">
+    <div style="margin-bottom: 30px;">
+        <h1 class="page-title"><i class="fa-solid fa-brain" style="color: #3f3fff;"></i> Clasificación de Data</h1>
+        <p style="color: #666;">Organiza tus menciones automáticamente definiendo categorías y temáticas con palabras clave.</p>
+    </div>
+
+    <!-- PASO 1: CARGA DE ARCHIVO -->
+    <div class="card" style="margin-bottom: 30px;">
+        <div class="card-title">1. Seleccionar Archivo</div>
+        <div class="upload-box" id="drop-zone" style="cursor: pointer;">
+            <div class="upload-icon">📁</div>
+            <div>
+                <strong>Haz clic o arrastra el archivo CSV</strong>
+                <p id="file-name-display">No se ha seleccionado ningún archivo (UTF-16 Tabulado recomendado)</p>
+            </div>
+            <input type="file" id="csv_file" accept=".csv" style="display: none;" />
+        </div>
+    </div>
+
+    <!-- PASO 2: REGLAS -->
+    <div class="card">
+        <div class="card-title">2. Definir Reglas de Clasificación</div>
+        <p style="font-size: 0.85rem; color: #777; margin-bottom: 20px;">
+            Las menciones se buscarán en la columna <strong>'Hit Sentence'</strong>. Si se encuentra una palabra clave, se asignará la Temática y Categoría correspondiente.
+        </p>
+
+        <div id="rules-container">
+            <!-- Las categorías se insertarán aquí dinámicamente -->
+        </div>
+
+        <button type="button" class="btn-add" onclick="addCategory()" style="width: 100%; padding: 12px; border-style: solid;">
+            <i class="fa-solid fa-plus"></i> Añadir Nueva Categoría
+        </button>
+    </div>
+
+    <!-- ACCIÓN FINAL -->
+    <div style="text-align: center; margin-top: 40px;">
+        <div class="classifier-actions">
+            <div>
+                <span style="color:#777; font-size: 0.9rem;">Listo para procesar:</span>
+                <strong style="color:#3f3fff;" id="status-text">Definir reglas y subir archivo</strong>
+            </div>
+            <div style="width: 1px; height: 20px; background: #ddd;"></div>
+            <button id="btnProcess" onclick="processClassification()" class="btn" style="margin:0;">
+                <i class="fa-solid fa-bolt"></i> Clasificar y Descargar
+            </button>
+        </div>
+    </div>
 </div>
+
+<script>
+    let categories = [
+        {
+            id: Date.now(),
+            name: "Economía",
+            tematicas: [
+                { id: Date.now() + 1, name: "Inflación", keywords: "precios, costo, canasta" }
+            ]
+        }
+    ];
+
+    const container = document.getElementById('rules-container');
+    const fileInput = document.getElementById('csv_file');
+    const dropZone = document.getElementById('drop-zone');
+    const fileNameDisplay = document.getElementById('file-name-display');
+
+    // Manejo de Archivos
+    dropZone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+        if (e.target.files.length > 0) {
+            fileNameDisplay.innerText = e.target.files[0].name;
+            document.getElementById('status-text').innerText = "Archivo listo";
+        }
+    };
+
+    // Renderizado de Reglas
+    function renderRules() {
+        container.innerHTML = '';
+        categories.forEach((cat, catIdx) => {
+            const catDiv = document.createElement('div');
+            catDiv.className = 'rule-category animate-fade';
+            catDiv.innerHTML = `
+                <div class="category-header">
+                    <input type="text" class="category-title editable" style="border:none; padding:5px; width:60%;" 
+                           value="${cat.name}" onchange="updateCategoryName(${catIdx}, this.value)">
+                    <button class="btn-remove" onclick="removeCategory(${catIdx})">
+                        <i class="fa-solid fa-trash"></i> Eliminar Categoría
+                    </button>
+                </div>
+                <div id="tematicas-${catIdx}">
+                    ${cat.tematicas.map((tem, temIdx) => `
+                        <div class="tematica-group animate-fade">
+                            <div class="tematica-header">
+                                <input type="text" placeholder="Nombre de Temática" 
+                                       style="font-weight:bold; width: 40%;" 
+                                       value="${tem.name}" onchange="updateTematicaName(${catIdx}, ${temIdx}, this.value)">
+                                <button class="btn-remove" onclick="removeTematica(${catIdx}, ${temIdx})">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="keywords-input" 
+                                   placeholder="Palabras clave (separadas por comas)" 
+                                   value="${tem.keywords}" onchange="updateKeywords(${catIdx}, ${temIdx}, this.value)">
+                        </div>
+                    `).join('')}
+                </div>
+                <button type="button" class="btn-add" onclick="addTematica(${catIdx})">
+                    <i class="fa-solid fa-plus"></i> Añadir Temática
+                </button>
+            `;
+            container.appendChild(catDiv);
+        });
+    }
+
+    // Funciones de model (Categorías/Temáticas)
+    function addCategory() {
+        categories.push({
+            id: Date.now(),
+            name: "Nueva Categoría",
+            tematicas: [{ id: Date.now() + 1, name: "Nueva Temática", keywords: "" }]
+        });
+        renderRules();
+    }
+
+    function removeCategory(idx) {
+        categories.splice(idx, 1);
+        renderRules();
+    }
+
+    function updateCategoryName(idx, val) {
+        categories[idx].name = val;
+    }
+
+    function addTematica(catIdx) {
+        categories[catIdx].tematicas.push({ id: Date.now(), name: "Nueva Temática", keywords: "" });
+        renderRules();
+    }
+
+    function removeTematica(catIdx, temIdx) {
+        categories[catIdx].tematicas.splice(temIdx, 1);
+        renderRules();
+    }
+
+    function updateTematicaName(catIdx, temIdx, val) {
+        categories[catIdx].tematicas[temIdx].name = val;
+    }
+
+    function updateKeywords(catIdx, temIdx, val) {
+        categories[catIdx].tematicas[temIdx].keywords = val;
+    }
+
+    // Proceso Final
+    async function processClassification() {
+        const btn = document.getElementById('btnProcess');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            alert("Por favor, selecciona un archivo CSV primero.");
+            return;
+        }
+
+        if (categories.length === 0) {
+            alert("Define al menos una categoría y temática.");
+            return;
+        }
+
+        try {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+            document.getElementById('status-text').innerText = "Limpiando y clasificando...";
+
+            // Preparar reglas para el backend (formato que espera classifier.py)
+            const rulesPayload = categories.map(cat => ({
+                category: cat.name,
+                tematicas: cat.tematicas.map(tem => ({
+                    name: tem.name,
+                    keywords: tem.keywords.split(',').map(k => k.trim()).filter(k => k)
+                }))
+            }));
+
+            const formData = new FormData();
+            formData.append('csv_file', file);
+            formData.append('rules', JSON.stringify(rulesPayload));
+
+            const response = await fetch('/clasificacion', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                document.getElementById('status-text').innerText = "¡Completado!";
+                window.location.href = result.download_url;
+                btn.innerHTML = '<i class="fa-solid fa-check"></i> Descargado';
+            } else {
+                throw new Error(result.error || "Error desconocido");
+            }
+
+        } catch (error) {
+            console.error(error);
+            alert("Error: " + error.message);
+            btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
+            btn.disabled = false;
+        }
+    }
+
+    // Inicializar
+    renderRules();
+</script>
+
+<style>
+    /* Estilos locales rápidos para inputs en el constructor */
+    .rule-category input[type="text"] {
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        transition: all 0.2s;
+        padding: 8px;
+        margin-bottom: 0;
+    }
+    
+    .rule-category input[type="text"]:focus, .rule-category input[type="text"]:hover {
+        background: #fff;
+        border-color: #ddd;
+        outline: none;
+    }
+
+    .tematica-group input.keywords-input {
+        background: #fff;
+        border: 1px solid #eee;
+        font-size: 0.9rem;
+    }
+</style>
 {% endblock %}
