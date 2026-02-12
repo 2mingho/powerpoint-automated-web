@@ -98,3 +98,4 @@ POWERPOINT-AUTOMATED-WEB/
 *   **PPT Templates**: The system expects a template with specific placeholders (e.g., `REPORT_CLIENT`, `SENTIMENT_PIE`) to function correctly.
 *   **Security**: The `.env` file is excluded from git; ensure you set your `GROQ_API_KEY` before running AI analysis.
 *   **Cleanup**: Generated files in `scratch/` are typically packaged into ZIPs for the user and should be managed for server storage.
+
