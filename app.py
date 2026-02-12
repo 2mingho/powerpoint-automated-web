@@ -2,8 +2,11 @@ import os
 import uuid
 import zipfile
 import shutil
+import json
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
+from flask_login import current_user, login_required
+from classifier import classify_mentions
 from flask_login import LoginManager, login_required, current_user
 from werkzeug.utils import secure_filename
 from pptx import Presentation
@@ -467,10 +470,102 @@ def error_archivo_invalido():
                            message="El archivo que subiste no es válido o tiene un formato incorrecto.")
 
 
-@app.route('/clasificacion')
+@app.route('/clasificacion', methods=['GET', 'POST'])
 @login_required
 def clasificacion():
+    if request.method == 'POST':
+        # 1. Obtener archivo, reglas y valor por defecto
+        file = request.files.get('csv_file')
+        rules_str = request.form.get('rules')
+        default_val = request.form.get('default_val', 'Sin Clasificar')
+        use_keywords = request.form.get('use_keywords') == 'true'
+        
+        if not file or not rules_str:
+            flash("Archivo o reglas no proporcionados.", "error")
+            return redirect(url_for('clasificacion'))
+        
+        try:
+            rules = json.loads(rules_str)
+        except json.JSONDecodeError:
+            flash("Error al procesar las reglas de clasificación.", "error")
+            return redirect(url_for('clasificacion'))
+            
+        # 2. Guardar archivo temporal
+        unique_id = str(uuid.uuid4())
+        filename = f"{unique_id}_{file.filename}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        
+        # 3. Clasificar
+        try:
+            print(f"DEBUG: Iniciando clasificación con default_val='{default_val}', use_keywords={use_keywords}")
+            df_classified = classify_mentions(file_path, rules, default_val=default_val, use_keywords=use_keywords)
+            
+            # 4. Calcular Estadísticas (Distribución e Insights)
+            stats = {}
+            if df_classified is not None and not df_classified.empty:
+                for index, row in df_classified.iterrows():
+                    cat = str(row.get('Categoria', default_val))
+                    tem = str(row.get('Tematica', default_val))
+                    
+                    if cat not in stats:
+                        stats[cat] = {"total": 0, "tematicas": {}}
+                    
+                    stats[cat]["total"] += 1
+                    if tem not in stats[cat]["tematicas"]:
+                        stats[cat]["tematicas"][tem] = 0
+                    stats[cat]["tematicas"][tem] += 1
+            
+            # Insights adicionales para el visual
+            top_category = "N/A"
+            max_val = -1
+            for cat, data in stats.items():
+                if cat != default_val and data['total'] > max_val:
+                    max_val = data['total']
+                    top_category = cat
+
+            # 5. Guardar resultado (CSV para descarga)
+            output_filename = f"Clasificado_{file.filename}"
+            output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{unique_id}.csv")
+            df_classified.to_csv(output_path, sep='\t', encoding='utf-16', index=False)
+            
+            return jsonify({
+                "success": True,
+                "download_url": url_for('download_classified', file_id=unique_id, original_name=output_filename),
+                "stats": stats,
+                "total_rows": len(df_classified),
+                "insights": {
+                    "top_category": top_category,
+                    "top_count": max_val if max_val != -1 else 0
+                }
+            })
+            
+        except Exception as e:
+            print(f"Error en clasificación: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+            
     return render_template('clasificacion.html')
+
+@app.route('/download_classified/<file_id>/<original_name>')
+@login_required
+def download_classified(file_id, original_name):
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{file_id}.csv")
+    
+    @after_this_request
+    def cleanup(response):
+        try:
+            if os.path.exists(file_path):
+                # Opcional: borrar archivo después de descarga
+                # os.remove(file_path) 
+                pass
+        except Exception as e:
+            print(f"Error limpiando archivo clasificado: {e}")
+        return response
+
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True, download_name=original_name)
+    else:
+        abort(404)
 
 
 @app.route('/union')
