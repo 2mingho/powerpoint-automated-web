@@ -1,7 +1,7 @@
 import pandas as pd
 from calculation import clean_dataframe
 
-def classify_mentions(file_path, rules_config):
+def classify_mentions(file_path, rules_config, default_val="Sin Clasificar"):
     """
     Classifies mentions based on a hierarchical rule configuration.
     
@@ -22,13 +22,18 @@ def classify_mentions(file_path, rules_config):
     
     # 2. Ensure classification columns exist
     if 'Tematica' not in df.columns:
-        df['Tematica'] = "Sin Clasificar"
+        df['Tematica'] = default_val
     if 'Categoria' not in df.columns:
-        df['Categoria'] = "Sin Clasificar"
+        df['Categoria'] = default_val
     
     # 3. Hierarchical classification
-    # Convert 'Hit Sentence' to lowercase once for efficiency
+    # Convert 'Hit Sentence' and 'Keyword' to lowercase once for efficiency
     df['Hit Sentence Lower'] = df['Hit Sentence'].fillna("").astype(str).str.lower()
+    
+    # Ensure 'Keyword' column exists, if not create empty one for fallback logic
+    if 'Keyword' not in df.columns:
+        df['Keyword'] = ""
+    df['Keyword Lower'] = df['Keyword'].fillna("").astype(str).str.lower()
     
     for category_rule in rules_config:
         category_name = category_rule.get('category', 'Otros')
@@ -41,19 +46,24 @@ def classify_mentions(file_path, rules_config):
             if not keywords:
                 continue
                 
-            # Create a regex pattern for better matching if needed, 
-            # but simple 'any' check is what was used in the original script.
-            # We'll use pandas efficient boolean indexing.
-            mask = df['Hit Sentence Lower'].apply(lambda s: any(k in s for k in keywords))
+            # Phase 1: Match against Hit Sentence
+            mask_hit = df['Hit Sentence Lower'].apply(lambda s: any(k in s for k in keywords))
             
-            # Apply labels (Priority to the first match found in the loop)
-            # You might want to decide if a row can belong to multiple categories, 
-            # but typically first-match is the standard for simple keyword classifiers.
-            # We only update if it's currently "Sin Clasificar" to prevent overwriting matches
-            df.loc[mask & (df['Tematica'] == "Sin Clasificar"), 'Tematica'] = tematica_name
-            df.loc[mask & (df['Categoria'] == "Sin Clasificar"), 'Categoria'] = category_name
+            # Phase 2: Fallback - Match against Keyword column if not already matched
+            # We only apply fallback to rows that are still the default_val
+            mask_keyword = df['Keyword Lower'].apply(lambda s: any(k in s for k in keywords))
+            
+            # Apply labels (Priority to Hit Sentence, then Keyword)
+            # Update rows that haven't been classified yet (still have default_val)
+            mask_to_classify = (df['Tematica'] == default_val)
+            
+            # Combine masks: Rows that match in Hit OR match in Keyword
+            mask_total = mask_hit | mask_keyword
+            
+            df.loc[mask_total & mask_to_classify, 'Tematica'] = tematica_name
+            df.loc[mask_total & mask_to_classify, 'Categoria'] = category_name
 
-    # Remove the temporary column
-    df = df.drop(columns=['Hit Sentence Lower'])
+    # Remove temporary columns
+    df = df.drop(columns=['Hit Sentence Lower', 'Keyword Lower'])
     
     return df

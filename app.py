@@ -474,9 +474,10 @@ def error_archivo_invalido():
 @login_required
 def clasificacion():
     if request.method == 'POST':
-        # 1. Obtener archivo y reglas
+        # 1. Obtener archivo, reglas y valor por defecto
         file = request.files.get('csv_file')
         rules_str = request.form.get('rules')
+        default_val = request.form.get('default_val', 'Sin Clasificar')
         
         if not file or not rules_str:
             flash("Archivo o reglas no proporcionados.", "error")
@@ -496,9 +497,30 @@ def clasificacion():
         
         # 3. Clasificar
         try:
-            df_classified = classify_mentions(file_path, rules)
+            print(f"DEBUG: Iniciando clasificación con default_val='{default_val}'")
+            df_classified = classify_mentions(file_path, rules, default_val=default_val)
             
-            # 4. Guardar resultado (CSV para descarga)
+            # 4. Calcular Estadísticas (Distribución)
+            # Agrupación por Categoría y Temática para el visual tree
+            stats = {}
+            if df_classified is not None and not df_classified.empty:
+                for index, row in df_classified.iterrows():
+                    # Asegurar que los valores son strings para evitar problemas en JSON (NaN, etc)
+                    cat = str(row.get('Categoria', default_val))
+                    tem = str(row.get('Tematica', default_val))
+                    
+                    if cat not in stats:
+                        stats[cat] = {"total": 0, "tematicas": {}}
+                    
+                    stats[cat]["total"] += 1
+                    if tem not in stats[cat]["tematicas"]:
+                        stats[cat]["tematicas"][tem] = 0
+                    stats[cat]["tematicas"][tem] += 1
+            
+            print(f"DEBUG: Clasificación completada. Filas: {len(df_classified) if df_classified is not None else 0}")
+            print(f"DEBUG: Stats keys: {list(stats.keys())}")
+
+            # 5. Guardar resultado (CSV para descarga)
             output_filename = f"Clasificado_{file.filename}"
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{unique_id}.csv")
             
@@ -507,7 +529,9 @@ def clasificacion():
             
             return jsonify({
                 "success": True,
-                "download_url": url_for('download_classified', file_id=unique_id, original_name=output_filename)
+                "download_url": url_for('download_classified', file_id=unique_id, original_name=output_filename),
+                "stats": stats,
+                "total_rows": len(df_classified)
             })
             
         except Exception as e:

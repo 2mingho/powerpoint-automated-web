@@ -24,10 +24,18 @@
     </div>
 
     <!-- PASO 2: REGLAS -->
-    <div class="card">
-        <div class="card-title">2. Definir Reglas de Clasificación</div>
+    <div class="card" id="settings-card">
+        <div class="card-title">2. Configuración y Reglas</div>
+        
+        <!-- Valor por Defecto -->
+        <div class="form-group" style="margin-bottom: 25px;">
+            <label for="default_val">Etiqueta para filas no clasificadas</label>
+            <input type="text" id="default_val" placeholder="Sin Clasificar" value="Sin Clasificar" 
+                   style="max-width: 300px; margin-top: 5px;">
+        </div>
+
         <p style="font-size: 0.85rem; color: #777; margin-bottom: 20px;">
-            Las menciones se buscarán en la columna <strong>'Hit Sentence'</strong>. Si se encuentra una palabra clave, se asignará la Temática y Categoría correspondiente.
+            Las menciones se buscarán en la columna <strong>'Hit Sentence'</strong>. Si no hay coincidencia, se buscará en <strong>'Keyword'</strong>.
         </p>
 
         <div id="rules-container">
@@ -39,8 +47,29 @@
         </button>
     </div>
 
+    <!-- PASO 3: RESULTADOS (Oculto inicialmente) -->
+    <div class="card animate-fade" id="results-card" style="display: none;">
+        <div class="card-title">3. Resumen de Clasificación</div>
+        <div id="results-summary" style="margin-bottom: 20px;">
+            <!-- Stats will be here -->
+        </div>
+        
+        <div id="results-tree" style="background: #f9f9f9; padding: 20px; border-radius: 12px; border: 1px solid #eee;">
+            <!-- Tree will be here -->
+        </div>
+
+        <div style="margin-top: 30px; display: flex; gap: 10px;">
+            <button class="btn" onclick="resetForm()" style="background: #f0f0f0; color: #333;">
+                <i class="fa-solid fa-arrow-left"></i> Volver a ajustar
+            </button>
+            <a id="download-link" href="#" class="btn" style="flex-grow: 1; text-align: center; background: #3f3fff; color: white;">
+                <i class="fa-solid fa-download"></i> Descargar Archivo Clasificado
+            </a>
+        </div>
+    </div>
+
     <!-- ACCIÓN FINAL -->
-    <div style="text-align: center; margin-top: 40px;">
+    <div id="action-bar-container" style="text-align: center; margin-top: 40px;">
         <div class="classifier-actions">
             <div>
                 <span style="color:#777; font-size: 0.9rem;">Listo para procesar:</span>
@@ -48,7 +77,7 @@
             </div>
             <div style="width: 1px; height: 20px; background: #ddd;"></div>
             <button id="btnProcess" onclick="processClassification()" class="btn" style="margin:0;">
-                <i class="fa-solid fa-bolt"></i> Clasificar y Descargar
+                <i class="fa-solid fa-bolt"></i> Clasificar Datos
             </button>
         </div>
     </div>
@@ -155,10 +184,20 @@
         categories[catIdx].tematicas[temIdx].keywords = val;
     }
 
+    function resetForm() {
+        document.getElementById('settings-card').style.display = 'block';
+        document.getElementById('action-bar-container').style.display = 'block';
+        document.getElementById('results-card').style.display = 'none';
+        document.getElementById('btnProcess').disabled = false;
+        document.getElementById('btnProcess').innerHTML = '<i class="fa-solid fa-bolt"></i> Clasificar Datos';
+        document.getElementById('status-text').innerText = "Ajusta las reglas";
+    }
+
     // Proceso Final
     async function processClassification() {
         const btn = document.getElementById('btnProcess');
         const file = fileInput.files[0];
+        const defaultVal = document.getElementById('default_val').value || "Sin Clasificar";
         
         if (!file) {
             alert("Por favor, selecciona un archivo CSV primero.");
@@ -175,7 +214,6 @@
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
             document.getElementById('status-text').innerText = "Limpiando y clasificando...";
 
-            // Preparar reglas para el backend (formato que espera classifier.py)
             const rulesPayload = categories.map(cat => ({
                 category: cat.name,
                 tematicas: cat.tematicas.map(tem => ({
@@ -187,6 +225,7 @@
             const formData = new FormData();
             formData.append('csv_file', file);
             formData.append('rules', JSON.stringify(rulesPayload));
+            formData.append('default_val', defaultVal);
 
             const response = await fetch('/clasificacion', {
                 method: 'POST',
@@ -196,9 +235,7 @@
             const result = await response.json();
 
             if (result.success) {
-                document.getElementById('status-text').innerText = "¡Completado!";
-                window.location.href = result.download_url;
-                btn.innerHTML = '<i class="fa-solid fa-check"></i> Descargado';
+                showResults(result);
             } else {
                 throw new Error(result.error || "Error desconocido");
             }
@@ -209,6 +246,87 @@
             btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
             btn.disabled = false;
         }
+    }
+
+    function showResults(result) {
+        console.log("Classification Result:", result);
+        
+        if (!result || !result.stats) {
+            console.error("Missing stats in result", result);
+            alert("Error: El servidor no devolvió las estadísticas de clasificación.");
+            resetForm();
+            return;
+        }
+
+        document.getElementById('settings-card').style.display = 'none';
+        document.getElementById('action-bar-container').style.display = 'none';
+        document.getElementById('results-card').style.display = 'block';
+
+        const summary = document.getElementById('results-summary');
+        const defaultValInput = document.getElementById('default_val');
+        const defaultVal = (defaultValInput ? defaultValInput.value : "Sin Clasificar") || "Sin Clasificar";
+        
+        // Safety check for stats indexing
+        const statsForDefault = result.stats[defaultVal] || { total: 0 };
+        const unclassifiedCount = statsForDefault.total || 0;
+        const totalRows = result.total_rows || 0;
+        const classifiedCount = totalRows - unclassifiedCount;
+        const percent = totalRows > 0 ? ((classifiedCount / totalRows) * 100).toFixed(1) : 0;
+
+        summary.innerHTML = `
+            <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 20px;">
+                <div style="flex: 1; text-align: center; background: #f5f7ff; padding: 15px; border-radius: 12px;">
+                    <div style="font-size: 2rem; font-weight: bold; color: #3f3fff;">${percent}%</div>
+                    <div style="font-size: 0.8rem; color: #777;">Datos Clasificados</div>
+                </div>
+                <div style="flex: 2;">
+                    <strong>Total Procesado:</strong> ${totalRows} filas<br>
+                    <strong>Clasificadas:</strong> ${classifiedCount}<br>
+                    <strong>Sin clasificar (como '${defaultVal}'):</strong> ${unclassifiedCount}
+                </div>
+            </div>
+        `;
+
+        const tree = document.getElementById('results-tree');
+        tree.innerHTML = "";
+        
+        // Sorting categories to show default value at the end
+        const statsKeys = Object.keys(result.stats);
+        const sortedCats = statsKeys.sort((a, b) => {
+            if (a === defaultVal) return 1;
+            if (b === defaultVal) return -1;
+            return a.localeCompare(b);
+        });
+
+        if (statsKeys.length === 0) {
+            tree.innerHTML = "<p style='color:#777; text-align:center;'>No hay datos para mostrar.</p>";
+        }
+
+        sortedCats.forEach(catName => {
+            const data = result.stats[catName];
+            if (!data) return;
+            
+            const catNode = document.createElement('div');
+            catNode.style.marginBottom = "15px";
+            catNode.innerHTML = `
+                <div style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
+                    <span><i class="fa-solid fa-folder-open" style="color: #ffdd00;"></i> ${catName}</span>
+                    <span>${data.total || 0}</span>
+                </div>
+                <div style="padding-left: 25px; margin-top: 5px;">
+                    ${data.tematicas ? Object.entries(data.tematicas).map(([tem, count]) => `
+                        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 3px;">
+                            <span style="color: #666;">• ${tem}</span>
+                            <span style="font-weight: 500;">${count}</span>
+                        </div>
+                    `).join('') : ''}
+                </div>
+            `;
+            tree.appendChild(catNode);
+        });
+
+        const dlLink = document.getElementById('download-link');
+        dlLink.href = result.download_url;
     }
 
     // Inicializar
