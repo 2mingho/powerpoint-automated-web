@@ -1,79 +1,101 @@
 # 📊 PowerPoint Automated Web
 
-Aplicación web para generar reportes automáticos a partir de archivos CSV con visualizaciones, análisis de menciones y generación de presentaciones en PowerPoint. Incluye autenticación de usuarios, almacenamiento de reportes y descarga de archivos generados.
+A professional web application for generating automated, data-driven reports from CSV data. This tool provides visual analysis, social listening insights powered by AI (Groq/Llama3), and generates professional PowerPoint presentations ready for download.
 
 ---
 
-## ⚙️ Requisitos
+## 🚀 Key Features
 
-- Python 3.10 o superior
-- Git (opcional, si clonas el repositorio)
-- Entorno Windows (usa `.bat` para automatización)
+*   **User Authentication**: Secure login and registration system.
+*   **Data Visualization**: Automatic generation of sentiment pie charts and conversation evolution line graphs.
+*   **AI Social Listening**: Advanced analysis of social media mentions using **Groq API (Llama3)** to identify themes and sentiment.
+*   **PowerPoint Engine**: Automated generation of native `.pptx` files with dynamic tables, charts, and text replacement.
+*   **Report Management**: Personal dashboard to browse and download previous reports.
+*   **Clean Export**: Generates a ZIP file containing the presentation and supporting data.
 
 ---
 
-## 🚀 Cómo ejecutar el proyecto
+## 🛠️ Tech Stack
 
-1. Clona el proyecto o descárgalo como ZIP.
-2. Abre una terminal en la carpeta raíz del proyecto.
-3. Ejecuta el script de entorno:
+*   **Backend**: Python, Flask, Flask-Login, Flask-SQLAlchemy (SQLite)
+*   **AI**: Groq API (Llama3-70b)
+*   **Data & Charts**: Pandas, Matplotlib
+*   **PPTX Generation**: Python-pptx
+*   **Styling**: Vanilla CSS (Responsive Design)
 
+---
+
+## ⚙️ Prerequisites
+
+*   Python 3.10 or higher
+*   Groq API Key (for AI analysis)
+*   CSV files encoded in **UTF-16** (standard for many social listening tools)
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone & Setup
+1. Clone the repository or download the source code.
+2. Create a `.env` file in the root directory:
+   ```env
+   GROQ_API_KEY=your_api_key_here
+   SECRET_KEY=your_flask_secret_key
+   ```
+
+### 2. Automatic Installation (Windows)
+Run the provided batch script to create a virtual environment, install dependencies, and launch the app:
+```bash
 setup_env.bat
+```
 
-### Este comando hará lo siguiente:
-1. Crear un entorno virtual (venv/)
-2. Activarlo
-3. Instalar todas las dependencias desde requirements.txt
-4. Lanzar la aplicación automáticamente en http://localhost:5000/
+### 3. Manual Installation (Any OS)
+If you prefer manual setup:
+```bash
+# Create and activate venv
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the app
+python app.py
+```
+Access the application at `http://localhost:5000/`.
 
 ---
 
-## 🧩 Estructura del proyecto
+## 🧩 Project Structure
 
+```text
 POWERPOINT-AUTOMATED-WEB/  
+├── app.py                   # Main Flask application and routing
+├── auth.py                  # Authentication logic (Login/Register/Logout)
+├── calculation.py           # Data processing and chart generation
+├── groq_analysis.py         # AI analysis integration via Groq
+├── ppt_engine.py            # PowerPoint generation engine
+├── models.py                # Database models (User, Reports)
+├── extensions.py            # Shared extensions (DB, LoginManager)
+├── requirements.txt         # Project dependencies
+├── setup_env.bat            # Automated setup script
+├── users.db                 # SQLite database
 │  
-├── app.py                   # Lógica principal y rutas  
-├── auth.py                  # Login, registro, logout  
-├── calculation.py           # Procesamiento de datos y gráficos  
-├── models.py                # Modelos de base de datos  
-├── extensions.py            # DB y login manager  
-├── requirements.txt         # Librerías necesarias  
-├── setup_env.bat            # Script de entorno virtual + ejecución  
-├── users.db                 # Base de datos SQLite  
-│  
-├── scratch/                 # Archivos generados temporalmente  
-├── powerpoints/  
+├── powerpoints/             # Slide templates and templates storage
 │   └── Reporte_plantilla.pptx  
-│  
-├── static/  
-│   ├── css/  
-│   │   └── style.css        # Estilos globales  
-│   └── img/  
-│       └── logo.ico  
-│  
-├── templates/  
-│   ├── base.html  
-│   ├── index.html  
-│   ├── login.html
-│   ├── register.html  
-│   ├── download.html  
-│   ├── mis_reportes.html  
-│   └── error.html  
+├── static/                  
+│   ├── css/style.css        # Global styles
+│   └── img/                 # Static assets (logo, etc.)
+├── templates/               # Jinja2 HTML templates
+└── scratch/                 # Temporary data (cleared after generation)
+```
 
 ---
 
-## ✅ Funcionalidades
+## 📌 Important Notes
 
-* Registro e inicio de sesión
-* Generación de reportes desde CSV
-* Wordcloud opcional
-* Visualización de reportes anteriores por usuario
-* Descarga del archivo ZIP con presentación y CSV
-* Interfaz responsive y moderna
+*   **CSV Encoding**: Ensure your input CSVs use **UTF-16** encoding to avoid parsing errors.
+*   **PPT Templates**: The system expects a template with specific placeholders (e.g., `REPORT_CLIENT`, `SENTIMENT_PIE`) to function correctly.
+*   **Security**: The `.env` file is excluded from git; ensure you set your `GROQ_API_KEY` before running AI analysis.
+*   **Cleanup**: Generated files in `scratch/` are typically packaged into ZIPs for the user and should be managed for server storage.
 
----
-
-## 📌 Notas
-
-* Los reportes se eliminan del servidor después de su descarga.
-* Asegúrate de que los archivos CSV estén codificados en UTF-16.
