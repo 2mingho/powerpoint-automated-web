@@ -50,7 +50,7 @@ def llamar_groq(prompt):
         content = response.json()["choices"][0]["message"]["content"]
         return content
     else:
-        print("❌ Error en la API:", response.status_code, response.text)
+        print("[ERROR] Error en la API:", response.status_code, response.text)
         return None
 
 def extraer_json(respuesta):

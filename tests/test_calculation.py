@@ -90,5 +90,32 @@ class TestCalculation(unittest.TestCase):
              if os.path.exists(temp_csv_name):
                 os.remove(temp_csv_name)
 
+def run_test():
+    """
+    Test 4: Calculation Engine (KPIs)
+    Adapter for run_diagnostic.py
+    """
+    import unittest
+    from io import StringIO
+    
+    # Create a test suite
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestCalculation)
+    result = unittest.TextTestRunner(stream=StringIO()).run(suite)
+    
+    success = result.wasSuccessful()
+    details = f"Pruebas de cálculo: {result.testsRun} ejecutadas, {len(result.failures)} fallos, {len(result.errors)} errores."
+    
+    # Extract some data points if possible
+    data_points = {
+        "Tests Run": result.testsRun,
+        "Failures": len(result.failures),
+        "Errors": len(result.errors),
+        "Detalle": [
+            {"name": "Cálculos de KPIs y Limpieza", "status": success, "diag": "Revisar lógica en calculation.py si hay fallos"}
+        ]
+    }
+    
+    return success, details, data_points
+
 if __name__ == '__main__':
     unittest.main()

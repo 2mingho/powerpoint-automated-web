@@ -1,0 +1,148 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Diagnóstico de Sistema | Powerpoint Automated</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #3f3fff; --success: #2ecc71; --error: #e74c3c; --warning: #f1c40f; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7fe; color: #333; margin: 0; padding: 40px; }
+        .header { margin-bottom: 40px; text-align: center; position: relative; }
+        .card { background: #fff; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; border: 1px solid #eee; break-inside: avoid; }
+        .badge { padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 0.85rem; text-transform: uppercase; }
+        .badge-success { background: #e8f5e9; color: var(--success); }
+        .badge-error { background: #ffebee; color: var(--error); }
+        .test-row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #f0f0f0; align-items: center; }
+        .diagnostic-box { background: #fff8e1; border-left: 4px solid var(--warning); padding: 15px; margin-top: 20px; border-radius: 4px; font-size: 0.9rem; }
+        .chart-container { max-width: 400px; margin: 0 auto; }
+        .btn-export { 
+            position: absolute; right: 0; top: 0;
+            background: var(--primary); color: white; border: none; padding: 10px 20px; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; transition: opacity 0.2s;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .btn-export:hover { opacity: 0.9; }
+        
+        @media print {
+            body { background: white; padding: 20px; }
+            .btn-export { display: none !important; }
+            .card { box-shadow: none; border: 1px solid #ddd; }
+            @page { margin: 1cm; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="btn-export" onclick="window.print()">
+            <i class="fa-solid fa-file-pdf"></i> Guardar como PDF
+        </button>
+        <h1><i class="fa-solid fa-stethoscope" style="color: var(--primary);"></i> Diagnóstico de Sistema</h1>
+        <p>Reporte generado el 2026-02-12 12:14:59</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+        <div class="card">
+            <h2 style="margin-top:0;">Resumen General</h2>
+            <div class="chart-container"><canvas id="summaryChart"></canvas></div>
+        </div>
+        <div class="card">
+            <h2 style="margin-top:0;">Estadísticas Rápidas</h2>
+            <div style="font-size: 1.1rem;">
+                <p><strong>Total Tests:</strong> 6</p>
+                <p><strong>Exitosos:</strong> <span style="color:var(--success)">5</span></p>
+                <p><strong>Fallidos:</strong> <span style="color:var(--error)">1</span></p>
+                <p><strong>Tiempo Ejecución:</strong> 1.98s</p>
+            </div>
+        </div>
+    </div>
+
+    
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Ai</h3>
+                <span class="badge badge-error">FAILED</span>
+            </div>
+            <p style="color: #666; margin-top:10px;">Se detectaron fallos en la conexión o configuración de la IA.</p>
+            <div style="margin-top:20px;">
+                <div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Construcción de Prompt</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Extracción de JSON</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Configuración de API Key</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-xmark" style="color:var(--error)"></i> Conexión en Vivo con API</span> <br><small style="color:var(--error)">Diagnóstico: Error de conexión o API Key inválida. Revisa tu internet y el valor de GROQ_API_KEY.</small></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Auth</h3>
+                <span class="badge badge-success">PASSED</span>
+            </div>
+            <p style="color: #666; margin-top:10px;">La lógica de hashing y verificación de contraseñas es segura.</p>
+            <div style="margin-top:20px;">
+                <div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Password Hashing Security</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Password Verification Logic</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Negative Verification</span> </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Calculation</h3>
+                <span class="badge badge-success">PASSED</span>
+            </div>
+            <p style="color: #666; margin-top:10px;">Pruebas de cálculo: 2 ejecutadas, 0 fallos, 0 errores.</p>
+            <div style="margin-top:20px;">
+                <div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Cálculos de KPIs y Limpieza</span> </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Environment</h3>
+                <span class="badge badge-success">PASSED</span>
+            </div>
+            <p style="color: #666; margin-top:10px;">Entorno configurado correctamente.</p>
+            <div style="margin-top:20px;">
+                <div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Python Version (3.13)</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Carpeta 'scratch'</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Carpeta 'powerpoints'</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Archivo .env</span> </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Logic</h3>
+                <span class="badge badge-success">PASSED</span>
+            </div>
+            <p style="color: #666; margin-top:10px;">Ambas fases de clasificación (Hit Sentence y Keywords) están funcionando correctamente.</p>
+            <div style="margin-top:20px;">
+                <div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Pass 1 (Hit Sentence)</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Pass 2 (Keywords Fallback)</span> </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Ppt</h3>
+                <span class="badge badge-success">PASSED</span>
+            </div>
+            <p style="color: #666; margin-top:10px;">El motor de PowerPoint funciona correctamente con la plantilla base.</p>
+            <div style="margin-top:20px;">
+                <div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Plantilla Base</span> </div><div class="test-row"><span><i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Generación de PPTX</span> </div>
+            </div>
+        </div>
+        
+
+    <script>
+        const ctx = document.getElementById('summaryChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Exitosos', 'Fallidos'],
+                datasets: [{
+                    data: [5, 1],
+                    backgroundColor: ['#2ecc71', '#e74c3c'],
+                    borderWidth: 0
+                }]
+            },
+            options: { 
+                animation: false,
+                cutout: '70%', 
+                plugins: { legend: { position: 'bottom' } } 
+            }
+        });
+    </script>
+</body>
+</html>

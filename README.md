@@ -8,9 +8,11 @@ A professional web application for generating automated, data-driven reports fro
 
 *   **User Authentication**: Secure login and registration system.
 *   **Data Visualization**: Automatic generation of sentiment pie charts and conversation evolution line graphs.
+*   **Hierarchical Data Classification**: Advanced engine to categorize mentions based on a Two-Pass (Hit Sentence & Keywords) rule system.
 *   **AI Social Listening**: Advanced analysis of social media mentions using **Groq API (Llama3)** to identify themes and sentiment.
 *   **PowerPoint Engine**: Automated generation of native `.pptx` files with dynamic tables, charts, and text replacement.
 *   **Report Management**: Personal dashboard to browse and download previous reports.
+*   **Interactive Insights**: Visual distribution trees and Chart.js dashboards for classified data.
 *   **Clean Export**: Generates a ZIP file containing the presentation and supporting data.
 
 ---
@@ -73,10 +75,12 @@ POWERPOINT-AUTOMATED-WEB/
 ├── app.py                   # Main Flask application and routing
 ├── auth.py                  # Authentication logic (Login/Register/Logout)
 ├── calculation.py           # Data processing and chart generation
+├── classifier.py            # Hierarchical data classification engine
 ├── groq_analysis.py         # AI analysis integration via Groq
 ├── ppt_engine.py            # PowerPoint generation engine
 ├── models.py                # Database models (User, Reports)
 ├── extensions.py            # Shared extensions (DB, LoginManager)
+├── documentation.md         # Technical deep-dive and internal logic
 ├── requirements.txt         # Project dependencies
 ├── setup_env.bat            # Automated setup script
 ├── users.db                 # SQLite database
