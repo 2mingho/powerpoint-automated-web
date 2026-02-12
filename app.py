@@ -478,6 +478,7 @@ def clasificacion():
         file = request.files.get('csv_file')
         rules_str = request.form.get('rules')
         default_val = request.form.get('default_val', 'Sin Clasificar')
+        use_keywords = request.form.get('use_keywords') == 'true'
         
         if not file or not rules_str:
             flash("Archivo o reglas no proporcionados.", "error")
@@ -497,15 +498,13 @@ def clasificacion():
         
         # 3. Clasificar
         try:
-            print(f"DEBUG: Iniciando clasificación con default_val='{default_val}'")
-            df_classified = classify_mentions(file_path, rules, default_val=default_val)
+            print(f"DEBUG: Iniciando clasificación con default_val='{default_val}', use_keywords={use_keywords}")
+            df_classified = classify_mentions(file_path, rules, default_val=default_val, use_keywords=use_keywords)
             
-            # 4. Calcular Estadísticas (Distribución)
-            # Agrupación por Categoría y Temática para el visual tree
+            # 4. Calcular Estadísticas (Distribución e Insights)
             stats = {}
             if df_classified is not None and not df_classified.empty:
                 for index, row in df_classified.iterrows():
-                    # Asegurar que los valores son strings para evitar problemas en JSON (NaN, etc)
                     cat = str(row.get('Categoria', default_val))
                     tem = str(row.get('Tematica', default_val))
                     
@@ -517,21 +516,28 @@ def clasificacion():
                         stats[cat]["tematicas"][tem] = 0
                     stats[cat]["tematicas"][tem] += 1
             
-            print(f"DEBUG: Clasificación completada. Filas: {len(df_classified) if df_classified is not None else 0}")
-            print(f"DEBUG: Stats keys: {list(stats.keys())}")
+            # Insights adicionales para el visual
+            top_category = "N/A"
+            max_val = -1
+            for cat, data in stats.items():
+                if cat != default_val and data['total'] > max_val:
+                    max_val = data['total']
+                    top_category = cat
 
             # 5. Guardar resultado (CSV para descarga)
             output_filename = f"Clasificado_{file.filename}"
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{unique_id}.csv")
-            
-            # Guardamos con el mismo encoding que solemos usar (UTF-16 Tabulado)
             df_classified.to_csv(output_path, sep='\t', encoding='utf-16', index=False)
             
             return jsonify({
                 "success": True,
                 "download_url": url_for('download_classified', file_id=unique_id, original_name=output_filename),
                 "stats": stats,
-                "total_rows": len(df_classified)
+                "total_rows": len(df_classified),
+                "insights": {
+                    "top_category": top_category,
+                    "top_count": max_val if max_val != -1 else 0
+                }
             })
             
         except Exception as e:
