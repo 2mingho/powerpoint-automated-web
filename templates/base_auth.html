@@ -1,5 +1,13 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="light">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,6 +21,9 @@
   </head>
   <body>
     <div class="auth-page">
+      <button class="theme-toggle" id="themeToggle" style="position: absolute; top: 20px; right: 20px; z-index: 10;" title="Cambiar tema">
+        <i class="fa-solid fa-moon"></i>
+      </button>
       <div class="auth-card">
         <div class="auth-logo">
           <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" />

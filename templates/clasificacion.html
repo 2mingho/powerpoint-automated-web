@@ -31,12 +31,12 @@
       <input type="text" id="default_val" class="form-input" placeholder="Sin Clasificar" value="Sin Clasificar">
     </div>
 
-    <div class="form-group" style="background: var(--c-accent-light); padding: 16px; border-radius: var(--r-md); border: 1px solid #ffeeba;">
-      <label class="form-check" style="font-weight: 600; color: #856404;">
+    <div class="form-group" style="background: var(--c-warning-bg); padding: 16px; border-radius: var(--r-md); border: 1px solid var(--c-warning);">
+      <label class="form-check" style="font-weight: 600; color: var(--c-warning);">
         <input type="checkbox" id="use_keywords">
         Doble Pasada (Columna 'Keywords')
       </label>
-      <p class="form-hint" style="color: #856404; margin-top: 6px;">
+      <p class="form-hint" style="color: var(--c-warning); margin-top: 6px;">
         <strong>Nota:</strong> Mas preciso al capturar menciones sin texto en 'Hit Sentence', pero puede aumentar el tiempo.
       </p>
     </div>
@@ -393,6 +393,8 @@
 
         const colors = ['#3f3fff', '#22c55e', '#f59e0b', '#a855f7', '#ffdd00', '#ef4444', '#14b8a6', '#334155', '#ea580c', '#94a3b8'];
 
+        const chartTextColor = getComputedStyle(document.documentElement).getPropertyValue('--c-chart-text').trim();
+
         myChart = new Chart(ctx, {
             type: 'doughnut',
             data: { labels, datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }] },
@@ -400,8 +402,20 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11, family: 'Inter' } } },
-                    title: { display: true, text: 'Distribucion por Categorias', font: { size: 13, weight: '600', family: 'Inter' } }
+                    legend: { 
+                        position: 'right', 
+                        labels: { 
+                            boxWidth: 12, 
+                            color: chartTextColor,
+                            font: { size: 11, family: 'Inter' } 
+                        } 
+                    },
+                    title: { 
+                        display: true, 
+                        text: 'Distribucion por Categorias', 
+                        color: chartTextColor,
+                        font: { size: 13, weight: '600', family: 'Inter' } 
+                    }
                 },
                 cutout: '70%'
             }
