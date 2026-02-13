@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if mode == 'edit' else 'Crear' }} Usuario | Admin{% endblock %}
+{% block content %}
+<div class="admin-container">
+  <div class="admin-header">
+    <h1>{{ '✏️ Editar' if mode == 'edit' else '➕ Crear' }} Usuario</h1>
+    <a href="{{ url_for('admin.users_list') }}" class="btn light">← Usuarios</a>
+  </div>
+
+  <div class="admin-form-wrapper">
+    <form method="POST" class="admin-form">
+      <div class="form-group">
+        <label for="username">Nombre de usuario</label>
+        <input type="text" id="username" name="username" 
+               value="{{ user.username if user else '' }}" 
+               placeholder="Mínimo 3 caracteres" required minlength="3" maxlength="50">
+      </div>
+
+      <div class="form-group">
+        <label for="email">Correo electrónico</label>
+        <input type="email" id="email" name="email" 
+               value="{{ user.email if user else '' }}" 
+               placeholder="usuario@ejemplo.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Contraseña {{ '(dejar vacío para no cambiar)' if mode == 'edit' else '' }}</label>
+        <input type="password" id="password" name="password" 
+               placeholder="Mínimo 8 caracteres" {{ '' if mode == 'edit' else 'required' }} minlength="8">
+      </div>
+
+      <div class="form-group">
+        <label for="role">Rol</label>
+        <select id="role" name="role" class="filter-select" required>
+          <option value="DI" {{ 'selected' if user and user.role == 'DI' }}>DI — Data Intelligence</option>
+          <option value="MW" {{ 'selected' if user and user.role == 'MW' }}>MW — Media Watch</option>
+          <option value="admin" {{ 'selected' if user and user.role == 'admin' }}>Admin — Administrador</option>
+        </select>
+      </div>
+
+      <!-- Tool Permissions -->
+      <div class="form-group">
+        <label>Herramientas permitidas</label>
+        <p class="perm-hint">Selecciona las herramientas que este usuario puede usar. Los admins tienen acceso total.</p>
+        <div class="perm-grid">
+          {% for key, label in all_tools.items() %}
+          <label class="perm-checkbox">
+            <input type="checkbox" name="tools" value="{{ key }}"
+                   {{ 'checked' if key in user_tools else '' }}>
+            <span class="perm-label">{{ label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn blue">
+          {{ '💾 Guardar Cambios' if mode == 'edit' else '➕ Crear Usuario' }}
+        </button>
+        <a href="{{ url_for('admin.users_list') }}" class="btn light">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

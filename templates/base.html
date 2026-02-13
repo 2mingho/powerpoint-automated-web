@@ -32,11 +32,22 @@
         <div class="nav-user">
           <div class="nav-user-btn">👤 <span>Usuario</span></div>
           <div class="dropdown-content">
+            {% if has_tool_access('reports') %}
             <a href="{{ url_for('index') }}">📊 Generar Reporte</a>
+            {% endif %}
+            {% if has_tool_access('classification') %}
             <a href="{{ url_for('clasificacion') }}">🧠 Clasificación</a>
+            {% endif %}
+            {% if has_tool_access('file_merge') %}
             <a href="{{ url_for('union_archivos') }}">🔗 Unión de Archivos</a>
+            {% endif %}
+            {% if has_tool_access('csv_analysis') %}
             <a href="{{ url_for('analisis_csv') }}">⚡ Análisis Rápido</a>
+            {% endif %}
             <a href="{{ url_for('mis_reportes') }}">📁 Mis reportes</a>
+            {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('admin.dashboard') }}">⚙️ Admin Panel</a>
+            {% endif %}
             <a href="{{ url_for('auth.logout') }}">🚪 Cerrar sesión</a>
           </div>
         </div>

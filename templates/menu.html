@@ -6,6 +6,7 @@ endblock %} {% block content %}
 
   <div class="menu-options">
     <!-- Generar Reportes -->
+    {% if has_tool_access('reports') %}
     <a href="{{ url_for('index') }}" class="tool-card">
       <div class="icon">📊</div>
       <h2>Generar Reportes</h2>
@@ -14,8 +15,10 @@ endblock %} {% block content %}
         menciones y visuales.
       </p>
     </a>
+    {% endif %}
 
     <!-- Clasificación de Data -->
+    {% if has_tool_access('classification') %}
     <a href="{{ url_for('clasificacion') }}" class="tool-card">
       <div class="icon">🧠</div>
       <h2>Clasificación de Data</h2>
@@ -24,8 +27,10 @@ endblock %} {% block content %}
         más.
       </p>
     </a>
+    {% endif %}
 
     <!-- Unión de Archivos -->
+    {% if has_tool_access('file_merge') %}
     <a href="{{ url_for('union_archivos') }}" class="tool-card">
       <div class="icon">🔗</div>
       <h2>Unión de Archivos</h2>
@@ -34,8 +39,10 @@ endblock %} {% block content %}
         estandarizada.
       </p>
     </a>
+    {% endif %}
 
     <!-- Análisis Rápido CSV -->
+    {% if has_tool_access('csv_analysis') %}
     <a href="{{ url_for('analisis_csv') }}" class="tool-card">
       <div class="icon">⚡</div>
       <h2>Análisis Rápido CSV</h2>
@@ -44,6 +51,7 @@ endblock %} {% block content %}
         segundos.
       </p>
     </a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

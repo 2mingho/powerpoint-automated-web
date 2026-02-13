@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import login_user, logout_user, login_required
+from flask_login import login_user, logout_user, login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import re
@@ -46,6 +46,10 @@ def register():
         db.session.add(new_user)
         db.session.commit()
 
+        # Log registration
+        from admin import log_activity
+        log_activity('register', f'Nuevo usuario registrado: {username}', user_id=new_user.id)
+
         flash('Registro exitoso. Ahora puedes iniciar sesión.', category='success')
         return redirect(url_for('auth.login'))
 
@@ -63,7 +67,17 @@ def login():
             flash('Credenciales incorrectas', category='error')
             return redirect(url_for('auth.login'))
 
+        # Check if user is active
+        if not user.is_active:
+            flash('Tu cuenta ha sido desactivada. Contacta al administrador.', category='error')
+            return redirect(url_for('auth.login'))
+
         login_user(user)
+
+        # Log login
+        from admin import log_activity
+        log_activity('login', f'Inicio de sesión: {user.username}', user_id=user.id)
+
         return redirect(url_for('menu'))
 
     return render_template('login.html')
@@ -71,6 +85,10 @@ def login():
 @auth.route('/logout')
 @login_required
 def logout():
+    # Log logout before clearing session
+    from admin import log_activity
+    log_activity('logout', f'Cierre de sesión: {current_user.username}')
+
     logout_user()
     flash('Has cerrado sesión.', category='warning')
     return redirect(url_for('auth.login'))

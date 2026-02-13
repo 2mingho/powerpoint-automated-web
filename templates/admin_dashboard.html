@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Panel de Administración | Data Intel{% endblock %}
+{% block content %}
+<div class="admin-container">
+  <div class="admin-header">
+    <h1>⚙️ Panel de Administración</h1>
+    <p class="admin-subtitle">Gestión de usuarios, roles y actividad del sistema</p>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="admin-stats">
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-value">{{ total_users }}</div>
+      <div class="stat-label">Usuarios Totales</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-value">{{ active_users }}</div>
+      <div class="stat-label">Activos</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🛡️</div>
+      <div class="stat-value">{{ roles_count.admin }}</div>
+      <div class="stat-label">Admins</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <div class="stat-value">{{ roles_count.DI }}</div>
+      <div class="stat-label">DI</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📡</div>
+      <div class="stat-value">{{ roles_count.MW }}</div>
+      <div class="stat-label">MW</div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="admin-actions-row">
+    <a href="{{ url_for('admin.users_list') }}" class="btn blue">👥 Gestionar Usuarios</a>
+    <a href="{{ url_for('admin.user_create') }}" class="btn blue">➕ Crear Usuario</a>
+    <a href="{{ url_for('admin.activity_log') }}" class="btn light">📋 Ver Actividad</a>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="admin-section">
+    <h2>📋 Actividad Reciente</h2>
+    {% if recent_logs %}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Usuario</th>
+          <th>Acción</th>
+          <th>Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in recent_logs %}
+        <tr>
+          <td>{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '—' }}</td>
+          <td>{{ log.user.username if log.user else 'Desconocido' }}</td>
+          <td><span class="action-badge">{{ log.action }}</span></td>
+          <td class="detail-cell">{{ log.detail[:80] }}{{ '…' if log.detail|length > 80 else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <a href="{{ url_for('admin.activity_log') }}" class="btn light" style="margin-top:15px;">Ver toda la actividad →</a>
+    {% else %}
+    <p class="empty-state">No hay actividad registrada aún.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -4,6 +4,7 @@ import zipfile
 import shutil
 import json
 from datetime import datetime
+import functools
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
 from classifier import classify_mentions
@@ -15,8 +16,9 @@ from sqlalchemy import inspect, text
 from dotenv import load_dotenv
 
 from auth import auth
+from admin import admin_bp, log_activity
 from extensions import db, login_manager
-from models import User, Report
+from models import User, Report, ActivityLog
 import calculation as report
 from groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 import ppt_engine
@@ -39,8 +41,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 db.init_app(app)
 login_manager.init_app(app)
 
-# Registrar blueprint SIEMPRE
+# Registrar blueprints
 app.register_blueprint(auth)
+app.register_blueprint(admin_bp)
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -123,6 +126,34 @@ def clean_scratch_folder():
         app.logger.error(f"Error al limpiar la carpeta scratch: {e}")
 
 
+# ─────────────────────────────────────────────────────────────
+# Tool access decorator
+# ─────────────────────────────────────────────────────────────
+
+def tool_required(tool_key):
+    """Decorator: blocks access if user lacks permission for *tool_key*."""
+    def wrapper(f):
+        @functools.wraps(f)
+        @login_required
+        def decorated(*args, **kwargs):
+            if not current_user.has_tool_access(tool_key):
+                flash('No tienes permiso para acceder a esta herramienta.', 'error')
+                return redirect(url_for('menu'))
+            return f(*args, **kwargs)
+        return decorated
+    return wrapper
+
+
+# Inject has_tool_access into templates
+@app.context_processor
+def inject_tool_access():
+    def _has_tool_access(tool_key):
+        if current_user.is_authenticated:
+            return current_user.has_tool_access(tool_key)
+        return False
+    return dict(has_tool_access=_has_tool_access)
+
+
 @app.route('/menu')
 @login_required
 def menu():
@@ -130,7 +161,7 @@ def menu():
 
 
 @app.route('/', methods=['GET', 'POST'])
-@login_required
+@tool_required('reports')
 def index():
     # Only clean old files, not all files (P6)
     clean_scratch_folder()
@@ -185,6 +216,7 @@ def index():
                 report_title=report_title,
                 description=description
             )
+            log_activity('generate_report', f'Reporte generado: {report_title or csv_filename} (plantilla: {selected_template})')
         except Exception as e:
             app.logger.error(f"Error generando el reporte: {e}")
             abort(500)
@@ -473,6 +505,7 @@ def download_file(filename):
         clean_scratch_folder()
         return response
 
+    log_activity('download_report', f'Descarga: {safe_filename}')
     return send_file(full_path, as_attachment=True)
 
 
@@ -496,7 +529,7 @@ def error_archivo_invalido():
 
 
 @app.route('/clasificacion', methods=['GET', 'POST'])
-@login_required
+@tool_required('classification')
 def clasificacion():
     if request.method == 'POST':
         # 1. Obtener archivo, reglas y valor por defecto
@@ -555,6 +588,8 @@ def clasificacion():
             output_filename = f"Clasificado_{file.filename}"
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{unique_id}.csv")
             df_classified.to_csv(output_path, sep='\t', encoding='utf-16', index=False)
+
+            log_activity('classify_data', f'Clasificación: {file.filename} ({len(df_classified)} filas, {len(stats)} categorías)')
             
             return jsonify({
                 "success": True,
@@ -604,13 +639,13 @@ def download_classified(file_id, original_name):
 
 
 @app.route('/union')
-@login_required
+@tool_required('file_merge')
 def union_archivos():
     return render_template('union.html')
 
 
 @app.route('/analisis-csv', methods=['GET', 'POST'])
-@login_required
+@tool_required('csv_analysis')
 def analisis_csv():
     if request.method == 'POST':
         # Get file and parameters
@@ -630,8 +665,9 @@ def analisis_csv():
         try:
             # Run analysis
             result = analyze_csv(file_path, encoding, separator)
-            
+
             if result['success']:
+                log_activity('csv_analysis', f'Análisis CSV: {file.filename}')
                 # Generate summary CSV for download
                 summary_filename = f"summary_{unique_id}.csv"
                 summary_path = os.path.join(app.config['UPLOAD_FOLDER'], summary_filename)
