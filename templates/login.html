@@ -1,33 +1,30 @@
-{% extends 'base.html' %}
-
-{% block title %}Iniciar sesión | Data Intel{% endblock %}
+{% extends 'base_auth.html' %}
+{% block title %}Iniciar sesion | Data Intel{% endblock %}
 
 {% block content %}
-  <div class="auth-container">
-    <h1 class="page-title">Iniciar Sesión</h1>
+<h2 class="auth-title">Iniciar Sesion</h2>
 
-    <form method="POST" action="{{ url_for('auth.login') }}">
-      <!-- Email -->
-      <div class="form-group icon-input">
-        <label for="email">Correo electrónico:</label>
-        <input type="email" id="email" name="email" placeholder="Ingresa tu correo electrónico" required />
-        <span class="icon">📧</span>
-      </div>
-
-      <!-- Contraseña -->
-      <div class="form-group icon-input">
-        <label for="password">Contraseña:</label>
-        <input type="password" id="password" name="password" placeholder="Ingresa tu contraseña" required />
-        <span class="icon">🔒</span>
-      </div>
-
-      <!-- Botón de enviar -->
-      <button type="submit">Entrar</button>
-
-      <!-- Link a registro -->
-      <p class="auth-link">¿No tienes cuenta?
-        <a href="{{ url_for('auth.register') }}">Regístrate aquí</a>
-      </p>
-    </form>
+<form method="POST" action="{{ url_for('auth.login') }}">
+  <div class="form-group">
+    <label class="form-label" for="email">Correo electronico</label>
+    <div class="input-icon-group">
+      <i class="fa-solid fa-envelope"></i>
+      <input type="email" id="email" name="email" class="form-input" placeholder="tucorreo@ejemplo.com" required />
+    </div>
   </div>
+
+  <div class="form-group">
+    <label class="form-label" for="password">Contrasena</label>
+    <div class="input-icon-group">
+      <i class="fa-solid fa-lock"></i>
+      <input type="password" id="password" name="password" class="form-input" placeholder="Ingresa tu contrasena" required />
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-block btn-lg">Entrar</button>
+
+  <p class="auth-link">
+    No tienes cuenta? <a href="{{ url_for('auth.register') }}">Registrate aqui</a>
+  </p>
+</form>
 {% endblock %}

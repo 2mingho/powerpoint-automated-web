@@ -1,57 +1,64 @@
-{% extends 'base.html' %} {% block title %}Menú Principal | Data Intel{%
-endblock %} {% block content %}
-<div class="menu-container">
-  <h1>Bienvenido a Data Intelligence</h1>
-  <p class="coming-soon">Selecciona una herramienta para comenzar:</p>
+{% extends 'base.html' %}
+{% block title %}Inicio | Data Intel{% endblock %}
+{% block page_name %}Inicio{% endblock %}
 
-  <div class="menu-options">
-    <!-- Generar Reportes -->
-    {% if has_tool_access('reports') %}
-    <a href="{{ url_for('index') }}" class="tool-card">
-      <div class="icon">📊</div>
-      <h2>Generar Reportes</h2>
-      <p>
-        Automatiza la creación de reportes desde archivos CSV con análisis de
-        menciones y visuales.
-      </p>
-    </a>
-    {% endif %}
+{% block content %}
+<div class="welcome-card">
+  <h1>Bienvenido, {{ current_user.username }}</h1>
+  <p>Selecciona una herramienta para comenzar a trabajar.</p>
+</div>
 
-    <!-- Clasificación de Data -->
-    {% if has_tool_access('classification') %}
-    <a href="{{ url_for('clasificacion') }}" class="tool-card">
-      <div class="icon">🧠</div>
-      <h2>Clasificación de Data</h2>
-      <p>
-        Organiza las menciones automáticamente por temática, tono, plataforma y
-        más.
-      </p>
-    </a>
-    {% endif %}
+<div class="tool-grid">
+  {% if has_tool_access('reports') %}
+  <a href="{{ url_for('index') }}" class="tool-card">
+    <div class="tool-card-icon">
+      <i class="fa-solid fa-chart-bar"></i>
+    </div>
+    <h3>Generar Reportes</h3>
+    <p>Automatiza la creacion de reportes desde archivos CSV con analisis de menciones y visuales.</p>
+    <div class="tool-card-arrow">
+      Abrir <i class="fa-solid fa-arrow-right"></i>
+    </div>
+  </a>
+  {% endif %}
 
-    <!-- Unión de Archivos -->
-    {% if has_tool_access('file_merge') %}
-    <a href="{{ url_for('union_archivos') }}" class="tool-card">
-      <div class="icon">🔗</div>
-      <h2>Unión de Archivos</h2>
-      <p>
-        Combina múltiples archivos de redes y prensa digital en una única fuente
-        estandarizada.
-      </p>
-    </a>
-    {% endif %}
+  {% if has_tool_access('classification') %}
+  <a href="{{ url_for('clasificacion') }}" class="tool-card">
+    <div class="tool-card-icon" style="background: var(--c-success-bg); color: var(--c-success);">
+      <i class="fa-solid fa-tags"></i>
+    </div>
+    <h3>Clasificacion de Data</h3>
+    <p>Organiza las menciones automaticamente por tematica, tono, plataforma y mas.</p>
+    <div class="tool-card-arrow">
+      Abrir <i class="fa-solid fa-arrow-right"></i>
+    </div>
+  </a>
+  {% endif %}
 
-    <!-- Análisis Rápido CSV -->
-    {% if has_tool_access('csv_analysis') %}
-    <a href="{{ url_for('analisis_csv') }}" class="tool-card">
-      <div class="icon">⚡</div>
-      <h2>Análisis Rápido CSV</h2>
-      <p>
-        Carga cualquier archivo CSV y obtén un análisis estadístico completo en
-        segundos.
-      </p>
-    </a>
-    {% endif %}
-  </div>
+  {% if has_tool_access('file_merge') %}
+  <a href="{{ url_for('union_archivos') }}" class="tool-card">
+    <div class="tool-card-icon" style="background: var(--c-warning-bg); color: var(--c-warning);">
+      <i class="fa-solid fa-link"></i>
+    </div>
+    <h3>Union de Archivos</h3>
+    <p>Combina multiples archivos de redes y prensa digital en una unica fuente estandarizada.</p>
+    <div class="tool-card-arrow">
+      Abrir <i class="fa-solid fa-arrow-right"></i>
+    </div>
+  </a>
+  {% endif %}
+
+  {% if has_tool_access('csv_analysis') %}
+  <a href="{{ url_for('analisis_csv') }}" class="tool-card">
+    <div class="tool-card-icon" style="background: var(--c-accent-light); color: #b8860b;">
+      <i class="fa-solid fa-bolt"></i>
+    </div>
+    <h3>Analisis Rapido CSV</h3>
+    <p>Carga cualquier archivo CSV y obten un analisis estadistico completo en segundos.</p>
+    <div class="tool-card-arrow">
+      Abrir <i class="fa-solid fa-arrow-right"></i>
+    </div>
+  </a>
+  {% endif %}
 </div>
 {% endblock %}

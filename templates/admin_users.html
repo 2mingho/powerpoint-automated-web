@@ -1,78 +1,110 @@
 {% extends 'base.html' %}
 {% block title %}Usuarios | Admin{% endblock %}
+{% block page_name %}Gestion de Usuarios{% endblock %}
+
 {% block content %}
-<div class="admin-container">
-  <div class="admin-header">
-    <h1>👥 Gestión de Usuarios</h1>
-    <a href="{{ url_for('admin.dashboard') }}" class="btn light">← Panel</a>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+  <div>
+    <h1>Gestion de Usuarios</h1>
+    <p>Administra cuentas, roles y permisos del sistema.</p>
   </div>
+  <a href="{{ url_for('admin.user_create') }}" class="btn btn-primary">
+    <i class="fa-solid fa-user-plus"></i> Nuevo Usuario
+  </a>
+</div>
 
-  <!-- Search & Filter -->
-  <div class="admin-filters">
-    <form method="GET" class="filter-form">
-      <input type="text" name="q" placeholder="🔍 Buscar por nombre o email..." value="{{ search }}" class="filter-input">
-      <select name="role" class="filter-select">
-        <option value="">Todos los roles</option>
-        <option value="admin" {{ 'selected' if role_filter == 'admin' }}>Admin</option>
-        <option value="DI" {{ 'selected' if role_filter == 'DI' }}>DI</option>
-        <option value="MW" {{ 'selected' if role_filter == 'MW' }}>MW</option>
-      </select>
-      <button type="submit" class="btn blue">Filtrar</button>
-    </form>
-    <a href="{{ url_for('admin.user_create') }}" class="btn blue">➕ Nuevo Usuario</a>
-  </div>
+<!-- Filters -->
+<div class="card" style="margin-bottom: 24px; padding: 16px;">
+  <form method="GET" class="filter-bar" style="margin-bottom: 0;">
+    <div class="input-icon-group" style="flex: 1; min-width: 200px;">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" name="q" placeholder="Buscar por nombre o email..." value="{{ search }}" class="form-input">
+    </div>
+    <select name="role" class="form-select" style="width: auto; min-width: 160px;">
+      <option value="">Todos los roles</option>
+      <option value="admin" {{ 'selected' if role_filter == 'admin' }}>Admin</option>
+      <option value="DI" {{ 'selected' if role_filter == 'DI' }}>DI</option>
+      <option value="MW" {{ 'selected' if role_filter == 'MW' }}>MW</option>
+    </select>
+    <button type="submit" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-filter"></i> Filtrar
+    </button>
+  </form>
+</div>
 
-  <!-- Users Table -->
+<!-- Users Table -->
+<div class="card" style="padding: 0; overflow: hidden;">
   {% if users %}
-  <table class="admin-table">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Usuario</th>
-        <th>Email</th>
-        <th>Rol</th>
-        <th>Estado</th>
-        <th>Creado</th>
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for user in users %}
-      <tr class="{{ 'inactive-row' if not user.is_active }}">
-        <td>{{ user.id }}</td>
-        <td><strong>{{ user.username }}</strong></td>
-        <td>{{ user.email }}</td>
-        <td><span class="role-badge role-{{ user.role }}">{{ user.role }}</span></td>
-        <td>
-          {% if user.is_active %}
-            <span class="status-badge active">Activo</span>
-          {% else %}
-            <span class="status-badge inactive">Inactivo</span>
-          {% endif %}
-        </td>
-        <td>{{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '—' }}</td>
-        <td class="actions-cell">
-          <a href="{{ url_for('admin.user_edit', user_id=user.id) }}" class="action-btn edit" title="Editar">✏️</a>
-          <a href="{{ url_for('admin.user_activity', user_id=user.id) }}" class="action-btn log" title="Ver actividad">📋</a>
-          {% if user.id != current_user.id %}
-          <form method="POST" action="{{ url_for('admin.user_toggle', user_id=user.id) }}" style="display:inline;">
-            <button type="submit" class="action-btn toggle" title="{{ 'Desactivar' if user.is_active else 'Activar' }}">
-              {{ '🔒' if user.is_active else '🔓' }}
-            </button>
-          </form>
-          <form method="POST" action="{{ url_for('admin.user_delete', user_id=user.id) }}" style="display:inline;"
-                onsubmit="return confirm('¿Desactivar a {{ user.username }}?');">
-            <button type="submit" class="action-btn delete" title="Eliminar">🗑️</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <p class="table-count">{{ users|length }} usuario(s) encontrado(s)</p>
+  <div style="overflow-x: auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Usuario</th>
+          <th>Email</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th>Creado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr style="{{ 'opacity: 0.5;' if not user.is_active }}">
+          <td>{{ user.id }}</td>
+          <td><strong>{{ user.username }}</strong></td>
+          <td>{{ user.email }}</td>
+          <td>
+            {% if user.role == 'admin' %}
+              <span class="badge badge-warning">{{ user.role }}</span>
+            {% elif user.role == 'DI' %}
+              <span class="badge badge-primary">{{ user.role }}</span>
+            {% else %}
+              <span class="badge badge-neutral">{{ user.role }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if user.is_active %}
+              <span class="badge badge-success">Activo</span>
+            {% else %}
+              <span class="badge badge-danger">Inactivo</span>
+            {% endif %}
+          </td>
+          <td style="white-space: nowrap;">{{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '—' }}</td>
+          <td style="white-space: nowrap;">
+            <a href="{{ url_for('admin.user_edit', user_id=user.id) }}" class="btn btn-outline btn-icon" title="Editar">
+              <i class="fa-solid fa-pen-to-square"></i>
+            </a>
+            <a href="{{ url_for('admin.user_activity', user_id=user.id) }}" class="btn btn-outline btn-icon" title="Ver actividad">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+            </a>
+            {% if user.id != current_user.id %}
+            <form method="POST" action="{{ url_for('admin.user_toggle', user_id=user.id) }}" style="display:inline;">
+              <button type="submit" class="btn btn-icon {{ 'btn-outline' if user.is_active else 'btn-success' }}" title="{{ 'Desactivar' if user.is_active else 'Activar' }}">
+                <i class="fa-solid {{ 'fa-lock' if user.is_active else 'fa-lock-open' }}"></i>
+              </button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.user_delete', user_id=user.id) }}" style="display:inline;"
+                  onsubmit="return confirm('Desactivar a {{ user.username }}?');">
+              <button type="submit" class="btn btn-icon btn-danger" title="Eliminar">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="padding: 12px 16px;">
+    <p class="table-count" style="margin: 0;">{{ users|length }} usuario(s) encontrado(s)</p>
+  </div>
   {% else %}
-  <p class="empty-state">No se encontraron usuarios con los filtros aplicados.</p>
+  <div style="padding: 48px; text-align: center; color: var(--c-text-secondary);">
+    <i class="fa-solid fa-users-slash" style="font-size: 2rem; margin-bottom: 12px; color: var(--c-border);"></i>
+    <p>No se encontraron usuarios con los filtros aplicados.</p>
+  </div>
   {% endif %}
 </div>
 {% endblock %}
