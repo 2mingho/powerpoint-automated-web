@@ -1,10 +1,14 @@
 {% extends 'base.html' %}
 {% block title %}Error | Data Intel{% endblock %}
+{% block page_name %}Error{% endblock %}
 
 {% block content %}
-  <div class="error-container">
-    <h1>⚠️ {{ title }}</h1>
-    <p>{{ message }}</p>
-    <a href="{{ url_for('index') }}" class="btn">🏠 Volver al inicio</a>
-  </div>
+<div class="card error-card">
+  <i class="fa-solid fa-triangle-exclamation"></i>
+  <h1>{{ title }}</h1>
+  <p>{{ message }}</p>
+  <a href="{{ url_for('menu') }}" class="btn btn-primary">
+    <i class="fa-solid fa-house"></i> Volver al inicio
+  </a>
+</div>
 {% endblock %}

@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}Registro de Actividad | Admin{% endblock %}
+{% block page_name %}Registro de Actividad{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Registro de Actividad{% if single_user is defined and single_user %} — {{ single_user.username }}{% endif %}</h1>
+  <p>Historial de acciones realizadas en el sistema.</p>
+</div>
+
+<!-- Filters -->
+<div class="card" style="margin-bottom: 24px; padding: 16px;">
+  <form method="GET" action="{{ url_for('admin.activity_log') }}" class="filter-bar" style="margin-bottom: 0;">
+    <select name="user_id" class="form-select" style="width: auto; min-width: 180px;">
+      <option value="">Todos los usuarios</option>
+      {% for u in users %}
+      <option value="{{ u.id }}" {{ 'selected' if user_filter == u.id|string }}>{{ u.username }}</option>
+      {% endfor %}
+    </select>
+    <div class="input-icon-group" style="flex: 1; min-width: 180px;">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" name="action" placeholder="Filtrar por accion..." value="{{ action_filter }}" class="form-input">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-filter"></i> Filtrar
+    </button>
+  </form>
+</div>
+
+<!-- Activity Table -->
+<div class="card" style="padding: 0; overflow: hidden;">
+  {% if logs.items %}
+  <div style="overflow-x: auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha y Hora</th>
+          <th>Usuario</th>
+          <th>Accion</th>
+          <th>Detalle</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs.items %}
+        <tr>
+          <td style="white-space: nowrap;">{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') if log.timestamp else '—' }}</td>
+          <td>
+            {% if log.user %}
+              <a href="{{ url_for('admin.user_activity', user_id=log.user_id) }}">{{ log.user.username }}</a>
+            {% else %}
+              <em style="color: var(--c-text-secondary);">Desconocido</em>
+            {% endif %}
+          </td>
+          <td><span class="badge badge-primary">{{ log.action }}</span></td>
+          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ log.detail if log.detail else '—' }}</td>
+          <td style="white-space: nowrap;">{{ log.ip_address or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" style="padding: 12px;">
+    {% if logs.has_prev %}
+    <a href="{{ url_for('admin.activity_log', page=logs.prev_num, user_id=user_filter, action=action_filter) }}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-chevron-left"></i> Anterior
+    </a>
+    {% endif %}
+    <span class="page-info">Pagina {{ logs.page }} de {{ logs.pages }} ({{ logs.total }} registros)</span>
+    {% if logs.has_next %}
+    <a href="{{ url_for('admin.activity_log', page=logs.next_num, user_id=user_filter, action=action_filter) }}" class="btn btn-outline btn-sm">
+      Siguiente <i class="fa-solid fa-chevron-right"></i>
+    </a>
+    {% endif %}
+  </div>
+  {% else %}
+  <div style="padding: 48px; text-align: center; color: var(--c-text-secondary);">
+    <i class="fa-solid fa-file-lines" style="font-size: 2rem; margin-bottom: 12px; color: var(--c-border);"></i>
+    <p>No hay registros de actividad con los filtros seleccionados.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

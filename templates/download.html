@@ -1,59 +1,61 @@
 <!-- templates/download.html -->
 {% extends 'base.html' %}
 {% block title %}Reporte generado | Data Intel{% endblock %}
+{% block page_name %}Reporte Generado{% endblock %}
 
 {% block content %}
-<div class="report-container">
-  <h1 class="page-title">Reporte Generado Exitosamente</h1>
+<div class="success-banner">
+  <i class="fa-solid fa-circle-check"></i>
+  <h2>Reporte Generado Exitosamente</h2>
+  <p>Tu reporte esta listo para ser descargado.</p>
+  <div class="success-actions">
+    <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn btn-primary btn-lg">
+      <i class="fa-solid fa-download"></i> Descargar Reporte
+    </a>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary btn-lg">
+      <i class="fa-solid fa-rotate"></i> Generar nuevo
+    </a>
+  </div>
+</div>
 
-  <div class="upload-box">
-    <div class="upload-icon">✅</div>
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-circle-info"></i> Detalles del reporte</div>
+
+  <div class="detail-row">
+    <div class="detail-icon"><i class="fa-solid fa-file"></i></div>
     <div>
-      <strong>Reporte completado</strong>
-      <p>
-        Tu reporte ha sido generado y está listo para ser descargado. Puedes descargarlo ahora o acceder a él más tarde desde la sección ‘Mis reportes’.
-      </p>
-    </div>
-    <div style="margin-top: 15px;">
-      <a href="{{ url_for('download_file', filename=zip_path) }}" class="btn">📥 Descargar Reporte</a>
-      <a href="{{ url_for('index') }}" class="btn">🔁 Generar nuevo reporte</a>
+      <div class="detail-label">Nombre del reporte</div>
+      <div class="detail-value">{{ zip_path.replace(".zip", "").replace("_", " ") }}</div>
     </div>
   </div>
 
-  <!-- Detalles del reporte -->
-  <div class="report-details" style="margin-top: 40px; text-align: left;">
-    <h3>Detalles del reporte</h3>
-
-    <div class="report-item">
-      <div class="upload-icon">📄</div>
-      <div class="report-details">
-        <p class="report-title">Nombre del reporte</p>
-        <p class="report-date">{{ zip_path.replace(".zip", "").replace("_", " ") }}</p>
-      </div>
+  <div class="detail-row">
+    <div class="detail-icon" style="background: var(--c-success-bg); color: var(--c-success);">
+      <i class="fa-solid fa-calendar"></i>
     </div>
-
-    <div class="report-item">
-      <div class="upload-icon">📅</div>
-      <div class="report-details">
-        <p class="report-title">Fecha de generación</p>
-        <p class="report-date">{{ formatted_datetime }}</p>
-      </div>
+    <div>
+      <div class="detail-label">Fecha de generacion</div>
+      <div class="detail-value">{{ formatted_datetime }}</div>
     </div>
+  </div>
 
-    <div class="report-item">
-      <div class="upload-icon">🧩</div>
-      <div class="report-details">
-        <p class="report-title">Plantilla utilizada</p>
-        <p class="report-date">{{ template_used }}</p>
-      </div>
+  <div class="detail-row">
+    <div class="detail-icon" style="background: var(--c-warning-bg); color: var(--c-warning);">
+      <i class="fa-solid fa-puzzle-piece"></i>
     </div>
+    <div>
+      <div class="detail-label">Plantilla utilizada</div>
+      <div class="detail-value">{{ template_used }}</div>
+    </div>
+  </div>
 
-    <div class="report-item">
-      <div class="upload-icon">⏱️</div>
-      <div class="report-details">
-        <p class="report-title">Tamaño del archivo</p>
-        <p class="report-date">{{ file_size }} MB</p>
-      </div>
+  <div class="detail-row">
+    <div class="detail-icon" style="background: var(--c-accent-light); color: #b8860b;">
+      <i class="fa-solid fa-weight-hanging"></i>
+    </div>
+    <div>
+      <div class="detail-label">Tamano del archivo</div>
+      <div class="detail-value">{{ file_size }} MB</div>
     </div>
   </div>
 </div>

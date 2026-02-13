@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}Panel de Administracion | Data Intel{% endblock %}
+{% block page_name %}Admin Panel{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Panel de Administracion</h1>
+  <p>Gestion de usuarios, roles y actividad del sistema.</p>
+</div>
+
+<!-- Stats Cards -->
+<div class="stat-grid" style="margin-bottom: 32px;">
+  <div class="stat-card">
+    <div class="stat-icon primary"><i class="fa-solid fa-users"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ total_users }}</div>
+      <div class="stat-label">Usuarios Totales</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon success"><i class="fa-solid fa-circle-check"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ active_users }}</div>
+      <div class="stat-label">Activos</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon warning"><i class="fa-solid fa-shield-halved"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ roles_count.admin }}</div>
+      <div class="stat-label">Admins</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon primary"><i class="fa-solid fa-chart-bar"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ roles_count.DI }}</div>
+      <div class="stat-label">DI</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon accent"><i class="fa-solid fa-satellite-dish"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ roles_count.MW }}</div>
+      <div class="stat-label">MW</div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 32px;">
+  <a href="{{ url_for('admin.users_list') }}" class="btn btn-primary">
+    <i class="fa-solid fa-users"></i> Gestionar Usuarios
+  </a>
+  <a href="{{ url_for('admin.user_create') }}" class="btn btn-secondary">
+    <i class="fa-solid fa-user-plus"></i> Crear Usuario
+  </a>
+  <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline">
+    <i class="fa-solid fa-clock-rotate-left"></i> Ver Actividad
+  </a>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Actividad Reciente</div>
+  {% if recent_logs %}
+  <div style="overflow-x: auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Usuario</th>
+          <th>Accion</th>
+          <th>Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in recent_logs %}
+        <tr>
+          <td style="white-space: nowrap;">{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '—' }}</td>
+          <td>{{ log.user.username if log.user else 'Desconocido' }}</td>
+          <td><span class="badge badge-primary">{{ log.action }}</span></td>
+          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ log.detail[:80] }}{{ '...' if log.detail|length > 80 else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top: 16px;">
+    <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline btn-sm">
+      Ver toda la actividad <i class="fa-solid fa-arrow-right"></i>
+    </a>
+  </div>
+  {% else %}
+  <p style="text-align: center; padding: 24px; color: var(--c-text-secondary);">No hay actividad registrada aun.</p>
+  {% endif %}
+</div>
+{% endblock %}

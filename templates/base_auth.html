@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Data Intel{% endblock %}</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}" type="image/x-icon" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  </head>
+  <body>
+    <div class="auth-page">
+      <button class="theme-toggle" id="themeToggle" style="position: absolute; top: 20px; right: 20px; z-index: 10;" title="Cambiar tema">
+        <i class="fa-solid fa-moon"></i>
+      </button>
+      <div class="auth-card">
+        <div class="auth-logo">
+          <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" />
+          <span>DATA INTELLIGENCE</span>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-container" style="margin-bottom: 16px;">
+          {% for category, msg in messages %}
+          <div class="flash-msg {{ category }}">
+            {% if category == 'error' %}<i class="fa-solid fa-circle-exclamation"></i>
+            {% else %}<i class="fa-solid fa-circle-info"></i>{% endif %}
+            {{ msg }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </body>
+</html>

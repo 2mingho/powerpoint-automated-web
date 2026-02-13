@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if user else 'Crear' }} Usuario | Admin{% endblock %}
+{% block page_name %}{{ 'Editar' if user else 'Crear' }} Usuario{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ 'Editar Usuario' if user else 'Crear Nuevo Usuario' }}</h1>
+  <p>{{ 'Actualiza los datos y permisos del usuario.' if user else 'Rellena los campos para registrar un nuevo usuario.' }}</p>
+</div>
+
+<div class="card" style="max-width: 700px;">
+  <form method="POST">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="username">Nombre de usuario</label>
+        <input type="text" id="username" name="username" class="form-input" value="{{ user.username if user else '' }}" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="email">Correo electronico</label>
+        <input type="email" id="email" name="email" class="form-input" value="{{ user.email if user else '' }}" required />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="password">
+        {{ 'Nueva contrasena (dejar vacio para no cambiar)' if user else 'Contrasena' }}
+      </label>
+      <input type="password" id="password" name="password" class="form-input"
+             placeholder="{{ 'Dejar vacio para mantener la actual' if user else 'Ingresa una contrasena segura' }}"
+             {{ '' if user else 'required' }} />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="role">Rol</label>
+      <select id="role" name="role" class="form-select">
+        <option value="DI" {{ 'selected' if user and user.role == 'DI' }}>DI</option>
+        <option value="MW" {{ 'selected' if user and user.role == 'MW' }}>MW</option>
+        <option value="admin" {{ 'selected' if user and user.role == 'admin' }}>Admin</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Herramientas permitidas</label>
+      <p class="perm-hint">Selecciona las herramientas a las que este usuario tendra acceso.</p>
+      <div class="perm-grid">
+        {% for key, label in all_tools.items() %}
+        <label class="perm-checkbox">
+          <input type="checkbox" name="tools" value="{{ key }}"
+                 {{ 'checked' if key in user_tools else '' }}>
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 12px; margin-top: 24px;">
+      <button type="submit" class="btn btn-primary btn-lg" style="flex: 1;">
+        <i class="fa-solid fa-check"></i> {{ 'Guardar cambios' if user else 'Crear usuario' }}
+      </button>
+      <a href="{{ url_for('admin.users_list') }}" class="btn btn-secondary btn-lg">
+        Cancelar
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}
