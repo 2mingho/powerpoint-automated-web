@@ -143,12 +143,12 @@
             datasets: [{
                 label: 'Menciones',
                 data: reportData.charts.evolution.values,
-                borderColor: '#ffdd00',
-                backgroundColor: 'rgba(255, 221, 0, 0.1)',
+                borderColor: getComputedStyle(document.documentElement).getPropertyValue('--c-primary').trim() || '#ffdd00',
+                backgroundColor: 'rgba(250, 223, 37, 0.1)',
                 borderWidth: 3,
                 tension: 0.4,
                 fill: true,
-                pointBackgroundColor: '#141414'
+                pointBackgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--c-bg').trim()
             }]
         },
         options: {
@@ -201,7 +201,7 @@
         row.innerHTML = `
             <div style="display:flex;align-items:center;">
                 <div style="width:12px;height:12px;border-radius:50%;background:${color};margin-right:8px;"></div>
-                <span style="font-size:0.88rem;font-weight:600;color:var(--c-text-secondary);">${displayLabel}</span>
+                <span style="font-size:0.88rem;font-weight:600;color:var(--c-text);">${displayLabel}</span>
             </div>
             <input type="number" min="0" value="${item.value}" data-index="${index}" class="sentiment-input form-input" style="width:70px;padding:6px 8px;text-align:right;">
         `;

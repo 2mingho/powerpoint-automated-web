@@ -281,8 +281,8 @@ function renderTypesChart(general) {
         options: {
             responsive: true,
             plugins: {
-                legend: { position: 'bottom', labels: { font: { family: 'Inter' } } },
-                title: { display: true, text: 'Distribucion de Tipos de Columnas', font: { family: 'Inter', weight: '600' } }
+                legend: { position: 'bottom' },
+                title: { display: true, text: 'Distribucion de Tipos de Columnas' }
             }
         }
     });
@@ -347,12 +347,17 @@ function renderCorrelationMatrix(correlation) {
 }
 
 function getCorrelationColor(value) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     if (value > 0) {
-        const i = Math.floor(255 - (value * 155));
-        return `rgb(${i}, ${i}, 255)`;
+        // Positive correlation: Blues
+        const i = isDark ? Math.floor(40 + (value * 60)) : Math.floor(255 - (value * 155));
+        const b = isDark ? 255 : 255;
+        const rg = isDark ? Math.floor(40 + (1-value)*60) : i;
+        return isDark ? `rgba(0, 100, 255, ${Math.abs(value) * 0.8})` : `rgb(${i}, ${i}, 255)`;
     } else {
-        const i = Math.floor(255 + (value * 155));
-        return `rgb(255, ${i}, ${i})`;
+        // Negative correlation: Reds
+        const i = isDark ? Math.floor(40 + (Math.abs(value) * 60)) : Math.floor(255 + (value * 155));
+        return isDark ? `rgba(255, 50, 50, ${Math.abs(value) * 0.8})` : `rgb(255, ${i}, ${i})`;
     }
 }
 

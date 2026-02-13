@@ -1,5 +1,14 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="light">
+  <script>
+    // Inline script to prevent flash of un-themed content
+    (function() {
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -90,6 +99,9 @@
         </div>
       </div>
       <div class="topbar-right">
+        <button class="theme-toggle" id="themeToggle" title="Cambiar tema">
+          <i class="fa-solid fa-moon"></i>
+        </button>
         <div class="topbar-user" tabindex="0">
           <div class="topbar-user-btn">
             <div class="topbar-avatar">{{ current_user.username[0]|upper if current_user.username else 'U' }}</div>

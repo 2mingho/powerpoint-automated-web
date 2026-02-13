@@ -53,6 +53,49 @@
   /* Transitions */
   --t-fast: 0.2s ease;
   --t-normal: 0.3s ease;
+
+  /* Flash Text Colors (Light) */
+  --c-flash-success-text: #166534;
+  --c-flash-error-text:   #991b1b;
+  --c-flash-warning-text: #92400e;
+  --c-flash-info-text:    #1e1b4b;
+
+  /* Chart Colors */
+  --c-chart-grid: rgba(0,0,0,0.05);
+  --c-chart-text: #64748b;
+}
+
+[data-theme="dark"] {
+  --c-dark:       #f0f3f6;
+  --c-primary:    #fadf25;
+  --c-primary-light: #2a2617;
+  --c-primary-text:  #141414;
+  --c-accent:     #fadf25;
+  --c-accent-light: #2a2617;
+  --c-bg:         #010409;
+  --c-white:      #0d1117;
+  --c-success:    #3fb950;
+  --c-success-bg: #0d2518;
+  --c-warning:    #d29922;
+  --c-warning-bg: #2a2005;
+  --c-danger:     #f85149;
+  --c-danger-bg:  #2d0a0a;
+  --c-text:       #f0f3f6;
+  --c-text-secondary: #9ca3af;
+  --c-border:     #30363d;
+  --c-border-light: #21262d;
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.5);
+
+  --c-flash-success-text: #aff5b4;
+  --c-flash-error-text:   #ffd7d5;
+  --c-flash-warning-text: #ffebac;
+  --c-flash-info-text:    #e0e7ff;
+
+  --c-chart-grid: rgba(255,255,255,0.1);
+  --c-chart-text: #9ca3af;
 }
 
 /* ─── RESET & BASE ─── */
@@ -69,6 +112,11 @@ body {
   color: var(--c-text);
   background-color: var(--c-bg);
   -webkit-font-smoothing: antialiased;
+  transition: background-color var(--t-normal), color var(--t-normal);
+}
+
+.sidebar, .topbar, .main-content, .card, .auth-card, .btn, .form-input, .form-select, .form-textarea {
+  transition: background-color var(--t-normal), border-color var(--t-normal), color var(--t-normal), box-shadow var(--t-normal);
 }
 
 a { color: var(--c-primary); text-decoration: none; }
@@ -179,6 +227,9 @@ img { max-width: 100%; }
 .sidebar-footer {
   padding: var(--sp-md);
   border-top: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
 }
 
 .sidebar-footer .sidebar-item {
@@ -238,6 +289,37 @@ img { max-width: 100%; }
   display: flex;
   align-items: center;
   gap: var(--sp-md);
+}
+
+.theme-toggle {
+  background: var(--c-primary);
+  color: #141414;
+  border: 2px solid var(--c-primary);
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  font-size: 1.2rem;
+  box-shadow: 0 2px 8px rgba(250, 223, 37, 0.35);
+  flex-shrink: 0;
+}
+.theme-toggle:hover {
+  transform: scale(1.12);
+  box-shadow: 0 4px 16px rgba(250, 223, 37, 0.5);
+}
+[data-theme="dark"] .theme-toggle {
+  background: var(--c-primary);
+  color: #141414;
+  border-color: var(--c-primary);
+  box-shadow: 0 2px 12px rgba(250, 223, 37, 0.4);
+}
+[data-theme="dark"] .theme-toggle:hover {
+  transform: scale(1.12);
+  box-shadow: 0 4px 20px rgba(250, 223, 37, 0.6);
 }
 
 .topbar-user {
@@ -698,7 +780,7 @@ img { max-width: 100%; }
 .form-select:focus,
 .form-textarea:focus {
   border-color: var(--c-primary);
-  box-shadow: 0 0 0 3px rgba(63,63,255,0.1);
+  box-shadow: 0 0 0 3px var(--c-primary-light);
 }
 
 .form-textarea {
@@ -862,22 +944,22 @@ img { max-width: 100%; }
 .flash-msg.success {
   background: var(--c-success-bg);
   border-color: var(--c-success);
-  color: #166534;
+  color: var(--c-flash-success-text);
 }
 .flash-msg.error {
   background: var(--c-danger-bg);
   border-color: var(--c-danger);
-  color: #991b1b;
+  color: var(--c-flash-error-text);
 }
 .flash-msg.warning {
   background: var(--c-warning-bg);
   border-color: var(--c-warning);
-  color: #92400e;
+  color: var(--c-flash-warning-text);
 }
 .flash-msg.info {
   background: var(--c-primary-light);
   border-color: var(--c-primary);
-  color: #1e1b4b;
+  color: var(--c-flash-info-text);
 }
 
 /* ─── PAGE HEADER ─── */
@@ -1017,21 +1099,27 @@ img { max-width: 100%; }
 
 /* ─── WELCOME SECTION ─── */
 .welcome-card {
-  background: linear-gradient(135deg, var(--c-primary) 0%, #2d2db3 100%);
-  color: var(--c-white);
+  background: linear-gradient(135deg, var(--c-primary) 0%, #3f3fff 100%);
+  color: var(--c-primary-text);
   border-radius: var(--r-lg);
   padding: var(--sp-xl) var(--sp-xl);
   margin-bottom: var(--sp-xl);
 }
 
+[data-theme="dark"] .welcome-card {
+  background: linear-gradient(135deg, var(--c-primary) 0%, #2563eb 100%);
+  color: #141414;
+}
+
 .welcome-card h1 {
-  color: var(--c-white);
+  color: inherit;
   font-size: 1.4rem;
   margin-bottom: var(--sp-xs);
 }
 
 .welcome-card p {
-  color: rgba(255,255,255,0.8);
+  color: inherit;
+  opacity: 0.8;
   font-size: 0.92rem;
 }
 
