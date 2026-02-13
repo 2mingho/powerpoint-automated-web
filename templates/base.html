@@ -4,81 +4,134 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}Data Intel{% endblock %}</title>
-    <link
-      rel="shortcut icon"
-      href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}"
-      type="image/x-icon"
-    />
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/style.css') }}"
-    />
+    <meta name="description" content="Data Intelligence — Herramientas de análisis y reportes para Newlink Dominicana">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}" type="image/x-icon" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
   </head>
   <body>
-    <header class="main-header">
-      <div class="logo-area">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar" role="navigation" aria-label="Navegacion principal">
+      <div class="sidebar-logo">
         <a href="{{ url_for('menu') }}">
-          <img
-            src="{{ url_for('static', filename='img/Newlink_logo.png') }}"
-            alt="Logo Newlink"
-            class="logo-img"
-          />
+          <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" />
         </a>
-        <span class="logo-full">NEWLINK DOMINICANA</span>
+        <span class="sidebar-logo-text">DATA INTELLIGENCE</span>
       </div>
 
-      <div class="nav-links">
-        {% if current_user.is_authenticated %}
-        <div class="nav-user">
-          <div class="nav-user-btn">👤 <span>Usuario</span></div>
-          <div class="dropdown-content">
-            {% if has_tool_access('reports') %}
-            <a href="{{ url_for('index') }}">📊 Generar Reporte</a>
-            {% endif %}
-            {% if has_tool_access('classification') %}
-            <a href="{{ url_for('clasificacion') }}">🧠 Clasificación</a>
-            {% endif %}
-            {% if has_tool_access('file_merge') %}
-            <a href="{{ url_for('union_archivos') }}">🔗 Unión de Archivos</a>
-            {% endif %}
-            {% if has_tool_access('csv_analysis') %}
-            <a href="{{ url_for('analisis_csv') }}">⚡ Análisis Rápido</a>
-            {% endif %}
-            <a href="{{ url_for('mis_reportes') }}">📁 Mis reportes</a>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section-label">Menu</div>
+        <a href="{{ url_for('menu') }}" class="sidebar-item {% if request.endpoint == 'menu' %}active{% endif %}" aria-label="Inicio">
+          <i class="fa-solid fa-house"></i>
+          <span>Inicio</span>
+        </a>
+
+        <div class="sidebar-section-label">Herramientas</div>
+        {% if has_tool_access('reports') %}
+        <a href="{{ url_for('index') }}" class="sidebar-item {% if request.endpoint == 'index' %}active{% endif %}" aria-label="Generar Reporte">
+          <i class="fa-solid fa-chart-bar"></i>
+          <span>Generar Reporte</span>
+        </a>
+        {% endif %}
+        {% if has_tool_access('classification') %}
+        <a href="{{ url_for('clasificacion') }}" class="sidebar-item {% if request.endpoint == 'clasificacion' %}active{% endif %}" aria-label="Clasificacion">
+          <i class="fa-solid fa-tags"></i>
+          <span>Clasificacion</span>
+        </a>
+        {% endif %}
+        {% if has_tool_access('file_merge') %}
+        <a href="{{ url_for('union_archivos') }}" class="sidebar-item {% if request.endpoint == 'union_archivos' %}active{% endif %}" aria-label="Union de Archivos">
+          <i class="fa-solid fa-link"></i>
+          <span>Union de Archivos</span>
+        </a>
+        {% endif %}
+        {% if has_tool_access('csv_analysis') %}
+        <a href="{{ url_for('analisis_csv') }}" class="sidebar-item {% if request.endpoint == 'analisis_csv' %}active{% endif %}" aria-label="Analisis Rapido">
+          <i class="fa-solid fa-bolt"></i>
+          <span>Analisis Rapido</span>
+        </a>
+        {% endif %}
+
+        <div class="sidebar-section-label">Cuenta</div>
+        <a href="{{ url_for('mis_reportes') }}" class="sidebar-item {% if request.endpoint == 'mis_reportes' %}active{% endif %}" aria-label="Mis Reportes">
+          <i class="fa-solid fa-folder-open"></i>
+          <span>Mis Reportes</span>
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('admin.dashboard') }}" class="sidebar-item {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" aria-label="Admin Panel">
+          <i class="fa-solid fa-gear"></i>
+          <span>Admin Panel</span>
+        </a>
+        {% endif %}
+      </nav>
+
+      <div class="sidebar-footer">
+        <a href="{{ url_for('auth.logout') }}" class="sidebar-item" aria-label="Cerrar sesion">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span>Cerrar sesion</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- Overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="topbar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <div class="topbar-breadcrumb">
+          <strong>{% block page_name %}Data Intelligence{% endblock %}</strong>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-user" tabindex="0">
+          <div class="topbar-user-btn">
+            <div class="topbar-avatar">{{ current_user.username[0]|upper if current_user.username else 'U' }}</div>
+            <span>{{ current_user.username }}</span>
+            <i class="fa-solid fa-chevron-down" style="font-size:0.65rem; margin-left:2px;"></i>
+          </div>
+          <div class="topbar-dropdown">
+            <a href="{{ url_for('mis_reportes') }}"><i class="fa-solid fa-folder-open"></i> Mis Reportes</a>
             {% if current_user.role == 'admin' %}
-            <a href="{{ url_for('admin.dashboard') }}">⚙️ Admin Panel</a>
+            <a href="{{ url_for('admin.dashboard') }}"><i class="fa-solid fa-gear"></i> Admin Panel</a>
             {% endif %}
-            <a href="{{ url_for('auth.logout') }}">🚪 Cerrar sesión</a>
+            <div class="topbar-divider"></div>
+            <a href="{{ url_for('auth.logout') }}" class="danger-link"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesion</a>
           </div>
         </div>
-        {% else %} {% if request.path != '/login' %}
-        <a href="{{ url_for('auth.login') }}" class="btn" data-icon="🔐"
-          >🔐 <span>Iniciar sesión</span></a
-        >
-        {% endif %} {% if request.path != '/register' %}
-        <a href="{{ url_for('auth.register') }}" class="btn" data-icon="📝"
-          >📝 <span>Registrarse</span></a
-        >
-        {% endif %} {% endif %}
       </div>
     </header>
 
-    <main>
-      {% with messages = get_flashed_messages(with_categories=true) %} {% if
-      messages %}
-      <ul class="flashes">
-        {% for category, msg in messages %}
-        <li class="{{ category }}">{{ msg }}</li>
-        {% endfor %}
-      </ul>
-      {% endif %} {% endwith %} {% block content %}{% endblock %}
+    <!-- Main content -->
+    <main class="main-content">
+      <div class="page-wrapper">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-container">
+          {% for category, msg in messages %}
+          <div class="flash-msg {{ category }}">
+            {% if category == 'success' %}<i class="fa-solid fa-circle-check"></i>
+            {% elif category == 'error' %}<i class="fa-solid fa-circle-exclamation"></i>
+            {% elif category == 'warning' %}<i class="fa-solid fa-triangle-exclamation"></i>
+            {% else %}<i class="fa-solid fa-circle-info"></i>{% endif %}
+            {{ msg }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </div>
     </main>
 
-    <footer>
-      <p>&copy; {{ current_year }} Data Intelligence</p>
-    </footer>
-
-    <!-- Script principal -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
   </body>
 </html>

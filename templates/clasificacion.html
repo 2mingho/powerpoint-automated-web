@@ -1,114 +1,95 @@
 {% extends 'base.html' %}
-{% block title %}Clasificación de Data | Data Intel{% endblock %}
+{% block title %}Clasificacion de Data | Data Intel{% endblock %}
+{% block page_name %}Clasificacion{% endblock %}
 
 {% block content %}
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-<!-- Chart.js Integration -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="classifier-dashboard">
-    <div style="margin-bottom: 30px;">
-        <h1 class="page-title">Clasificación de Data</h1>
-        <p style="color: #666;">Organiza tus menciones automáticamente definiendo categorías y temáticas con palabras clave.</p>
+<div class="page-header">
+  <h1>Clasificacion de Data</h1>
+  <p>Organiza tus menciones automaticamente definiendo categorias y tematicas con palabras clave.</p>
+</div>
+
+<!-- PASO 1: CARGA DE ARCHIVO -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-file-csv"></i> 1. Seleccionar Archivo</div>
+  <div class="upload-zone" id="drop-zone" onclick="document.getElementById('csv_file').click()">
+    <i class="fa-solid fa-cloud-arrow-up"></i>
+    <div class="upload-zone-title">Haz clic o arrastra el archivo CSV</div>
+    <div class="upload-zone-hint" id="file-name-display">No se ha seleccionado ningun archivo (UTF-16 Tabulado recomendado)</div>
+    <input type="file" id="csv_file" accept=".csv" style="display: none;" />
+  </div>
+</div>
+
+<!-- PASO 2: REGLAS -->
+<div class="card" id="settings-card" style="margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-sliders"></i> 2. Configuracion y Reglas</div>
+
+  <div class="form-row" style="margin-bottom: 20px;">
+    <div class="form-group">
+      <label class="form-label" for="default_val">Etiqueta para filas no clasificadas</label>
+      <input type="text" id="default_val" class="form-input" placeholder="Sin Clasificar" value="Sin Clasificar">
     </div>
 
-    <!-- PASO 1: CARGA DE ARCHIVO -->
-    <div class="card" style="margin-bottom: 30px;">
-        <div class="card-title">1. Seleccionar Archivo</div>
-        <div class="upload-box" id="drop-zone" style="cursor: pointer;">
-            <div class="upload-icon">📁</div>
-            <div>
-                <strong>Haz clic o arrastra el archivo CSV</strong>
-                <p id="file-name-display">No se ha seleccionado ningún archivo (UTF-16 Tabulado recomendado)</p>
-            </div>
-            <input type="file" id="csv_file" accept=".csv" style="display: none;" />
-        </div>
+    <div class="form-group" style="background: var(--c-accent-light); padding: 16px; border-radius: var(--r-md); border: 1px solid #ffeeba;">
+      <label class="form-check" style="font-weight: 600; color: #856404;">
+        <input type="checkbox" id="use_keywords">
+        Doble Pasada (Columna 'Keywords')
+      </label>
+      <p class="form-hint" style="color: #856404; margin-top: 6px;">
+        <strong>Nota:</strong> Mas preciso al capturar menciones sin texto en 'Hit Sentence', pero puede aumentar el tiempo.
+      </p>
     </div>
+  </div>
 
-    <!-- PASO 2: REGLAS -->
-    <div class="card" id="settings-card">
-        <div class="card-title">2. Configuración y Reglas</div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px;">
-            <!-- Valor por Defecto -->
-            <div class="form-group">
-                <label for="default_val">Etiqueta para filas no clasificadas</label>
-                <input type="text" id="default_val" placeholder="Sin Clasificar" value="Sin Clasificar" 
-                       style="margin-top: 5px; width: 100%;">
-            </div>
+  <p class="form-hint" style="margin-bottom: 20px;">
+    Las menciones se buscaran primero en <strong>'Hit Sentence'</strong> y opcionalmente en <strong>'Keywords'</strong>.
+  </p>
 
-            <!-- Toggle Búsqueda Secundaria -->
-            <div class="form-group" style="background: #fff8e6; padding: 15px; border-radius: 8px; border: 1px solid #ffeeba;">
-                <label style="display: flex; align-items: center; cursor: pointer; font-weight: bold; color: #856404;">
-                    <input type="checkbox" id="use_keywords" style="margin-right: 10px; width: 18px; height: 18px;">
-                    Doble Pasada (Columna 'Keywords')
-                </label>
-                <p style="font-size: 0.8rem; color: #856404; margin-top: 5px; line-height: 1.2;">
-                    <strong>Disclaimer:</strong> Más preciso al capturar menciones sin texto en 'Hit Sentence', pero puede aumentar el tiempo de procesamiento.
-                </p>
-            </div>
-        </div>
+  <div id="rules-container"></div>
 
-        <p style="font-size: 0.85rem; color: #777; margin-bottom: 20px;">
-            Las menciones se buscarán primero en <strong>'Hit Sentence'</strong> y luego opcionalmente en <strong>'Keywords'</strong>.
-        </p>
+  <button type="button" class="btn-add" onclick="addCategory()" style="margin-top: 12px;">
+    <i class="fa-solid fa-plus"></i> Anadir Nueva Categoria
+  </button>
+</div>
 
-        <div id="rules-container">
-            <!-- Las categorías se insertarán aquí dinámicamente -->
-        </div>
+<!-- PASO 3: RESULTADOS -->
+<div class="card animate-fade" id="results-card" style="display: none; margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-chart-pie"></i> Insights y Resultados</div>
 
-        <button type="button" class="btn-add" onclick="addCategory()" style="width: 100%; padding: 12px; border-style: solid;">
-            <i class="fa-solid fa-plus"></i> Añadir Nueva Categoría
-        </button>
+  <div id="insights-text" class="flash-msg info" style="margin-bottom: 24px;"></div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; margin-bottom: 24px;">
+    <div style="background: var(--c-bg); padding: 16px; border-radius: var(--r-lg); border: 1px solid var(--c-border-light);">
+      <canvas id="distChart"></canvas>
     </div>
+    <div id="results-summary"></div>
+  </div>
 
-    <!-- PASO 3: RESULTADOS -->
-    <div class="card animate-fade" id="results-card" style="display: none;">
-        <div class="card-title">2. Insights y Resultados</div>
-        
-        <div class="insights-summary" id="insights-text" style="background: #f0f7ff; border-left: 4px solid #3f3fff; padding: 15px; margin-bottom: 25px; border-radius: 4px; font-size: 0.95rem;">
-            <!-- Insights generated here -->
-        </div>
+  <div id="results-tree" style="background: var(--c-bg); padding: 20px; border-radius: var(--r-lg); border: 1px solid var(--c-border-light); max-height: 400px; overflow-y: auto;"></div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 30px; margin-bottom: 30px;">
-            <!-- Gráfico -->
-            <div style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee;">
-                <canvas id="distChart"></canvas>
-            </div>
-            
-            <!-- Resumen numérico -->
-            <div id="results-summary">
-                <!-- Stats will be here -->
-            </div>
-        </div>
-        
-        <div id="results-tree" style="background: #f9f9f9; padding: 20px; border-radius: 12px; border: 1px solid #eee; max-height: 400px; overflow-y: auto;">
-            <!-- Tree will be here -->
-        </div>
+  <div style="margin-top: 24px; display: flex; gap: 12px;">
+    <button class="btn btn-secondary" onclick="resetForm()">
+      <i class="fa-solid fa-arrow-left"></i> Volver a ajustar
+    </button>
+    <a id="download-link" href="#" class="btn btn-primary" style="flex-grow: 1; text-align: center;">
+      <i class="fa-solid fa-download"></i> Descargar Archivo Clasificado
+    </a>
+  </div>
+</div>
 
-        <div style="margin-top: 30px; display: flex; gap: 10px;">
-            <button class="btn" onclick="resetForm()" style="background: #f0f0f0; color: #333;">
-                <i class="fa-solid fa-arrow-left"></i> Volver a ajustar
-            </button>
-            <a id="download-link" href="#" class="btn" style="flex-grow: 1; text-align: center; background: #3f3fff; color: white;">
-                <i class="fa-solid fa-download"></i> Descargar Archivo Clasificado
-            </a>
-        </div>
+<!-- ACCION FINAL -->
+<div id="action-bar-container" style="text-align: center; margin-top: 32px;">
+  <div class="classifier-actions">
+    <div>
+      <span style="color: var(--c-text-secondary); font-size: 0.88rem;">Listo para procesar:</span>
+      <strong style="color: var(--c-primary);" id="status-text">Definir reglas y subir archivo</strong>
     </div>
-
-    <!-- ACCIÓN FINAL -->
-    <div id="action-bar-container" style="text-align: center; margin-top: 40px;">
-        <div class="classifier-actions">
-            <div>
-                <span style="color:#777; font-size: 0.9rem;">Listo para procesar:</span>
-                <strong style="color:#3f3fff;" id="status-text">Definir reglas y subir archivo</strong>
-            </div>
-            <div style="width: 1px; height: 20px; background: #ddd;"></div>
-            <button id="btnProcess" onclick="processClassification()" class="btn" style="margin:0;">
-                <i class="fa-solid fa-bolt"></i> Clasificar Datos
-            </button>
-        </div>
-    </div>
+    <div style="width: 1px; height: 20px; background: var(--c-border);"></div>
+    <button id="btnProcess" onclick="processClassification()" class="btn btn-primary">
+      <i class="fa-solid fa-bolt"></i> Clasificar Datos
+    </button>
+  </div>
 </div>
 
 <script>
@@ -116,9 +97,9 @@
     let categories = [
         {
             id: Date.now(),
-            name: "Economía",
+            name: "Economia",
             tematicas: [
-                { id: Date.now() + 1, name: "Inflación", keywords: "precios, costo, canasta" }
+                { id: Date.now() + 1, name: "Inflacion", keywords: "precios, costo, canasta" }
             ]
         }
     ];
@@ -128,16 +109,27 @@
     const dropZone = document.getElementById('drop-zone');
     const fileNameDisplay = document.getElementById('file-name-display');
 
-    // Manejo de Archivos
-    dropZone.onclick = () => fileInput.click();
+    // File handling
     fileInput.onchange = (e) => {
         if (e.target.files.length > 0) {
             fileNameDisplay.innerText = e.target.files[0].name;
             document.getElementById('status-text').innerText = "Archivo listo";
+            dropZone.style.borderColor = 'var(--c-primary)';
         }
     };
 
-    // Renderizado de Reglas
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            fileNameDisplay.innerText = e.dataTransfer.files[0].name;
+            document.getElementById('status-text').innerText = "Archivo listo";
+        }
+    });
+
     function renderRules() {
         container.innerHTML = '';
         categories.forEach((cat, catIdx) => {
@@ -145,8 +137,8 @@
             catDiv.className = 'rule-category animate-fade';
             catDiv.innerHTML = `
                 <div class="category-header">
-                    <input type="text" class="category-title editable" style="border:none; padding:5px; width:60%; font-size: 1.1rem;" 
-                           value="${cat.name}" onchange="updateCategoryName(${catIdx}, this.value)">
+                    <input type="text" class="form-input" style="border:none; background:transparent; font-size:1.05rem; font-weight:600; padding:4px 8px; width:60%;"
+                           value="${cat.name}" onchange="updateCategoryName(${catIdx}, this.value)" onfocus="this.style.background='var(--c-white)';this.style.border='1px solid var(--c-border)'" onblur="this.style.background='transparent';this.style.border='none'">
                     <button class="btn-remove" onclick="removeCategory(${catIdx})">
                         <i class="fa-solid fa-trash"></i> Eliminar
                     </button>
@@ -155,62 +147,35 @@
                     ${cat.tematicas.map((tem, temIdx) => `
                         <div class="tematica-group animate-fade">
                             <div class="tematica-header">
-                                <input type="text" placeholder="Temática" 
-                                       style="font-weight:bold; width: 40%;" 
+                                <input type="text" class="form-input" placeholder="Tematica"
+                                       style="font-weight:600; width: 40%; padding: 6px 10px;"
                                        value="${tem.name}" onchange="updateTematicaName(${catIdx}, ${temIdx}, this.value)">
                                 <button class="btn-remove" onclick="removeTematica(${catIdx}, ${temIdx})">
                                     <i class="fa-solid fa-xmark"></i>
                                 </button>
                             </div>
-                            <input type="text" class="keywords-input" 
-                                   placeholder="Palabras clave (separadas por comas)" 
+                            <input type="text" class="form-input"
+                                   placeholder="Palabras clave (separadas por comas)"
+                                   style="font-size: 0.85rem;"
                                    value="${tem.keywords}" onchange="updateKeywords(${catIdx}, ${temIdx}, this.value)">
                         </div>
                     `).join('')}
                 </div>
-                <button type="button" class="btn-add" onclick="addTematica(${catIdx})">
-                    <i class="fa-solid fa-plus"></i> Añadir Temática
+                <button type="button" class="btn-add" onclick="addTematica(${catIdx})" style="margin-top: 8px;">
+                    <i class="fa-solid fa-plus"></i> Anadir Tematica
                 </button>
             `;
             container.appendChild(catDiv);
         });
     }
 
-    function addCategory() {
-        categories.push({
-            id: Date.now(),
-            name: "Nueva Categoría",
-            tematicas: [{ id: Date.now() + 1, name: "Nueva Temática", keywords: "" }]
-        });
-        renderRules();
-    }
-
-    function removeCategory(idx) {
-        categories.splice(idx, 1);
-        renderRules();
-    }
-
-    function updateCategoryName(idx, val) {
-        categories[idx].name = val;
-    }
-
-    function addTematica(catIdx) {
-        categories[catIdx].tematicas.push({ id: Date.now(), name: "Nueva Temática", keywords: "" });
-        renderRules();
-    }
-
-    function removeTematica(catIdx, temIdx) {
-        categories[catIdx].tematicas.splice(temIdx, 1);
-        renderRules();
-    }
-
-    function updateTematicaName(catIdx, temIdx, val) {
-        categories[catIdx].tematicas[temIdx].name = val;
-    }
-
-    function updateKeywords(catIdx, temIdx, val) {
-        categories[catIdx].tematicas[temIdx].keywords = val;
-    }
+    function addCategory() { categories.push({ id: Date.now(), name: "Nueva Categoria", tematicas: [{ id: Date.now() + 1, name: "Nueva Tematica", keywords: "" }] }); renderRules(); }
+    function removeCategory(idx) { categories.splice(idx, 1); renderRules(); }
+    function updateCategoryName(idx, val) { categories[idx].name = val; }
+    function addTematica(catIdx) { categories[catIdx].tematicas.push({ id: Date.now(), name: "Nueva Tematica", keywords: "" }); renderRules(); }
+    function removeTematica(catIdx, temIdx) { categories[catIdx].tematicas.splice(temIdx, 1); renderRules(); }
+    function updateTematicaName(catIdx, temIdx, val) { categories[catIdx].tematicas[temIdx].name = val; }
+    function updateKeywords(catIdx, temIdx, val) { categories[catIdx].tematicas[temIdx].keywords = val; }
 
     function resetForm() {
         document.getElementById('settings-card').style.display = 'block';
@@ -219,10 +184,7 @@
         document.getElementById('btnProcess').disabled = false;
         document.getElementById('btnProcess').innerHTML = '<i class="fa-solid fa-bolt"></i> Clasificar Datos';
         document.getElementById('status-text').innerText = "Ajusta las reglas";
-        if (myChart) {
-            myChart.destroy();
-            myChart = null;
-        }
+        if (myChart) { myChart.destroy(); myChart = null; }
     }
 
     async function processClassification() {
@@ -230,16 +192,9 @@
         const file = fileInput.files[0];
         const defaultVal = document.getElementById('default_val').value || "Sin Clasificar";
         const useKeywords = document.getElementById('use_keywords').checked;
-        
-        if (!file) {
-            alert("Por favor, selecciona un archivo CSV primero.");
-            return;
-        }
 
-        if (categories.length === 0) {
-            alert("Define al menos una categoría y temática.");
-            return;
-        }
+        if (!file) { alert("Por favor, selecciona un archivo CSV primero."); return; }
+        if (categories.length === 0) { alert("Define al menos una categoria y tematica."); return; }
 
         try {
             btn.disabled = true;
@@ -260,19 +215,10 @@
             formData.append('default_val', defaultVal);
             formData.append('use_keywords', useKeywords);
 
-            const response = await fetch('/clasificacion', {
-                method: 'POST',
-                body: formData
-            });
-
+            const response = await fetch('/clasificacion', { method: 'POST', body: formData });
             const result = await response.json();
-
-            if (result.success) {
-                showResults(result);
-            } else {
-                throw new Error(result.error || "Error desconocido");
-            }
-
+            if (result.success) { showResults(result); }
+            else { throw new Error(result.error || "Error desconocido"); }
         } catch (error) {
             console.error(error);
             alert("Error: " + error.message);
@@ -282,67 +228,131 @@
     }
 
     function showResults(result) {
-        console.log("Classification Result:", result);
+        console.log('[DEBUG] showResults called with:', result);
         
-        if (!result || !result.stats) {
-            console.error("Missing stats in result", result);
-            alert("Error: El servidor no devolvió las estadísticas de clasificación.");
-            resetForm();
-            return;
+        if (!result || !result.stats) { 
+            console.error('[DEBUG] Missing result or stats');
+            alert("Error: El servidor no devolvio las estadisticas."); 
+            resetForm(); 
+            return; 
         }
 
+        console.log('[DEBUG] Hiding settings and action bar...');
         document.getElementById('settings-card').style.display = 'none';
         document.getElementById('action-bar-container').style.display = 'none';
-        document.getElementById('results-card').style.display = 'block';
-
-        const summary = document.getElementById('results-summary');
-        const insightsDiv = document.getElementById('insights-text');
-        const defaultVal = document.getElementById('default_val').value || "Sin Clasificar";
         
-        const statsKeys = Object.keys(result.stats);
+        console.log('[DEBUG] Showing results card...');
+        const resultsCard = document.getElementById('results-card');
+        console.log('[DEBUG] results-card element:', resultsCard);
+        resultsCard.style.display = 'block';
+
+        console.log('[DEBUG] Querying child elements...');
+        let summary = document.getElementById('results-summary');
+        let insightsDiv = document.getElementById('insights-text');
+        
+        console.log('[DEBUG] Initial query results:', { 
+            summary: summary, 
+            insightsDiv: insightsDiv,
+            summaryExists: !!summary,
+            insightsDivExists: !!insightsDiv
+        });
+        
+        if (!summary || !insightsDiv) {
+            console.error("[DEBUG] Missing expected results elements:", { summary, insightsDiv });
+            console.log('[DEBUG] Attempting recovery...');
+            
+            // Fallback for missing elements
+            const card = document.getElementById('results-card');
+            if (card) {
+                 // Try to recover if somehow they were deleted from DOM
+                 if (!summary) {
+                     console.log('[DEBUG] Creating summary element...');
+                     const gridContainer = card.querySelector('div[style*="display: grid"]');
+                     console.log('[DEBUG] Grid container found:', gridContainer);
+                     if (gridContainer) {
+                         let s = document.createElement('div');
+                         s.id = 'results-summary';
+                         gridContainer.appendChild(s);
+                         summary = s; // Update the reference
+                         console.log('[DEBUG] Summary created and appended');
+                     }
+                 }
+                 if (!insightsDiv) {
+                     console.log('[DEBUG] Creating insights element...');
+                     let i = document.createElement('div');
+                     i.id = 'insights-text';
+                     i.className = 'flash-msg info';
+                     i.style.marginBottom = '24px';
+                     card.insertBefore(i, card.firstChild.nextSibling);
+                     insightsDiv = i; // Update the reference
+                     console.log('[DEBUG] Insights created and inserted');
+                 }
+            }
+            
+            // Re-query to ensure we have the elements
+            console.log('[DEBUG] Re-querying elements...');
+            if (!summary) summary = document.getElementById('results-summary');
+            if (!insightsDiv) insightsDiv = document.getElementById('insights-text');
+            
+            console.log('[DEBUG] After recovery:', { 
+                summary: summary, 
+                insightsDiv: insightsDiv,
+                summaryExists: !!summary,
+                insightsDivExists: !!insightsDiv
+            });
+            
+            // If still null, abort with error
+            if (!summary || !insightsDiv) {
+                console.error('[DEBUG] FATAL: Elements still null after recovery!');
+                alert('Error: No se pudieron cargar los elementos de resultados. Por favor, recarga la pagina.');
+                resetForm();
+                return;
+            }
+        }
+        
+        console.log('[DEBUG] Elements verified, proceeding with data population...');
+        
+        const defaultVal = document.getElementById('default_val').value || "Sin Clasificar";
+
         const statsForDefault = result.stats[defaultVal] || { total: 0 };
         const unclassifiedCount = statsForDefault.total || 0;
         const totalRows = result.total_rows || 0;
         const classifiedCount = totalRows - unclassifiedCount;
         const percent = totalRows > 0 ? ((classifiedCount / totalRows) * 100).toFixed(1) : 0;
 
-        // Generate Insight text
         let insightMsg = "";
         if (result.insights && result.insights.top_category != "N/A") {
-            insightMsg = `<strong>Insights:</strong> La categoría más impactante es <strong>"${result.insights.top_category}"</strong> con ${result.insights.top_count} menciones clasificados. `;
+            insightMsg = `<strong>Insights:</strong> La categoria mas impactante es <strong>"${result.insights.top_category}"</strong> con ${result.insights.top_count} menciones. `;
         } else {
-            insightMsg = `<strong>Resumen:</strong> No se han detectado categorías predominantes fuera del valor por defecto. `;
+            insightMsg = `<strong>Resumen:</strong> No se han detectado categorias predominantes fuera del valor por defecto. `;
         }
-        insightMsg += `Se ha logrado clasificar el <strong>${percent}%</strong> del total de datos analizados.`;
+        insightMsg += `Se ha logrado clasificar el <strong>${percent}%</strong> del total de datos.`;
         insightsDiv.innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${insightMsg}`;
-
         summary.innerHTML = `
-            <div style="background: #f5f7ff; padding: 20px; border-radius: 12px; height: 100%;">
-                <div style="margin-bottom: 15px;">
-                    <div style="font-size: 2.2rem; font-weight: bold; color: #3f3fff; line-height:1;">${percent}%</div>
-                    <div style="font-size: 0.85rem; color: #777;">Tasa de Clasificación</div>
+            <div style="background: var(--c-primary-light); padding: 20px; border-radius: var(--r-lg); height: 100%;">
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 2.2rem; font-weight: 700; color: var(--c-primary); line-height:1;">${percent}%</div>
+                    <div style="font-size: 0.82rem; color: var(--c-text-secondary);">Tasa de Clasificacion</div>
                 </div>
-                <div style="font-size: 0.95rem; color: #444;">
+                <div style="font-size: 0.92rem;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                         <span>Total Analizado:</span> <strong>${totalRows}</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #2ecc71;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--c-success);">
                         <span>Clasificados:</span> <strong>${classifiedCount}</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; color: #e74c3c;">
+                    <div style="display: flex; justify-content: space-between; color: var(--c-danger);">
                         <span>Sin Clasificar:</span> <strong>${unclassifiedCount}</strong>
                     </div>
                 </div>
             </div>
         `;
 
-        // Render Chart
         renderChart(result.stats, defaultVal);
 
-        // Render Tree
         const tree = document.getElementById('results-tree');
-        tree.innerHTML = "<h4 style='margin-bottom: 15px; border-bottom: 2px solid #3f3fff; display: inline-block;'>Desglose por Categoría</h4>";
-        
+        if (tree) tree.innerHTML = "<h4 style='margin-bottom: 16px; border-bottom: 2px solid var(--c-primary); display: inline-block; padding-bottom: 4px;'>Desglose por Categoria</h4>";
+
         const sortedCats = Object.keys(result.stats).sort((a, b) => {
             if (a === defaultVal) return 1;
             if (b === defaultVal) return -1;
@@ -351,20 +361,19 @@
 
         sortedCats.forEach(catName => {
             const data = result.stats[catName];
-            if (!data) return;
-            
+            if (!data || !tree) return;
             const catNode = document.createElement('div');
-            catNode.style.marginBottom = "15px";
+            catNode.style.marginBottom = "12px";
             catNode.innerHTML = `
-                <div style="display: flex; justify-content: space-between; font-weight: bold; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
-                    <span><i class="fa-solid fa-folder-open" style="color: #ffdd00; margin-right: 8px;"></i> ${catName}</span>
-                    <span style="background: #3f3fff; color: white; padding: 2px 8px; border-radius: 20px; font-size: 0.8rem;">${data.total || 0}</span>
+                <div style="display: flex; justify-content: space-between; font-weight: 600; background: var(--c-white); padding: 10px 14px; border-radius: var(--r-md); border: 1px solid var(--c-border-light);">
+                    <span><i class="fa-solid fa-folder-open" style="color: var(--c-accent); margin-right: 8px;"></i> ${catName}</span>
+                    <span class="badge badge-primary">${data.total || 0}</span>
                 </div>
-                <div style="padding-left: 20px; margin-top: 5px;">
+                <div style="padding-left: 20px; margin-top: 4px;">
                     ${data.tematicas ? Object.entries(data.tematicas).sort((a,b) => b[1]-a[1]).map(([tem, count]) => `
-                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 5px 10px; border-bottom: 1px dashed #eee;">
-                            <span style="color: #666;">• ${tem}</span>
-                            <span style="font-weight: 600; color: #333;">${count}</span>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 5px 10px; border-bottom: 1px dashed var(--c-border-light);">
+                            <span style="color: var(--c-text-secondary);">&#x2022; ${tem}</span>
+                            <span style="font-weight: 600;">${count}</span>
                         </div>
                     `).join('') : ''}
                 </div>
@@ -372,49 +381,27 @@
             tree.appendChild(catNode);
         });
 
-        const dlLink = document.getElementById('download-link');
-        dlLink.href = result.download_url;
+        document.getElementById('download-link').href = result.download_url;
     }
 
     function renderChart(stats, defaultVal) {
         const ctx = document.getElementById('distChart').getContext('2d');
         const labels = Object.keys(stats).filter(k => k !== defaultVal);
         const data = labels.map(l => stats[l].total);
-        
-        // Add others/unclassified if any
-        if (stats[defaultVal]) {
-            labels.push("Otras");
-            data.push(stats[defaultVal].total);
-        }
 
-        const colors = [
-            '#3f3fff', '#2ecc71', '#e67e22', '#9b59b6', '#f1c40f', 
-            '#e74c3c', '#1abc9c', '#34495e', '#d35400', '#7f8c8d'
-        ];
+        if (stats[defaultVal]) { labels.push("Otras"); data.push(stats[defaultVal].total); }
+
+        const colors = ['#3f3fff', '#22c55e', '#f59e0b', '#a855f7', '#ffdd00', '#ef4444', '#14b8a6', '#334155', '#ea580c', '#94a3b8'];
 
         myChart = new Chart(ctx, {
             type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: data,
-                    backgroundColor: colors.slice(0, labels.length),
-                    borderWidth: 0
-                }]
-            },
+            data: { labels, datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }] },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: { boxWidth: 12, font: { size: 10 } }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Distribución por Categorías',
-                        font: { size: 14, weight: 'bold' }
-                    }
+                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11, family: 'Inter' } } },
+                    title: { display: true, text: 'Distribucion por Categorias', font: { size: 13, weight: '600', family: 'Inter' } }
                 },
                 cutout: '70%'
             }
@@ -425,27 +412,15 @@
 </script>
 
 <style>
-    .rule-category input[type="text"] {
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        transition: all 0.2s;
-        padding: 5px;
-        margin-bottom: 0;
-    }
-    .rule-category input[type="text"]:focus, .rule-category input[type="text"]:hover {
-        background: #fff;
-        border-color: #ddd;
-        outline: none;
-    }
-    .tematica-group input.keywords-input {
-        background: #fff;
-        border: 1px solid #eee;
-        font-size: 0.9rem;
-    }
     #results-tree::-webkit-scrollbar { width: 6px; }
-    #results-tree::-webkit-scrollbar-track { background: #f1f1f1; }
-    #results-tree::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
-    #results-tree::-webkit-scrollbar-thumb:hover { background: #3f3fff; }
+    #results-tree::-webkit-scrollbar-track { background: var(--c-bg); }
+    #results-tree::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 10px; }
+    #results-tree::-webkit-scrollbar-thumb:hover { background: var(--c-primary); }
+
+    @media (max-width: 768px) {
+      #results-card div[style*="grid-template-columns: 1fr 1.5fr"] {
+        grid-template-columns: 1fr !important;
+      }
+    }
 </style>
 {% endblock %}

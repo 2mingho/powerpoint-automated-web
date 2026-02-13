@@ -1,29 +1,48 @@
 <!-- templates/mis_reportes.html -->
 {% extends 'base.html' %}
 {% block title %}Mis reportes | Data Intel{% endblock %}
+{% block page_name %}Mis Reportes{% endblock %}
 
 {% block content %}
-<div class="report-list-container">
-  <h1 class="page-title">📁 Mis Reportes</h1>
-  <h3>Reportes generados recientemente</h3>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+  <div>
+    <h1>Mis Reportes</h1>
+    <p>Reportes generados recientemente</p>
+  </div>
+  <a href="{{ url_for('index') }}" class="btn btn-primary">
+    <i class="fa-solid fa-plus"></i> Nuevo reporte
+  </a>
+</div>
 
+<div class="card" style="padding: 0; overflow: hidden;">
   {% if reports %}
     {% for r in reports %}
-      <div class="report-item">
-        <div class="report-details">
-          <div class="report-title">{{ r.filename }}</div>
-          <div class="report-date">
+    <div class="report-list-item">
+      <div class="report-info">
+        <div class="report-file-icon">
+          <i class="fa-solid fa-file-zipper"></i>
+        </div>
+        <div>
+          <div class="report-name">{{ r.filename }}</div>
+          <div class="report-meta">
             {{ r.created_at.strftime('%d de %B, %Y - %H:%M') }}
-            • Plantilla: {{ r.template_name or 'N/D' }}
+            &middot; Plantilla: {{ r.template_name or 'N/D' }}
           </div>
         </div>
-        <a href="{{ url_for('download_file', filename=r.filename) }}" class="download-btn" title="Descargar">⬇️</a>
       </div>
+      <a href="{{ url_for('download_file', filename=r.filename) }}" class="btn btn-outline btn-sm" title="Descargar">
+        <i class="fa-solid fa-download"></i> Descargar
+      </a>
+    </div>
     {% endfor %}
   {% else %}
-    <p style="margin-top: 20px;">Aún no has generado reportes.</p>
+    <div style="padding: 48px; text-align: center; color: var(--c-text-secondary);">
+      <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; margin-bottom: 12px; color: var(--c-border);"></i>
+      <p>Aun no has generado reportes.</p>
+      <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top: 16px;">
+        <i class="fa-solid fa-plus"></i> Generar primer reporte
+      </a>
+    </div>
   {% endif %}
-
-  <a href="{{ url_for('index') }}" class="generate-btn">+ Generar nuevo reporte</a>
 </div>
 {% endblock %}
