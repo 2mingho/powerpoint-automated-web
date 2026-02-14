@@ -7,7 +7,7 @@ from io import StringIO
 # Allow importing from parent directory
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import csv_analysis
+from services import csv_analysis
 
 # Sample CSV data for testing
 CSV_UTF8_COMMA = """Name,Age,Salary,Department,JoinDate

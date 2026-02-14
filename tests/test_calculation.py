@@ -7,7 +7,7 @@ from io import StringIO
 # --- MAGIC: Permitir importar desde el directorio padre ---
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import calculation
+from services import calculation
 
 # Simulación de TU archivo real (Tab-separated)
 # He alineado las columnas clave: Source, Reach, Sentiment, Alternate Date Format, Hit Sentence

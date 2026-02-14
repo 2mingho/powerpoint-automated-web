@@ -3,7 +3,7 @@ import sys
 
 # Add root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import groq_analysis
+from services import groq_analysis
 
 def run_test():
     """

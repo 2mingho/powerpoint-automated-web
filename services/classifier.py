@@ -1,5 +1,5 @@
 import pandas as pd
-from calculation import clean_dataframe
+from services.calculation import clean_dataframe
 
 def classify_mentions(file_path, rules_config, default_val="Sin Clasificar", use_keywords=False):
     """

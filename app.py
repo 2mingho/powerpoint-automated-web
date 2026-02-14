@@ -7,22 +7,25 @@ from datetime import datetime
 import functools
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
-from classifier import classify_mentions
+from services.classifier import classify_mentions
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
 from babel.dates import format_datetime
 from sqlalchemy import inspect, text
 from dotenv import load_dotenv
 
-from auth import auth
-from admin import admin_bp, log_activity
+from blueprints.auth import auth
+from blueprints.admin import admin_bp, log_activity
 from extensions import db, login_manager
 from models import User, Report, ActivityLog
-import calculation as report
-from groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
-import ppt_engine
-from csv_analysis import analyze_csv, generate_summary_csv
+from services import calculation as report
+from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
+from pptx_builder import engine as ppt_engine
+from pptx_builder import native_charts
+from pptx_builder.engine import set_text_style
+from services.csv_analysis import analyze_csv, generate_summary_csv
 
 # Load environment variables
 load_dotenv()
@@ -260,12 +263,8 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
     processed_csv_path = report.save_cleaned_csv(df_cleaned, csv_path, unique_id)
 
     solo_fecha = request.form.get('solo_fecha') is not None
-    if solo_fecha:
-        report.create_mentions_evolution_chart_by_date(df_cleaned)
-    else:
-        report.create_mentions_evolution_chart(df_cleaned)
-
-    report.create_sentiment_pie_chart(df_cleaned)
+    evolution_data = report.get_evolution_data(df_cleaned, use_date_only=not solo_fecha)
+    sentiment_data = report.get_sentiment_data(df_cleaned)
 
     platform_counts, _ = report.distribucion_plataforma(df_cleaned)
     top_sentences = report.get_top_hit_sentences(df_cleaned)
@@ -313,8 +312,11 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
         slide, shape = find_shape_for_key(key)
         if shape:
             try:
-                report.set_text_style(shape, str(value), 'Effra Heavy', Pt(28), 
-                                     False if key not in ("NUMB_MENTIONS", "NUMB_ACTORS", "EST_REACH") else True)
+                # Custom color for REPORT_DATE (white)
+                text_color = RGBColor(255, 255, 255) if key == "REPORT_DATE" else RGBColor(0, 0, 0)
+                set_text_style(shape, str(value), 'Effra Heavy', Pt(28), 
+                               False if key not in ("NUMB_MENTIONS", "NUMB_ACTORS", "EST_REACH") else True,
+                               color=text_color)
                 found_text_keys.add(key)
             except Exception:
                 pass
@@ -345,14 +347,28 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
                 return False
         return False
 
-    # Conversación (chart)
-    conv_added = place_image_at_placeholder('CONVERSATION_CHART', 'scratch/convEvolution.png', default_size=(Inches(9.55), Inches(5.14)))
-    if not conv_added:
+    # Conversación (native line chart)
+    conv_slide, conv_shape = find_shape_for_key('CONVERSATION_CHART')
+    if conv_slide and conv_shape:
+        try:
+            native_charts.add_native_line_chart(
+                conv_slide, conv_shape,
+                evolution_data['labels'], evolution_data['values'],
+                width=Inches(9.07), height=Inches(5.15)
+            )
+        except Exception:
+            missing_fields.append('CONVERSATION_CHART')
+    else:
         missing_fields.append('CONVERSATION_CHART')
 
-    # Sentiment pie
-    sent_added = place_image_at_placeholder('SENTIMENT_PIE', 'scratch/sentiment_pie_chart.png', default_size=(Inches(6), Inches(6)))
-    if not sent_added:
+    # Sentiment pie (native pie chart)
+    sent_slide, sent_shape = find_shape_for_key('SENTIMENT_PIE')
+    if sent_slide and sent_shape:
+        try:
+            native_charts.add_native_pie_chart(sent_slide, sent_shape, sentiment_data, width=Inches(5.75), height=Inches(5.09))
+        except Exception:
+            missing_fields.append('SENTIMENT_PIE')
+    else:
         missing_fields.append('SENTIMENT_PIE')
 
     # Wordcloud
@@ -366,7 +382,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
     topnews_slide, topnews_shape = find_shape_for_key('TOP_NEWS')
     if topnews_shape:
         try:
-            report.set_text_style(topnews_shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
+            set_text_style(topnews_shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
         except Exception:
             missing_fields.append('TOP_NEWS')
     else:
@@ -388,7 +404,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
     analisis_slide, analisis_shape = find_shape_for_key('CONVERSATION_ANALISIS')
     if analisis_shape:
         try:
-            report.set_text_style(analisis_shape, analisis_texto, 'Effra Light', Pt(11), False)
+            set_text_style(analisis_shape, analisis_texto, 'Effra Light', Pt(11), False)
         except Exception:
             missing_fields.append('CONVERSATION_ANALISIS')
     else:
@@ -399,7 +415,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
     prensa_slide, prensa_shape = find_shape_for_key(prensa_shape_key)
     if prensa_shape:
         try:
-            report.set_text_style(prensa_shape, str(platform_counts.get('Prensa Digital', 0)), font_size=Pt(28))
+            set_text_style(prensa_shape, str(platform_counts.get('Prensa Digital', 0)), font_size=Pt(28))
         except Exception:
             missing_fields.append(prensa_shape_key)
     else:
@@ -411,7 +427,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
         if slide_for_table and shape_for_table:
             left, top, width, height = shape_for_table.left, shape_for_table.top, shape_for_table.width, shape_for_table.height
             try:
-                report.add_dataframe_as_table(slide_for_table, top_influencers_prensa, left, top, width, height)
+                ppt_engine.add_dataframe_as_table(slide_for_table, top_influencers_prensa, left, top, width, height)
                 table_added = True
             except Exception:
                 table_added = False
@@ -424,7 +440,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
     redes_slide, redes_shape = find_shape_for_key(redes_shape_key)
     if redes_shape:
         try:
-            report.set_text_style(redes_shape, str(platform_counts.get('Redes Sociales', 0)), font_size=Pt(28))
+            set_text_style(redes_shape, str(platform_counts.get('Redes Sociales', 0)), font_size=Pt(28))
         except Exception:
             missing_fields.append(redes_shape_key)
     else:
@@ -436,7 +452,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
         slide_t1, shape_t1 = find_shape_for_key('TOP_INFLUENCERS_REDES_POSTS_TABLE')
         if slide_t1 and shape_t1:
             try:
-                report.add_dataframe_as_table(slide_t1, top_influencers_redes_posts, shape_t1.left, shape_t1.top, shape_t1.width, shape_t1.height)
+                ppt_engine.add_dataframe_as_table(slide_t1, top_influencers_redes_posts, shape_t1.left, shape_t1.top, shape_t1.width, shape_t1.height)
                 table1_added = True
             except Exception:
                 table1_added = False
@@ -450,7 +466,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
         slide_t2, shape_t2 = find_shape_for_key('TOP_INFLUENCERS_REDES_REACH_TABLE')
         if slide_t2 and shape_t2:
             try:
-                report.add_dataframe_as_table(slide_t2, top_influencers_redes_reach, shape_t2.left, shape_t2.top, shape_t2.width, shape_t2.height)
+                ppt_engine.add_dataframe_as_table(slide_t2, top_influencers_redes_reach, shape_t2.left, shape_t2.top, shape_t2.width, shape_t2.height)
                 table2_added = True
             except Exception:
                 table2_added = False

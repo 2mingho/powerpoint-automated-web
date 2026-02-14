@@ -23,6 +23,11 @@ source venv/bin/activate
 # Instalar dependencias
 echo "📦 Instalando librerías desde requirements.txt..."
 pip install -r requirements.txt
+pip install pytest > /dev/null 2>&1
+
+# Inicializar/actualizar base de datos
+echo "🗃️ Verificando base de datos..."
+python init_db.py
 
 # Ejecutar la app
 echo "🚀 Iniciando la aplicación..."
