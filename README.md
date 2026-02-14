@@ -1,10 +1,10 @@
-# 📊 PowerPoint Automated Web
+# PowerPoint Automated Web
 
 A professional web application for generating automated, data-driven reports from CSV data. This tool provides visual analysis, social listening insights powered by AI (Groq/Llama3), and generates professional PowerPoint presentations ready for download.
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 *   **User Authentication**: Secure login and registration system.
 *   **Data Visualization**: Automatic generation of sentiment pie charts and conversation evolution line graphs.
@@ -18,7 +18,7 @@ A professional web application for generating automated, data-driven reports fro
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 *   **Backend**: Python, Flask, Flask-Login, Flask-SQLAlchemy (SQLite)
 *   **AI**: Groq API (Llama3-70b)
@@ -28,7 +28,7 @@ A professional web application for generating automated, data-driven reports fro
 
 ---
 
-## ⚙️ Prerequisites
+## Prerequisites
 
 *   Python 3.10 or higher
 *   Groq API Key (for AI analysis)
@@ -36,7 +36,7 @@ A professional web application for generating automated, data-driven reports fro
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Clone & Setup
 1. Clone the repository or download the source code.
@@ -69,7 +69,7 @@ Access the application at `http://localhost:5000/`.
 
 ---
 
-## 🧩 Project Structure
+## Project Structure
 
 ```text
 POWERPOINT-AUTOMATED-WEB/  
@@ -99,7 +99,7 @@ POWERPOINT-AUTOMATED-WEB/
 
 ---
 
-## 🛠️ Maintenance & Diagnostics
+## Maintenance & Diagnostics
 
 Keep the system healthy using the built-in diagnostic suite:
 
@@ -112,7 +112,7 @@ Keep the system healthy using the built-in diagnostic suite:
 
 ---
 
-## 📌 Important Notes
+## Important Notes
 
 *   **CSV Encoding**: Ensure your input CSVs use **UTF-16** encoding to avoid parsing errors.
 *   **Two-Pass Classification**: Enable "Doble Pasada" in settings to use the `Keywords` column as a fallback.
