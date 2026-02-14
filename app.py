@@ -3,7 +3,7 @@ import uuid
 import zipfile
 import shutil
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import functools
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
@@ -157,7 +157,74 @@ def inject_tool_access():
 @app.route('/menu')
 @login_required
 def menu():
-    return render_template('menu.html')
+    if not current_user.is_admin:
+        return render_template('menu.html')
+
+    # ── Admin Dashboard Data ──
+    from sqlalchemy import func
+
+    total_reports = Report.query.count()
+    total_users = User.query.count()
+    active_users = User.query.filter_by(is_active=True).count()
+
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    reports_this_week = Report.query.filter(Report.created_at >= week_ago).count()
+
+    # Activity per day (last 30 days)
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    
+    # Base query for activity (exclude default admin if necessary)
+    default_admin_email = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
+    default_admin = User.query.filter_by(email=default_admin_email).first()
+    
+    activity_query = db.session.query(func.date(ActivityLog.timestamp), func.count(ActivityLog.id)).filter(ActivityLog.timestamp >= thirty_days_ago)
+    if default_admin:
+        activity_query = activity_query.filter(ActivityLog.user_id != default_admin.id)
+        
+    daily_activity_raw = (
+        activity_query
+        .group_by(func.date(ActivityLog.timestamp))
+        .order_by(func.date(ActivityLog.timestamp))
+        .all()
+    )
+    daily_labels = [str(row[0]) for row in daily_activity_raw]
+    daily_values = [row[1] for row in daily_activity_raw]
+
+    # Reports per user (top 5)
+    user_reports_raw = (
+        db.session.query(User.username, func.count(Report.id))
+        .join(Report, Report.user_id == User.id)
+        .group_by(User.username)
+        .order_by(func.count(Report.id).desc())
+        .limit(5)
+        .all()
+    )
+    user_labels = [row[0] for row in user_reports_raw]
+    user_values = [row[1] for row in user_reports_raw]
+
+    # Recent activity (last 15, exclude default admin)
+    default_admin_email = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
+    default_admin = User.query.filter_by(email=default_admin_email).first()
+    log_query = ActivityLog.query
+    if default_admin:
+        log_query = log_query.filter(ActivityLog.user_id != default_admin.id)
+    recent_logs = (
+        log_query
+        .order_by(ActivityLog.timestamp.desc())
+        .limit(15)
+        .all()
+    )
+
+    return render_template('admin_home.html',
+                           total_reports=total_reports,
+                           total_users=total_users,
+                           active_users=active_users,
+                           reports_this_week=reports_this_week,
+                           daily_labels=json.dumps(daily_labels),
+                           daily_values=json.dumps(daily_values),
+                           user_labels=json.dumps(user_labels),
+                           user_values=json.dumps(user_values),
+                           recent_logs=recent_logs)
 
 
 @app.route('/', methods=['GET', 'POST'])

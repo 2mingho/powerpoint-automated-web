@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard | Data Intel{% endblock %}
+{% block page_name %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fa-solid fa-chart-line" style="color: var(--c-primary);"></i> Dashboard</h1>
+    <p>Vista general de uso de la plataforma.</p>
+</div>
+
+<!-- KPI Cards -->
+<div class="stat-grid" style="margin-bottom: var(--sp-xl);">
+    <div class="stat-card">
+        <div class="stat-icon primary"><i class="fa-solid fa-file-powerpoint"></i></div>
+        <div class="stat-info">
+            <div class="stat-value">{{ total_reports }}</div>
+            <div class="stat-label">Reportes Totales</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon success"><i class="fa-solid fa-users"></i></div>
+        <div class="stat-info">
+            <div class="stat-value">{{ total_users }}</div>
+            <div class="stat-label">Usuarios Registrados</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon warning"><i class="fa-solid fa-user-check"></i></div>
+        <div class="stat-info">
+            <div class="stat-value">{{ active_users }}</div>
+            <div class="stat-label">Usuarios Activos</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon accent"><i class="fa-solid fa-calendar-week"></i></div>
+        <div class="stat-info">
+            <div class="stat-value">{{ reports_this_week }}</div>
+            <div class="stat-label">Reportes Esta Semana</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="dashboard-grid">
+    <div class="card chart-card">
+        <div class="card-title"><i class="fa-solid fa-chart-area"></i> Actividad por dia (30 dias)</div>
+        <div class="chart-container">
+            <canvas id="dailyChart"></canvas>
+        </div>
+    </div>
+    <div class="card chart-card">
+        <div class="card-title"><i class="fa-solid fa-chart-pie"></i> Reportes por Usuario (Top 5)</div>
+        <div class="chart-container">
+            <canvas id="userChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card" style="margin-top: var(--sp-xl);">
+    <div class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Actividad Reciente</div>
+    {% if recent_logs %}
+    <div class="activity-table-wrap">
+        <table class="activity-table">
+            <thead>
+                <tr>
+                    <th>Usuario</th>
+                    <th>Accion</th>
+                    <th>Detalle</th>
+                    <th>Fecha</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in recent_logs %}
+                <tr>
+                    <td>
+                        <span class="activity-user">{{ log.user.username if log.user else 'N/A' }}</span>
+                    </td>
+                    <td><span class="activity-badge">{{ log.action }}</span></td>
+                    <td class="activity-detail">{{ log.detail[:80] if log.detail else '—' }}{% if log.detail and
+                        log.detail|length > 80 %}…{% endif %}</td>
+                    <td class="activity-time">{{ log.timestamp.strftime('%d %b %Y, %I:%M %p') if log.timestamp else '—'
+                        }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="color: var(--c-text-secondary); text-align: center; padding: var(--sp-xl);">
+        <i class="fa-solid fa-inbox" style="font-size: 2rem; display: block; margin-bottom: var(--sp-sm);"></i>
+        No hay actividad registrada aun.
+    </p>
+    {% endif %}
+</div>
+
+<!-- Quick Links (Tool Cards) -->
+<div style="margin-top: var(--sp-xl);">
+    <h2 style="margin-bottom: var(--sp-md);"><i class="fa-solid fa-toolbox" style="color: var(--c-primary);"></i>
+        Herramientas</h2>
+    <div class="tool-grid">
+        {% if has_tool_access('reports') %}
+        <a href="{{ url_for('index') }}" class="tool-card">
+            <div class="tool-card-icon"><i class="fa-solid fa-chart-bar"></i></div>
+            <h3>Generar Reportes</h3>
+            <p>Automatiza la creacion de reportes desde archivos CSV.</p>
+            <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+        {% endif %}
+        {% if has_tool_access('classification') %}
+        <a href="{{ url_for('clasificacion') }}" class="tool-card">
+            <div class="tool-card-icon" style="background: var(--c-success-bg); color: var(--c-success);"><i
+                    class="fa-solid fa-tags"></i></div>
+            <h3>Clasificacion de Data</h3>
+            <p>Organiza las menciones automaticamente por tematica.</p>
+            <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+        {% endif %}
+        {% if has_tool_access('file_merge') %}
+        <a href="{{ url_for('union_archivos') }}" class="tool-card">
+            <div class="tool-card-icon" style="background: var(--c-warning-bg); color: var(--c-warning);"><i
+                    class="fa-solid fa-link"></i></div>
+            <h3>Union de Archivos</h3>
+            <p>Combina multiples archivos en una unica fuente.</p>
+            <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+        {% endif %}
+        {% if has_tool_access('csv_analysis') %}
+        <a href="{{ url_for('analisis_csv') }}" class="tool-card">
+            <div class="tool-card-icon" style="background: var(--c-accent-light); color: var(--c-warning);"><i
+                    class="fa-solid fa-bolt"></i></div>
+            <h3>Analisis Rapido CSV</h3>
+            <p>Carga cualquier CSV y obten analisis en segundos.</p>
+            <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        var root = getComputedStyle(document.documentElement);
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+        var textColor = isDark ? '#9ca3af' : '#64748b';
+        var primaryColor = '#fadf25';
+        var accentColors = ['#fadf25', '#22c55e', '#3b82f6', '#f59e0b', '#ef4444'];
+
+        var commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: textColor, font: { family: 'Inter', size: 12 } } }
+            }
+        };
+
+        // Daily Activity Line Chart
+        var dailyCtx = document.getElementById('dailyChart');
+        if (dailyCtx) {
+            var dailyLabels = {{ daily_labels|safe }};
+            var dailyValues = {{ daily_values|safe }};
+
+            var formattedLabels = dailyLabels.map(function (d) {
+                var dt = new Date(d + 'T00:00:00');
+                return dt.toLocaleDateString('es-DO', { day: '2-digit', month: 'short' });
+            });
+
+            new Chart(dailyCtx, {
+                type: 'line',
+                data: {
+                    labels: formattedLabels,
+                    datasets: [{
+                        label: 'Actividad',
+                        data: dailyValues,
+                        borderColor: primaryColor,
+                        backgroundColor: isDark ? 'rgba(250,223,37,0.12)' : 'rgba(250,223,37,0.18)',
+                        borderWidth: 2.5,
+                        pointRadius: 4,
+                        pointBackgroundColor: primaryColor,
+                        pointBorderColor: isDark ? '#0d1117' : '#ffffff',
+                        pointBorderWidth: 2,
+                        fill: true,
+                        tension: 0.35
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: gridColor },
+                            ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: gridColor },
+                            ticks: { color: textColor, font: { size: 11 }, stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // User Reports Doughnut Chart
+        var userCtx = document.getElementById('userChart');
+        if (userCtx) {
+            var userLabels = {{ user_labels|safe }};
+            var userValues = {{ user_values|safe }};
+
+            new Chart(userCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: userLabels,
+                    datasets: [{
+                        data: userValues,
+                        backgroundColor: accentColors.slice(0, userLabels.length),
+                        borderColor: isDark ? '#0d1117' : '#ffffff',
+                        borderWidth: 3,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '55%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: textColor,
+                                padding: 16,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                font: { family: 'Inter', size: 12 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    })();
+</script>
+{% endblock %}
