@@ -4,7 +4,7 @@ import os
 
 # Add root to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from classifier import classify_mentions
+from services.classifier import classify_mentions
 
 def run_test():
     """

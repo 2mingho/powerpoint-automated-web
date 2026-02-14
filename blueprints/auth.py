@@ -6,6 +6,7 @@ from flask_limiter.util import get_remote_address
 import re
 from models import User
 from extensions import db, login_manager
+# Note: 'admin' import inside functions uses blueprints.admin
 
 auth = Blueprint('auth', __name__)
 
@@ -47,7 +48,7 @@ def register():
         db.session.commit()
 
         # Log registration
-        from admin import log_activity
+        from blueprints.admin import log_activity
         log_activity('register', f'Nuevo usuario registrado: {username}', user_id=new_user.id)
 
         flash('Registro exitoso. Ahora puedes iniciar sesión.', category='success')
@@ -75,7 +76,7 @@ def login():
         login_user(user)
 
         # Log login
-        from admin import log_activity
+        from blueprints.admin import log_activity
         log_activity('login', f'Inicio de sesión: {user.username}', user_id=user.id)
 
         return redirect(url_for('menu'))
@@ -86,7 +87,7 @@ def login():
 @login_required
 def logout():
     # Log logout before clearing session
-    from admin import log_activity
+    from blueprints.admin import log_activity
     log_activity('logout', f'Cierre de sesión: {current_user.username}')
 
     logout_user()

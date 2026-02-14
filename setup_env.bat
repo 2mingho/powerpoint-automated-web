@@ -15,11 +15,16 @@ REM Activar entorno virtual
 call venv\Scripts\activate
 
 REM Instalar dependencias
-echo 📦 Instalando librerías desde requirements.txt...
+echo 📦 Instalando librerias desde requirements.txt...
 pip install -r requirements.txt
+pip install pytest >nul 2>&1
+
+REM Inicializar/actualizar base de datos
+echo 🗃️ Verificando base de datos...
+python init_db.py
 
 REM Ejecutar la app
-echo 🚀 Iniciando la aplicación...
+echo 🚀 Iniciando la aplicacion...
 python app.py
 
 ENDLOCAL
