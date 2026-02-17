@@ -43,7 +43,7 @@
 <!-- Charts Row -->
 <div class="dashboard-grid">
     <div class="card chart-card">
-        <div class="card-title"><i class="fa-solid fa-chart-area"></i> Actividad por dia (30 dias)</div>
+        <div class="card-title"><i class="fa-solid fa-chart-area"></i> Actividad por día (30 dias)</div>
         <div class="chart-container">
             <canvas id="dailyChart"></canvas>
         </div>
@@ -65,7 +65,7 @@
             <thead>
                 <tr>
                     <th>Usuario</th>
-                    <th>Accion</th>
+                    <th>Acción</th>
                     <th>Detalle</th>
                     <th>Fecha</th>
                 </tr>
@@ -77,10 +77,8 @@
                         <span class="activity-user">{{ log.user.username if log.user else 'N/A' }}</span>
                     </td>
                     <td><span class="activity-badge">{{ log.action }}</span></td>
-                    <td class="activity-detail">{{ log.detail[:80] if log.detail else '—' }}{% if log.detail and
-                        log.detail|length > 80 %}…{% endif %}</td>
-                    <td class="activity-time">{{ log.timestamp.strftime('%d %b %Y, %I:%M %p') if log.timestamp else '—'
-                        }}</td>
+                    <td class="activity-detail">{{ log.detail[:80] if log.detail else '—' }}{% if log.detail and log.detail|length > 80 %}…{% endif %}</td>
+                    <td class="activity-time">{{ log.timestamp.strftime('%d %b %Y, %I:%M %p') if log.timestamp else '—' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -89,7 +87,7 @@
     {% else %}
     <p style="color: var(--c-text-secondary); text-align: center; padding: var(--sp-xl);">
         <i class="fa-solid fa-inbox" style="font-size: 2rem; display: block; margin-bottom: var(--sp-sm);"></i>
-        No hay actividad registrada aun.
+        No hay actividad registrada aún.
     </p>
     {% endif %}
 </div>
@@ -103,7 +101,7 @@
         <a href="{{ url_for('index') }}" class="tool-card">
             <div class="tool-card-icon"><i class="fa-solid fa-chart-bar"></i></div>
             <h3>Generar Reportes</h3>
-            <p>Automatiza la creacion de reportes desde archivos CSV.</p>
+            <p>Automatiza la creación de reportes desde archivos CSV.</p>
             <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
         </a>
         {% endif %}
@@ -111,8 +109,8 @@
         <a href="{{ url_for('clasificacion') }}" class="tool-card">
             <div class="tool-card-icon" style="background: var(--c-success-bg); color: var(--c-success);"><i
                     class="fa-solid fa-tags"></i></div>
-            <h3>Clasificacion de Data</h3>
-            <p>Organiza las menciones automaticamente por tematica.</p>
+            <h3>Clasificación de Data</h3>
+            <p>Organiza las menciones automáticamente por temática.</p>
             <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
         </a>
         {% endif %}
@@ -120,7 +118,7 @@
         <a href="{{ url_for('union_archivos') }}" class="tool-card">
             <div class="tool-card-icon" style="background: var(--c-warning-bg); color: var(--c-warning);"><i
                     class="fa-solid fa-link"></i></div>
-            <h3>Union de Archivos</h3>
+            <h3>Unión de Archivos</h3>
             <p>Combina multiples archivos en una unica fuente.</p>
             <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
         </a>
@@ -129,7 +127,7 @@
         <a href="{{ url_for('analisis_csv') }}" class="tool-card">
             <div class="tool-card-icon" style="background: var(--c-accent-light); color: var(--c-warning);"><i
                     class="fa-solid fa-bolt"></i></div>
-            <h3>Analisis Rapido CSV</h3>
+            <h3>Análisis Rápido CSV</h3>
             <p>Carga cualquier CSV y obten analisis en segundos.</p>
             <div class="tool-card-arrow">Abrir <i class="fa-solid fa-arrow-right"></i></div>
         </a>
@@ -142,107 +140,129 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
     (function () {
-        var root = getComputedStyle(document.documentElement);
-        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-        var textColor = isDark ? '#9ca3af' : '#64748b';
-        var primaryColor = '#fadf25';
-        var accentColors = ['#fadf25', '#22c55e', '#3b82f6', '#f59e0b', '#ef4444'];
+        const root = getComputedStyle(document.documentElement);
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
-        var commonOptions = {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: textColor, font: { family: 'Inter', size: 12 } } }
-            }
-        };
+        // Use CSS variables for consistent theming
+        const gridColor = root.getPropertyValue('--c-chart-grid').trim() || (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)');
+        const textColor = root.getPropertyValue('--c-chart-text').trim() || (isDark ? '#9ca3af' : '#64748b');
+        const primaryColor = root.getPropertyValue('--c-primary').trim() || '#fadf25';
+        const fontFamily = root.getPropertyValue('--font-family-sans').trim() || 'Inter, sans-serif';
 
-        // Daily Activity Line Chart
-        var dailyCtx = document.getElementById('dailyChart');
-        if (dailyCtx) {
-            var dailyLabels = {{ daily_labels|safe }};
-            var dailyValues = {{ daily_values|safe }};
+        const accentColors = ['#fadf25', '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-            var formattedLabels = dailyLabels.map(function (d) {
-                var dt = new Date(d + 'T00:00:00');
-                return dt.toLocaleDateString('es-DO', { day: '2-digit', month: 'short' });
-            });
-
-            new Chart(dailyCtx, {
-                type: 'line',
-                data: {
-                    labels: formattedLabels,
-                    datasets: [{
-                        label: 'Actividad',
-                        data: dailyValues,
-                        borderColor: primaryColor,
-                        backgroundColor: isDark ? 'rgba(250,223,37,0.12)' : 'rgba(250,223,37,0.18)',
-                        borderWidth: 2.5,
-                        pointRadius: 4,
-                        pointBackgroundColor: primaryColor,
-                        pointBorderColor: isDark ? '#0d1117' : '#ffffff',
-                        pointBorderWidth: 2,
-                        fill: true,
-                        tension: 0.35
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: {
-                            grid: { color: gridColor },
-                            ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: gridColor },
-                            ticks: { color: textColor, font: { size: 11 }, stepSize: 1 }
-                        }
-                    }
-                }
-            });
+        function showEmptyState(containerId, message) {
+            const canvas = document.getElementById(containerId);
+            if (!canvas) return;
+            const container = canvas.parentElement;
+            container.innerHTML = `
+                <div class="chart-empty-state">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <p>${message}</p>
+                </div>`;
         }
 
-        // User Reports Doughnut Chart
-        var userCtx = document.getElementById('userChart');
-        if (userCtx) {
-            var userLabels = {{ user_labels|safe }};
-            var userValues = {{ user_values|safe }};
+        // Daily Activity Line Chart
+        const dailyCtx = document.getElementById('dailyChart');
+        if (dailyCtx) {
+            const dailyLabels = {{ daily_labels|safe }};
+            const dailyValues = {{ daily_values|safe }};
 
-            new Chart(userCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: userLabels,
-                    datasets: [{
-                        data: userValues,
-                        backgroundColor: accentColors.slice(0, userLabels.length),
-                        borderColor: isDark ? '#0d1117' : '#ffffff',
-                        borderWidth: 3,
-                        hoverOffset: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '55%',
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                color: textColor,
-                                padding: 16,
-                                usePointStyle: true,
-                                pointStyle: 'circle',
-                                font: { family: 'Inter', size: 12 }
+            if (!dailyValues || dailyValues.length === 0) {
+                showEmptyState('dailyChart', 'Sin actividad en los últimos 30 días');
+            } else {
+                const formattedLabels = dailyLabels.map(function (d) {
+                    // Safety check for date parsing
+                    const dt = d.includes('T') ? new Date(d) : new Date(d + 'T12:00:00');
+                    return dt.toLocaleDateString('es-DO', { day: '2-digit', month: 'short' });
+                });
+
+                new Chart(dailyCtx, {
+                    type: 'line',
+                    data: {
+                        labels: formattedLabels,
+                        datasets: [{
+                            label: 'Actividad',
+                            data: dailyValues,
+                            borderColor: primaryColor,
+                            backgroundColor: isDark ? 'rgba(250,223,37,0.12)' : 'rgba(250,223,37,0.18)',
+                            borderWidth: 2.5,
+                            pointRadius: 4,
+                            pointBackgroundColor: primaryColor,
+                            pointBorderColor: isDark ? '#0d1117' : '#ffffff',
+                            pointBorderWidth: 2,
+                            fill: true,
+                            tension: 0.35
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                bodyFont: { family: fontFamily }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: gridColor },
+                                ticks: { color: textColor, font: { family: fontFamily, size: 11 }, maxRotation: 45 }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: gridColor },
+                                ticks: { color: textColor, font: { family: fontFamily, size: 11 }, stepSize: 1 }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
+        }
+
+        // User Reports Doughnut Chart
+        const userCtx = document.getElementById('userChart');
+        if (userCtx) {
+            const userLabels = {{ user_labels|safe }};
+            const userValues = {{ user_values|safe }};
+
+            if (!userValues || userValues.length === 0) {
+                showEmptyState('userChart', 'No hay reportes generados aún');
+            } else {
+                // Dynamic colors for donut chart
+                const chartColors = userLabels.map((_, i) => accentColors[i % accentColors.length]);
+
+                new Chart(userCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: userLabels,
+                        datasets: [{
+                            data: userValues,
+                            backgroundColor: chartColors,
+                            borderColor: isDark ? '#0d1117' : '#ffffff',
+                            borderWidth: 3,
+                            hoverOffset: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '55%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: textColor,
+                                    padding: 16,
+                                    usePointStyle: true,
+                                    pointStyle: 'circle',
+                                    font: { family: fontFamily, size: 12 }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
         }
     })();
 </script>

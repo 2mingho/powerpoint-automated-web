@@ -629,6 +629,29 @@ img {
   color: #b8860b;
 }
 
+/* ─── DASHBOARD SPECIFIC ─── */
+.chart-container {
+  position: relative;
+  height: 300px;
+  width: 100%;
+}
+
+.chart-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--c-text-secondary);
+  gap: var(--sp-sm);
+  font-size: 0.9rem;
+}
+
+.chart-empty-state i {
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
 .stat-info {
   flex: 1;
 }

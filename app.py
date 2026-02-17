@@ -3,7 +3,7 @@ import uuid
 import zipfile
 import shutil
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import functools
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
@@ -167,11 +167,11 @@ def menu():
     total_users = User.query.count()
     active_users = User.query.filter_by(is_active=True).count()
 
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
     reports_this_week = Report.query.filter(Report.created_at >= week_ago).count()
 
     # Activity per day (last 30 days)
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     
     # Base query for activity (exclude default admin if necessary)
     default_admin_email = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
