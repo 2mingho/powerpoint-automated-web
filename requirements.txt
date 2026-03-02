@@ -11,3 +11,6 @@ babel
 wordcloud
 gunicorn
 SQLAlchemy
+openpyxl
+chardet
+xlrd
