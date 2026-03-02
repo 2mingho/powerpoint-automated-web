@@ -95,6 +95,17 @@ def update_structure_if_needed():
     conn.commit()
     conn.close()
     print("[ok] Verificacion de estructura completada.")
+    
+    # -------------------------------------------------------------
+    # NEW: Ensure all new SQLAlchemy models (Social Media ETL) exist
+    # -------------------------------------------------------------
+    from app import app
+    from extensions import db
+    with app.app_context():
+        # This will create any NEW tables defined in models.py (e.g., tb_instagram, classification_profiles)
+        # without affecting existing tables.
+        db.create_all()
+        print("[ok] create_all() ejecutado para asegurar tablas nuevas.")
 
 
 def seed_admin(app=None):

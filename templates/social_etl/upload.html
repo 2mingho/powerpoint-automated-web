@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 800px;">
+    <h2 class="mb-4 text-center fw-bold text-primary">Carga de Datos Social Listening</h2>
+
+    <div class="card shadow border-0">
+        <div class="card-body p-4">
+            <form id="uploadForm" enctype="multipart/form-data">
+                
+                <!-- 1. Archivo y Parsing -->
+                <h5 class="fw-bold mb-3"><i class="fas fa-file-csv me-2 text-warning"></i>1. Archivo y Formato</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-12">
+                        <label class="form-label">Archivo CSV</label>
+                        <input type="file" class="form-control" name="csv_file" accept=".csv" required onchange="previewColumns()">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Codificación</label>
+                        <select name="encoding" class="form-select">
+                            <option value="utf-8" selected>UTF-8</option>
+                            <option value="utf-16">UTF-16</option>
+                            <option value="latin1">Latin-1</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Separador</label>
+                        <select name="separator" class="form-select">
+                            <option value="," selected>Coma (,)</option>
+                            <option value=";">Punto y coma (;)</option>
+                            <option value="\t">Tabulación (\t)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 2. Periodo -->
+                <h5 class="fw-bold mb-3"><i class="fas fa-calendar-alt me-2 text-success"></i>2. Asignación de Periodo</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Mes</label>
+                        <select name="mes" class="form-select" required>
+                            <option value="">Seleccionar...</option>
+                            <option value="Enero">Enero</option>
+                            <option value="Febrero">Febrero</option>
+                            <option value="Marzo">Marzo</option>
+                            <option value="Abril">Abril</option>
+                            <option value="Mayo">Mayo</option>
+                            <option value="Junio">Junio</option>
+                            <option value="Julio">Julio</option>
+                            <option value="Agosto">Agosto</option>
+                            <option value="Septiembre">Septiembre</option>
+                            <option value="Octubre">Octubre</option>
+                            <option value="Noviembre">Noviembre</option>
+                            <option value="Diciembre">Diciembre</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Año</label>
+                        <input type="number" name="anio" class="form-control" value="{{ current_year }}" required>
+                    </div>
+                </div>
+
+                <!-- 3. Mapeo preliminar -->
+                <h5 class="fw-bold mb-3"><i class="fas fa-columns me-2 text-info"></i>3. Mapeo de Texto</h5>
+                <div class="mb-4">
+                    <div id="columnSelectorContainer" class="p-3 bg-light border rounded text-center text-muted">
+                        <small>Sube un archivo para ver las columnas disponibles.</small>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg" id="btnProcess" disabled>
+                        Siguiente: Validar y Clasificar <i class="fas fa-arrow-right ms-2"></i>
+                    </button>
+                    <div id="loading" class="text-center text-primary mt-3" style="display:none;">
+                        <div class="spinner-border" role="status"></div>
+                        <p class="mb-0 small">Procesando y clasificando...</p>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('uploadForm');
+    
+    // Auto-scan columns when file or options change
+    async function previewColumns() {
+        const formData = new FormData(form);
+        if(!formData.get('csv_file') || !formData.get('csv_file').size) return;
+
+        const container = document.getElementById('columnSelectorContainer');
+        container.innerHTML = '<div class="spinner-border spinner-border-sm text-secondary"></div> Leyendo cabeceras...';
+
+        try {
+            const res = await fetch('/social-etl/api/preview-columns', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            
+            if(data.error) {
+                container.innerHTML = `<span class="text-danger">${data.error}</span>`;
+                return;
+            }
+
+            // Create Select
+            let html = `
+                <label class="form-label d-block text-start">Selecciona la columna de TEXTO (Content/Post/Text):</label>
+                <select name="text_column" class="form-select shadow-sm border-primary" required>
+            `;
+            data.columns.forEach(col => {
+                // Auto-detect common names
+                const selected = ['content', 'text', 'post', 'message', 'descripcion', 'description'].some(
+                    keyword => col.toLowerCase().includes(keyword)
+                ) ? 'selected' : '';
+                html += `<option value="${col}" ${selected}>${col}</option>`;
+            });
+            html += `</select>`;
+            html += `<small class="text-muted mt-2 d-block text-start">* Esta columna se usará para buscar las palabras clave.</small>`;
+            
+            container.innerHTML = html;
+            document.getElementById('btnProcess').disabled = false;
+
+        } catch (err) {
+            console.error(err);
+            container.innerHTML = '<span class="text-danger">Error leyendo el archivo. Verifica el separador/codificación.</span>';
+        }
+    }
+    
+    // Bind change events to re-preview (e.g. if separator changes)
+    form.querySelector('[name="separator"]').addEventListener('change', previewColumns);
+    form.querySelector('[name="encoding"]').addEventListener('change', previewColumns);
+
+    // Form Submit
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('btnProcess');
+        const loader = document.getElementById('loading');
+        
+        btn.disabled = true;
+        loader.style.display = 'block';
+
+        const formData = new FormData(form);
+        
+        try {
+            const res = await fetch('/social-etl/api/process-upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            
+            if(data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else if(data.error) {
+                alert('Error: ' + data.error);
+                btn.disabled = false;
+                loader.style.display = 'none';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error de conexión');
+            btn.disabled = false;
+            loader.style.display = 'none';
+        }
+    });
+
+</script>
+{% endblock %}

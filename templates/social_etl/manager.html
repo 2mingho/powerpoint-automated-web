@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 1400px;">
+    
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-gray-800">
+                <i class="fas fa-tags me-2 text-primary"></i>Gestor de Perfiles
+            </h1>
+            <p class="text-muted mb-0">Configura diccionarios de palabras clave para tus clasificaciones automáticas.</p>
+        </div>
+        <div>
+            <button class="btn btn-primary shadow-sm" onclick="openNewProfileModal()">
+                <i class="fas fa-plus me-1"></i> Nuevo Perfil
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Sidebar: List of Profiles -->
+        <div class="col-md-3 mb-4">
+            <div class="card shadow border-0 h-100">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-primary">Perfiles Disponibles</h6>
+                </div>
+                <div class="list-group list-group-flush" id="profilesList">
+                    <!-- Loaded dynamically -->
+                    <div class="text-center p-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Area: Editor -->
+        <div class="col-md-9 mb-4">
+            <div class="card shadow border-0 h-100" id="editorPanel" style="display:none;">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="m-0 fw-bold text-dark" id="currentProfileName">Nombre del Perfil</h5>
+                    <div>
+                        <span id="activeBadge" class="badge bg-success me-2" style="display:none;">Activo</span>
+                        <button class="btn btn-sm btn-outline-success me-2" onclick="activateCurrentProfile()" id="btnActivate">
+                            <i class="fas fa-check-circle me-1"></i> Activar
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrentProfile()">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body bg-light">
+                    <!-- Categories Container -->
+                    <div id="categoriesContainer" class="accordion accordion-flush bg-transparent">
+                        <!-- Loaded dynamically -->
+                    </div>
+
+                    <!-- Add Category Button -->
+                    <div class="mt-4 text-center border p-3 rounded bg-white border-dashed cursor-pointer hover-shadow" onclick="openNewCategoryModal()">
+                        <h6 class="text-muted mb-0"><i class="fas fa-plus-circle me-2"></i>Añadir Nueva Categoría</h6>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="card shadow border-0 h-100 d-flex justify-content-center align-items-center p-5" id="emptyState">
+                <div class="text-center text-muted">
+                    <i class="fas fa-arrow-left fa-3x mb-3 text-gray-300"></i>
+                    <h5>Selecciona un perfil para editar</h5>
+                    <p>O crea uno nuevo para comenzar.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+<!-- New Profile Modal -->
+<div class="modal fade" id="newProfileModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Crear Nuevo Perfil</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="newProfileName" class="form-control" placeholder="Ej: Negocios 2024">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="createProfile()">Crear</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Category Modal -->
+<div class="modal fade" id="newCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nueva Categoría</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="newCategoryName" class="form-control" placeholder="Ej: Institucional">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="createCategory()">Añadir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Theme Modal -->
+<div class="modal fade" id="newThemeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nueva Temática</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="targetCategoryId">
+                <input type="text" id="newThemeName" class="form-control" placeholder="Ej: Inversión Social">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="createTheme()">Añadir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentProfileId = null;
+    let profilesData = [];
+
+    document.addEventListener('DOMContentLoaded', loadProfiles);
+
+    function loadProfiles() {
+        fetch('/social-etl/api/profiles')
+            .then(res => res.json())
+            .then(data => {
+                profilesData = data;
+                renderProfilesList();
+            })
+            .catch(err => {
+                console.error('Error loading profiles:', err);
+                alert('Error al cargar perfiles');
+            });
+    }
+
+    function renderProfilesList() {
+        const list = document.getElementById('profilesList');
+        list.innerHTML = '';
+        
+        if(profilesData.length === 0) {
+            list.innerHTML = '<div class="text-center p-4 text-muted">No hay perfiles creados aún.</div>';
+            return;
+        }
+        
+        profilesData.forEach(p => {
+            const item = document.createElement('a');
+            item.className = `list-group-item list-group-item-action d-flex justify-content-between align-items-center ${p.id === currentProfileId ? 'active' : ''}`;
+            item.href = '#';
+            item.onclick = (e) => {
+                e.preventDefault();
+                selectProfile(p.id);
+            };
+            item.innerHTML = `
+                <div>
+                    <span class="fw-bold">${p.name}</span>
+                    <br>
+                    <small class="${p.is_active ? 'text-success fw-bold' : 'text-muted'}">
+                        ${p.is_active ? '<i class="fas fa-circle fa-xs me-1"></i>Activo' : 'Inactivo'}
+                    </small>
+                </div>
+                <i class="fas fa-chevron-right text-muted" style="font-size: 0.8rem;"></i>
+            `;
+            list.appendChild(item);
+        });
+    }
+
+    function selectProfile(id) {
+        currentProfileId = id;
+        renderProfilesList(); // update active class
+        
+        document.getElementById('editorPanel').style.display = 'block';
+        document.getElementById('emptyState').style.display = 'none';
+        
+        const profile = profilesData.find(p => p.id === id);
+        if(profile) {
+            document.getElementById('currentProfileName').textContent = profile.name;
+            
+            const activeBadge = document.getElementById('activeBadge');
+            const btnActivate = document.getElementById('btnActivate');
+            
+            if(profile.is_active) {
+                activeBadge.style.display = 'inline';
+                btnActivate.style.display = 'none';
+            } else {
+                activeBadge.style.display = 'none';
+                btnActivate.style.display = 'inline-block';
+            }
+        }
+        
+        // Load full details
+        loadProfileDetails(id);
+    }
+
+    function loadProfileDetails(id) {
+        fetch(`/social-etl/api/profiles/${id}/details`)
+            .then(res => res.json())
+            .then(data => {
+                renderDetails(data);
+            })
+            .catch(err => {
+                console.error('Error loading profile details:', err);
+                alert('Error al cargar detalles del perfil');
+            });
+    }
+
+    function renderDetails(data) {
+        const container = document.getElementById('categoriesContainer');
+        container.innerHTML = '';
+        
+        if (data.categories.length === 0) {
+            container.innerHTML = '<div class="text-center py-4 text-muted border border-dashed rounded bg-white">No hay categorías aún. Crea una para comenzar.</div>';
+            return;
+        }
+
+        data.categories.forEach(cat => {
+            const catItem = document.createElement('div');
+            catItem.className = 'accordion-item border rounded mb-3 shadow-sm overflow-hidden';
+            
+            // Themes HTML
+            let themesHtml = '';
+            cat.themes.forEach(theme => {
+                const keywordsString = theme.keywords.join(', ');
+                themesHtml += `
+                    <div class="theme-block p-3 border-bottom bg-white hover-bg-light">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="fw-bold text-dark mb-0"><i class="fas fa-layer-group me-2 text-info"></i>${theme.name}</h6>
+                            <button class="btn btn-sm text-danger" onclick="deleteTheme(${theme.id})"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white text-muted border-end-0"><i class="fas fa-key fa-sm"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" 
+                                   value="${keywordsString}" 
+                                   placeholder="Palabras clave separadas por comas..."
+                                   onchange="updateKeywords(${theme.id}, this.value)">
+                        </div>
+                        <small class="text-muted mt-1 d-block"><i class="fas fa-info-circle me-1"></i>Presiona Enter o haz click fuera para guardar.</small>
+                    </div>
+                `;
+            });
+
+            catItem.innerHTML = `
+                <h2 class="accordion-header">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#col_${cat.id}" aria-expanded="true">
+                        <span class="fw-bold text-dark">${cat.name}</span>
+                        <div class="ms-auto me-3 z-index-2" onclick="event.stopPropagation()">
+                            <button class="btn btn-sm btn-light btn-hover-danger" onclick="deleteCategory(${cat.id})"><i class="fas fa-trash-alt text-muted"></i></button>
+                        </div>
+                    </button>
+                </h2>
+                <div id="col_${cat.id}" class="accordion-collapse collapse show">
+                    <div class="accordion-body bg-light p-0">
+                        ${themesHtml}
+                        <div class="p-3 text-center bg-white border-top cursor-pointer text-primary fw-bold" onclick="openNewThemeModal(${cat.id})">
+                            <i class="fas fa-plus me-1"></i> Añadir Temática
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(catItem);
+        });
+    }
+
+    // CRUD ACTIONS
+    function createProfile() {
+        const name = document.getElementById('newProfileName').value.trim();
+        if(!name) {
+            alert('Por favor ingresa un nombre para el perfil');
+            return;
+        }
+        
+        fetch('/social-etl/api/profiles', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name})
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.error) {
+                alert(res.error);
+            } else {
+                bootstrap.Modal.getInstance(document.getElementById('newProfileModal')).hide();
+                document.getElementById('newProfileName').value = '';
+                loadProfiles();
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error al crear perfil');
+        });
+    }
+
+    function createCategory() {
+        const name = document.getElementById('newCategoryName').value.trim();
+        if(!name) {
+            alert('Por favor ingresa un nombre para la categoría');
+            return;
+        }
+        if(!currentProfileId) {
+            alert('Selecciona un perfil primero');
+            return;
+        }
+
+        fetch('/social-etl/api/categories', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({profile_id: currentProfileId, name})
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.error) {
+                alert(res.error);
+            } else {
+                bootstrap.Modal.getInstance(document.getElementById('newCategoryModal')).hide();
+                document.getElementById('newCategoryName').value = '';
+                loadProfileDetails(currentProfileId);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error al crear categoría');
+        });
+    }
+
+    function createTheme() {
+        const name = document.getElementById('newThemeName').value.trim();
+        const catId = document.getElementById('targetCategoryId').value;
+        
+        if(!name) {
+            alert('Por favor ingresa un nombre para la temática');
+            return;
+        }
+        
+        fetch('/social-etl/api/themes', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({category_id: catId, name})
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.error) {
+                alert(res.error);
+            } else {
+                bootstrap.Modal.getInstance(document.getElementById('newThemeModal')).hide();
+                document.getElementById('newThemeName').value = '';
+                loadProfileDetails(currentProfileId);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error al crear temática');
+        });
+    }
+
+    function deleteTheme(id) {
+        if(!confirm('¿Eliminar esta temática?')) return;
+        
+        fetch(`/social-etl/api/themes/${id}`, {method: 'DELETE'})
+            .then(() => loadProfileDetails(currentProfileId))
+            .catch(err => {
+                console.error(err);
+                alert('Error al eliminar temática');
+            });
+    }
+
+    function deleteCategory(id) {
+        if(!confirm('¿Eliminar esta categoría y todas sus temáticas?')) return;
+        
+        fetch(`/social-etl/api/categories/${id}`, {method: 'DELETE'})
+            .then(() => loadProfileDetails(currentProfileId))
+            .catch(err => {
+                console.error(err);
+                alert('Error al eliminar categoría');
+            });
+    }
+
+    function updateKeywords(themeId, value) {
+        const keywords = value.split(',').map(s => s.trim()).filter(s => s);
+        
+        fetch(`/social-etl/api/themes/${themeId}/keywords`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({keywords})
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.error) {
+                console.error('Error saving keywords:', res.error);
+            } else {
+                console.log('Keywords saved successfully');
+            }
+        })
+        .catch(err => {
+            console.error('Error updating keywords:', err);
+        });
+    }
+
+    function activateCurrentProfile() {
+        if(!confirm('¿Activar este perfil? El perfil actual activo se desactivará.')) return;
+        
+        fetch(`/social-etl/api/profiles/${currentProfileId}/activate`, {method: 'POST'})
+            .then(() => {
+                loadProfiles();
+                selectProfile(currentProfileId);
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error al activar perfil');
+            });
+    }
+
+    function deleteCurrentProfile() {
+        if(!confirm('¿Eliminar PERMANENTEMENTE este perfil y todas sus categorías y temáticas?')) return;
+        
+        fetch(`/social-etl/api/profiles/${currentProfileId}`, {method: 'DELETE'})
+            .then(() => {
+                currentProfileId = null;
+                document.getElementById('editorPanel').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'flex';
+                loadProfiles();
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error al eliminar perfil');
+            });
+    }
+
+    // Modal Helpers
+    function openNewProfileModal() {
+        document.getElementById('newProfileName').value = '';
+        new bootstrap.Modal(document.getElementById('newProfileModal')).show();
+    }
+    
+    function openNewCategoryModal() {
+        if(!currentProfileId) {
+            alert('Selecciona un perfil primero');
+            return;
+        }
+        document.getElementById('newCategoryName').value = '';
+        new bootstrap.Modal(document.getElementById('newCategoryModal')).show();
+    }
+    
+    function openNewThemeModal(catId) {
+        document.getElementById('targetCategoryId').value = catId;
+        document.getElementById('newThemeName').value = '';
+        new bootstrap.Modal(document.getElementById('newThemeModal')).show();
+    }
+</script>
+
+<style>
+    .border-dashed { border-style: dashed !important; }
+    .cursor-pointer { cursor: pointer; }
+    .bg-transparent { background-color: transparent !important; }
+    .hover-shadow:hover { box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; transition: 0.3s; }
+    .hover-bg-light:hover { background-color: #f8f9fa !important; }
+    .z-index-2 { z-index: 2; position: relative; }
+</style>
+{% endblock %}

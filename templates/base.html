@@ -63,6 +63,12 @@
           <span>Analisis Rapido</span>
         </a>
         {% endif %}
+        {% if has_tool_access('social_etl') %}
+        <a href="{{ url_for('social_etl.dashboard') }}" class="sidebar-item {% if request.endpoint and request.endpoint.startswith('social_etl.') %}active{% endif %}" aria-label="Social ETL">
+          <i class="fa-solid fa-hashtag"></i>
+          <span>Social Dashboard</span>
+        </a>
+        {% endif %}
 
         <div class="sidebar-section-label">Cuenta</div>
         <a href="{{ url_for('mis_reportes') }}" class="sidebar-item {% if request.endpoint == 'mis_reportes' %}active{% endif %}" aria-label="Mis Reportes">

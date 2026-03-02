@@ -48,6 +48,9 @@ login_manager.init_app(app)
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
 
+from blueprints.social_etl import social_etl_bp
+app.register_blueprint(social_etl_bp)
+
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 

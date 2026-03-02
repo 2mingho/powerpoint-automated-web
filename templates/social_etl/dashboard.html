@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 1600px;">
+    
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 fw-bold text-gray-800">Dashboard Social Media</h1>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadDashboard()"><i class="fas fa-sync-alt"></i> Actualizar</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 bg-white">
+            <h6 class="m-0 fw-bold text-primary">Filtros Globales</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Plataforma</label>
+                    <select id="filterPlatform" class="form-select" onchange="loadDashboard()">
+                        <option value="">Todas</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="facebook">Facebook</option>
+                        <option value="linkedin">LinkedIn</option>
+                        <option value="twitter">Twitter</option>
+                        <option value="youtube">YouTube</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Año</label>
+                    <input type="number" id="filterYear" class="form-control" value="{{ current_year }}" onchange="loadDashboard()">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Mes</label>
+                    <select id="filterMonth" class="form-select" onchange="loadDashboard()">
+                        <option value="">Todos</option>
+                        <option value="Enero">Enero</option>
+                        <option value="Febrero">Febrero</option>
+                        <option value="Marzo">Marzo</option>
+                        <option value="Abril">Abril</option>
+                        <option value="Mayo">Mayo</option>
+                        <option value="Junio">Junio</option>
+                        <option value="Julio">Julio</option>
+                        <option value="Agosto">Agosto</option>
+                        <option value="Septiembre">Septiembre</option>
+                        <option value="Octubre">Octubre</option>
+                        <option value="Noviembre">Noviembre</option>
+                        <option value="Diciembre">Diciembre</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Categoría</label>
+                    <input type="text" id="filterCategory" class="form-control" placeholder="Ej: Negocios" onchange="loadDashboard()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-l-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Posts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="kpiPosts">-</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-edit fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-l-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Impresiones</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="kpiImpressions">-</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-eye fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-l-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Interacciones</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="kpiInteractions">-</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-comments fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-l-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Alcance Total</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="kpiReach">-</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-users fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="row mb-4">
+        <!-- Combo Chart -->
+        <div class="col-xl-8 col-lg-7">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Evolución: Posts vs Interacciones</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-area" style="height: 320px;">
+                        <canvas id="comboChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Donut Chart -->
+        <div class="col-xl-4 col-lg-5">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Formato de Contenido</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-pie pt-4 pb-2" style="height: 320px;">
+                        <canvas id="donutChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts Row 2 -->
+    <div class="row mb-4">
+       <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Comparativa por Temática: Alcance vs Impresiones</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-bar" style="height: 350px;">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </div>
+       </div>
+    </div>
+
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    let comboChart, donutChart, barChart;
+
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+
+    function loadDashboard() {
+        const filters = {
+            platform: document.getElementById('filterPlatform').value,
+            anio: document.getElementById('filterYear').value,
+            mes: document.getElementById('filterMonth').value,
+            category: document.getElementById('filterCategory').value
+        };
+        
+        // Sanitize
+        Object.keys(filters).forEach(key => !filters[key] && delete filters[key]);
+
+        fetch('/social-etl/api/dashboard/data', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(filters)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.error) {
+                console.error(data.error);
+                alert('Error cargando datos: ' + data.error);
+                return;
+            }
+            renderKPIs(data.kpis);
+            renderCharts(data.charts);
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error de conexión al cargar el dashboard');
+        });
+    }
+
+    function renderKPIs(kpis) {
+        document.getElementById('kpiPosts').textContent = kpis.posts.toLocaleString();
+        document.getElementById('kpiImpressions').textContent = kpis.impressions.toLocaleString();
+        document.getElementById('kpiInteractions').textContent = kpis.interactions.toLocaleString();
+        document.getElementById('kpiReach').textContent = kpis.reach.toLocaleString();
+    }
+
+    function renderCharts(charts) {
+        // 1. Combo
+        const ctxCombo = document.getElementById("comboChart");
+        if(comboChart) comboChart.destroy();
+        comboChart = new Chart(ctxCombo, {
+            type: 'bar',
+            data: {
+                labels: charts.combo.labels,
+                datasets: [
+                    {
+                        label: 'Interacciones',
+                        data: charts.combo.interactions,
+                        type: 'line',
+                        borderColor: '#4e73df',
+                        backgroundColor: '#4e73df',
+                        fill: false,
+                        yAxisID: 'y1'
+                    },
+                    {
+                        label: 'Posts',
+                        data: charts.combo.posts,
+                        backgroundColor: '#d1d3e2',
+                        yAxisID: 'y'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { type: 'linear', display: true, position: 'left' },
+                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+
+        // 2. Donut
+        const ctxDonut = document.getElementById("donutChart");
+        if(donutChart) donutChart.destroy();
+        donutChart = new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: {
+                labels: charts.donut.labels,
+                datasets: [{
+                    data: charts.donut.data,
+                    backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'],
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                cutout: '70%',
+            }
+        });
+        
+        // 3. Grouped Bar
+        const ctxBar = document.getElementById("barChart");
+        if(barChart) barChart.destroy();
+        barChart = new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: charts.bar.labels,
+                datasets: [
+                    {
+                        label: 'Alcance',
+                        data: charts.bar.reach,
+                        backgroundColor: '#f6c23e'
+                    },
+                    {
+                        label: 'Impresiones',
+                        data: charts.bar.impressions,
+                        backgroundColor: '#1cc88a'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

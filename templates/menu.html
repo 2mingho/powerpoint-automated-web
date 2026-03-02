@@ -60,5 +60,18 @@
     </div>
   </a>
   {% endif %}
+
+  {% if has_tool_access('social_etl') %}
+  <a href="{{ url_for('social_etl.manager') }}" class="tool-card">
+    <div class="tool-card-icon" style="background: #e3f2fd; color: #1976d2;">
+      <i class="fa-solid fa-project-diagram"></i>
+    </div>
+    <h3>Social ETL & Dashboard</h3>
+    <p>Gestiona perfiles de clasificacion, carga data de redes sociales y visualiza metrics unificadas.</p>
+    <div class="tool-card-arrow">
+      Abrir <i class="fa-solid fa-arrow-right"></i>
+    </div>
+  </a>
+  {% endif %}
 </div>
 {% endblock %}
