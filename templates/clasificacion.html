@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% block title %}Clasificacion de Data | Data Intel{% endblock %}
 {% block page_name %}Clasificacion{% endblock %}
 
@@ -15,12 +15,33 @@
   <div class="card-title"><i class="fa-solid fa-file-csv"></i> 1. Seleccionar Archivo</div>
   <div class="upload-zone" id="drop-zone" onclick="document.getElementById('csv_file').click()">
     <i class="fa-solid fa-cloud-arrow-up"></i>
-    <div class="upload-zone-title">Haz clic o arrastra el archivo CSV</div>
-    <div class="upload-zone-hint" id="file-name-display">No se ha seleccionado ningun archivo (UTF-16 Tabulado recomendado)</div>
-    <input type="file" id="csv_file" accept=".csv" style="display: none;" />
+    <div class="upload-zone-title">Haz clic o arrastra tu archivo</div>
+    <div class="upload-zone-hint" id="file-name-display">No se ha seleccionado ningun archivo (.csv, .xlsx, .xls)</div>
+    <input type="file" id="csv_file" accept=".csv,.xlsx,.xls,.txt" style="display: none;" />
   </div>
 </div>
 
+
+<!-- PASO 1.5: MAPEO DE COLUMNAS (aparece tras detectar el archivo) -->
+<div class="card animate-fade" id="mapping-card" style="display:none; margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-table-columns"></i> 1.5. Mapear Columnas</div>
+  <p class="form-hint" style="margin-bottom:16px;">El sistema detecto el formato automaticamente. Indica cual columna contiene el texto a clasificar.</p>
+
+  <div class="form-row" style="margin-bottom: 16px; align-items: flex-end;">
+    <div class="form-group">
+      <label class="form-label" for="sel_text_col"><strong>Columna de texto</strong> (requerido)</label>
+      <select id="sel_text_col" class="form-input"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="sel_keywords_col">Columna de keywords (opcional)</label>
+      <select id="sel_keywords_col" class="form-input"></select>
+    </div>
+  </div>
+
+  <div id="col-preview-wrap" style="overflow-x:auto; max-height:180px; border:1px solid var(--c-border-light); border-radius:var(--r-md);">
+    <table id="col-preview-table" style="width:100%; border-collapse:collapse; font-size:0.8rem;"></table>
+  </div>
+</div>
 <!-- PASO 2: REGLAS -->
 <div class="card" id="settings-card" style="margin-bottom: 24px;">
   <div class="card-title"><i class="fa-solid fa-sliders"></i> 2. Configuracion y Reglas</div>
@@ -46,6 +67,17 @@
     Las menciones se buscaran primero en <strong>'Hit Sentence'</strong> y opcionalmente en <strong>'Keywords'</strong>.
   </p>
 
+  <!-- Preset bar -->
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:12px 16px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light);">
+    <i class="fa-solid fa-bookmark" style="color:var(--c-primary);"></i>
+    <span style="font-size:0.85rem; color:var(--c-text-secondary);">Presets:</span>
+    <select id="preset-select" class="form-input" style="flex:1; max-width:260px; font-size:0.85rem;" onchange="loadPreset(this.value)">
+      <option value="">-- Seleccionar preset guardado --</option>
+    </select>
+    <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="savePreset()">
+      <i class="fa-solid fa-floppy-disk"></i> Guardar Preset
+    </button>
+  </div>
   <div id="rules-container"></div>
 
   <button type="button" class="btn-add" onclick="addCategory()" style="margin-top: 12px;">
@@ -92,6 +124,17 @@
   </div>
 </div>
 
+<!-- PROGRESS BAR (chunked mode) -->
+<div id="progress-container" style="display:none; margin-top: 20px; padding: 20px; background: var(--c-white); border: 1px solid var(--c-border-light); border-radius: var(--r-lg);">
+  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+    <span style="font-size: 0.88rem; color: var(--c-text-secondary);">Procesando lotes de datos...</span>
+    <span id="progress-label" style="font-size: 0.88rem; font-weight: 600; color: var(--c-primary);">0%</span>
+  </div>
+  <div style="background: var(--c-bg); border-radius: 999px; height: 10px; overflow: hidden;">
+    <div id="progress-bar" style="height: 100%; width: 0%; background: var(--c-primary); border-radius: 999px; transition: width 0.3s ease;"></div>
+  </div>
+  <div id="progress-detail" style="margin-top: 8px; font-size: 0.8rem; color: var(--c-text-secondary); text-align: center;"></div>
+</div>
 <script>
     let myChart = null;
     let categories = [
@@ -109,25 +152,61 @@
     const dropZone = document.getElementById('drop-zone');
     const fileNameDisplay = document.getElementById('file-name-display');
 
-    // File handling
-    fileInput.onchange = (e) => {
-        if (e.target.files.length > 0) {
-            fileNameDisplay.innerText = e.target.files[0].name;
-            document.getElementById('status-text').innerText = "Archivo listo";
-            dropZone.style.borderColor = 'var(--c-primary)';
-        }
-    };
+    let detectedFmt = null;
 
+    async function onFileSelected(file) {
+        if (!file) return;
+        fileNameDisplay.innerText = file.name;
+        document.getElementById('status-text').innerText = 'Analizando archivo...';
+        dropZone.style.borderColor = 'var(--c-primary)';
+        document.getElementById('mapping-card').style.display = 'none';
+        const fd = new FormData();
+        fd.append('csv_file', file);
+        try {
+            const resp = await fetch('/clasificacion/detect', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (!data.success) { alert('Error al analizar el archivo: ' + data.error); return; }
+            detectedFmt = data;
+            populateMappingCard(data);
+            document.getElementById('status-text').innerText = 'Columnas detectadas';
+        } catch(e) { alert('No se pudo analizar el archivo.'); }
+    }
+
+    function populateMappingCard(data) {
+        const card = document.getElementById('mapping-card');
+        const selText = document.getElementById('sel_text_col');
+        const selKw = document.getElementById('sel_keywords_col');
+        selText.innerHTML = '';
+        selKw.innerHTML = '<option value="">Ninguna</option>';
+        data.columns.forEach(col => {
+            const esc = col.replace(/"/g,'&quot;');
+            selText.innerHTML += '<option value="' + esc + '">' + esc + '</option>';
+            selKw.innerHTML += '<option value="' + esc + '">' + esc + '</option>';
+        });
+        const cols = data.columns.map(c => c.toLowerCase());
+        const hitIdx = cols.findIndex(c => c.includes('hit') || c.includes('sentence') || c.includes('texto') || c.includes('content'));
+        if (hitIdx >= 0) selText.selectedIndex = hitIdx;
+        const kwIdx = cols.findIndex(c => c.includes('keyword') || c.includes('tag'));
+        if (kwIdx >= 0) selKw.selectedIndex = kwIdx + 1;
+        const tbl = document.getElementById('col-preview-table');
+        tbl.innerHTML = '';
+        const thead = tbl.createTHead();
+        const hrow = thead.insertRow();
+        data.columns.forEach(c => { const th = document.createElement('th'); th.textContent = c; th.style.cssText = 'padding:6px 8px; background:var(--c-primary-light); font-size:0.78rem; white-space:nowrap;'; hrow.appendChild(th); });
+        const tbody = tbl.createTBody();
+        (data.preview || []).forEach(row => {
+            const tr = tbody.insertRow();
+            data.columns.forEach(c => { const td = tr.insertCell(); td.textContent = row[c] != null ? row[c] : ''; td.style.cssText = 'padding:5px 8px; border-bottom:1px solid var(--c-border-light); font-size:0.78rem; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'; });
+        });
+        card.style.display = 'block';
+    }
+
+    fileInput.onchange = (e) => { if (e.target.files.length > 0) onFileSelected(e.target.files[0]); };
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
     dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
     dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        if (e.dataTransfer.files.length > 0) {
-            fileInput.files = e.dataTransfer.files;
-            fileNameDisplay.innerText = e.dataTransfer.files[0].name;
-            document.getElementById('status-text').innerText = "Archivo listo";
-        }
+        e.preventDefault(); dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) { fileInput.files = e.dataTransfer.files; onFileSelected(e.dataTransfer.files[0]); }
     });
 
     function renderRules() {
@@ -135,41 +214,22 @@
         categories.forEach((cat, catIdx) => {
             const catDiv = document.createElement('div');
             catDiv.className = 'rule-category animate-fade';
-            catDiv.innerHTML = `
-                <div class="category-header">
-                    <input type="text" class="form-input" style="border:none; background:transparent; font-size:1.05rem; font-weight:600; padding:4px 8px; width:60%;"
-                           value="${cat.name}" onchange="updateCategoryName(${catIdx}, this.value)" onfocus="this.style.background='var(--c-white)';this.style.border='1px solid var(--c-border)'" onblur="this.style.background='transparent';this.style.border='none'">
-                    <button class="btn-remove" onclick="removeCategory(${catIdx})">
-                        <i class="fa-solid fa-trash"></i> Eliminar
-                    </button>
-                </div>
-                <div id="tematicas-${catIdx}">
-                    ${cat.tematicas.map((tem, temIdx) => `
-                        <div class="tematica-group animate-fade">
-                            <div class="tematica-header">
-                                <input type="text" class="form-input" placeholder="Tematica"
-                                       style="font-weight:600; width: 40%; padding: 6px 10px;"
-                                       value="${tem.name}" onchange="updateTematicaName(${catIdx}, ${temIdx}, this.value)">
-                                <button class="btn-remove" onclick="removeTematica(${catIdx}, ${temIdx})">
-                                    <i class="fa-solid fa-xmark"></i>
-                                </button>
-                            </div>
-                            <input type="text" class="form-input"
-                                   placeholder="Palabras clave (separadas por comas)"
-                                   style="font-size: 0.85rem;"
-                                   value="${tem.keywords}" onchange="updateKeywords(${catIdx}, ${temIdx}, this.value)">
-                        </div>
-                    `).join('')}
-                </div>
-                <button type="button" class="btn-add" onclick="addTematica(${catIdx})" style="margin-top: 8px;">
-                    <i class="fa-solid fa-plus"></i> Anadir Tematica
-                </button>
-            `;
+            catDiv.innerHTML = '<div class="category-header">' +
+                '<input type="text" class="form-input" style="border:none; background:transparent; font-size:1.05rem; font-weight:600; padding:4px 8px; width:60%;" value="' + cat.name.replace(/"/g,'&quot;') + '" onchange="updateCategoryName(' + catIdx + ', this.value)" onfocus="this.style.background=\'var(--c-white)\';this.style.border=\'1px solid var(--c-border)\'" onblur="this.style.background=\'transparent\';this.style.border=\'none\'">' +
+                '<button class="btn-remove" onclick="removeCategory(' + catIdx + ')"><i class="fa-solid fa-trash"></i> Eliminar</button>' +
+                '</div><div id="tematicas-' + catIdx + '">' +
+                cat.tematicas.map((tem, temIdx) =>
+                    '<div class="tematica-group animate-fade"><div class="tematica-header">' +
+                    '<input type="text" class="form-input" placeholder="Tematica" style="font-weight:600; width:40%; padding:6px 10px;" value="' + tem.name.replace(/"/g,'&quot;') + '" onchange="updateTematicaName(' + catIdx + ',' + temIdx + ', this.value)">' +
+                    '<button class="btn-remove" onclick="removeTematica(' + catIdx + ',' + temIdx + ')"><i class="fa-solid fa-xmark"></i></button>' +
+                    '</div><input type="text" class="form-input" placeholder="Palabras clave (separadas por comas)" style="font-size:0.85rem;" value="' + tem.keywords.replace(/"/g,'&quot;') + '" onchange="updateKeywords(' + catIdx + ',' + temIdx + ', this.value)"></div>'
+                ).join('') + '</div>' +
+                '<button type="button" class="btn-add" onclick="addTematica(' + catIdx + ')" style="margin-top:8px;"><i class="fa-solid fa-plus"></i> Anadir Tematica</button>';
             container.appendChild(catDiv);
         });
     }
 
-    function addCategory() { categories.push({ id: Date.now(), name: "Nueva Categoria", tematicas: [{ id: Date.now() + 1, name: "Nueva Tematica", keywords: "" }] }); renderRules(); }
+    function addCategory() { categories.push({ id: Date.now(), name: "Nueva Categoria", tematicas: [{ id: Date.now()+1, name: "Nueva Tematica", keywords: "" }] }); renderRules(); }
     function removeCategory(idx) { categories.splice(idx, 1); renderRules(); }
     function updateCategoryName(idx, val) { categories[idx].name = val; }
     function addTematica(catIdx) { categories[catIdx].tematicas.push({ id: Date.now(), name: "Nueva Tematica", keywords: "" }); renderRules(); }
@@ -187,40 +247,108 @@
         if (myChart) { myChart.destroy(); myChart = null; }
     }
 
+    async function loadPresetList() {
+        try {
+            const resp = await fetch('/clasificacion/presets');
+            const list = await resp.json();
+            const sel = document.getElementById('preset-select');
+            sel.innerHTML = '<option value="">-- Seleccionar preset guardado --</option>';
+            list.forEach(p => { sel.innerHTML += '<option value="' + p.id + '">' + p.name + ' (' + p.created_at + ')</option>'; });
+        } catch(e) {}
+    }
+
+    async function loadPreset(id) {
+        if (!id) return;
+        try {
+            const resp = await fetch('/clasificacion/presets/' + id);
+            const data = await resp.json();
+            if (!data.success) { alert('Error al cargar preset: ' + data.error); return; }
+            categories = data.rules.map(cat => ({
+                id: Date.now() + Math.random(), name: cat.category,
+                tematicas: cat.tematicas.map(t => ({ id: Date.now() + Math.random(), name: t.name, keywords: Array.isArray(t.keywords) ? t.keywords.join(', ') : (t.keywords || '') }))
+            }));
+            renderRules();
+            document.getElementById('preset-select').value = '';
+        } catch(e) { alert('No se pudo cargar el preset.'); }
+    }
+
+    async function savePreset() {
+        const name = prompt('Nombre del preset:');
+        if (!name || !name.trim()) return;
+        const rules = categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(t => ({ name: t.name, keywords: t.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
+        try {
+            const resp = await fetch('/clasificacion/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), rules }) });
+            const data = await resp.json();
+            if (data.success) { await loadPresetList(); alert('Preset "' + data.name + '" guardado.'); }
+            else { alert('Error: ' + data.error); }
+        } catch(e) { alert('No se pudo guardar el preset.'); }
+    }
+
+    const CHUNK_SIZE = 2000;
+    function mergeStats(target, partial) {
+        for (const [cat, data] of Object.entries(partial)) {
+            if (!target[cat]) target[cat] = { total: 0, tematicas: {} };
+            target[cat].total += data.total;
+            for (const [tem, cnt] of Object.entries(data.tematicas || {})) { target[cat].tematicas[tem] = (target[cat].tematicas[tem] || 0) + cnt; }
+        }
+    }
+    function setProgress(done, total) {
+        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        document.getElementById('progress-bar').style.width = pct + '%';
+        document.getElementById('progress-label').innerText = pct + '%';
+        document.getElementById('progress-detail').innerText = 'Chunk ' + done + ' de ' + total + ' procesado';
+    }
+    async function postJson(url, payload) {
+        const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const text = await resp.text();
+        try { return JSON.parse(text); } catch { throw new Error('Error del servidor (HTTP ' + resp.status + ').'); }
+    }
+
     async function processClassification() {
         const btn = document.getElementById('btnProcess');
         const file = fileInput.files[0];
         const defaultVal = document.getElementById('default_val').value || "Sin Clasificar";
         const useKeywords = document.getElementById('use_keywords').checked;
+        const textCol = document.getElementById('sel_text_col')?.value || 'Hit Sentence';
+        const kwCol   = document.getElementById('sel_keywords_col')?.value || '';
 
-        if (!file) { alert("Por favor, selecciona un archivo CSV primero."); return; }
+        if (!file) { alert("Por favor, selecciona un archivo primero."); return; }
         if (categories.length === 0) { alert("Define al menos una categoria y tematica."); return; }
+        if (!detectedFmt) { alert("Espera a que se detecte el formato del archivo."); return; }
 
         try {
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
-            document.getElementById('status-text').innerText = "Limpiando y clasificando...";
-
-            const rulesPayload = categories.map(cat => ({
-                category: cat.name,
-                tematicas: cat.tematicas.map(tem => ({
-                    name: tem.name,
-                    keywords: tem.keywords.split(',').map(k => k.trim()).filter(k => k)
-                }))
-            }));
-
-            const formData = new FormData();
-            formData.append('csv_file', file);
-            formData.append('rules', JSON.stringify(rulesPayload));
-            formData.append('default_val', defaultVal);
-            formData.append('use_keywords', useKeywords);
-
-            const response = await fetch('/clasificacion', { method: 'POST', body: formData });
-            const result = await response.json();
-            if (result.success) { showResults(result); }
-            else { throw new Error(result.error || "Error desconocido"); }
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Leyendo archivo...';
+            document.getElementById('status-text').innerText = "Preparando...";
+            const rulesPayload = categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(tem => ({ name: tem.name, keywords: tem.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
+            const csvText = await file.text();
+            const allLines = csvText.split(/\r?\n/);
+            const headerLine = allLines[0] + '\n';
+            const dataLines = allLines.slice(1).filter(l => l.trim() !== '');
+            const chunks = [];
+            for (let i = 0; i < dataLines.length; i += CHUNK_SIZE) chunks.push(dataLines.slice(i, i + CHUNK_SIZE).join('\n'));
+            const sessionId = crypto.randomUUID().replace(/-/g, '');
+            const mergedStats = {};
+            let totalRows = 0;
+            document.getElementById('progress-container').style.display = 'block';
+            setProgress(0, chunks.length);
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clasificando...';
+            for (let i = 0; i < chunks.length; i++) {
+                const res = await postJson('/clasificacion/chunk', { session_id: sessionId, header: headerLine, rows: chunks[i], rules: rulesPayload, default_val: defaultVal, use_keywords: useKeywords, chunk_index: i, text_col: textCol, keywords_col: kwCol });
+                if (!res.success) throw new Error(res.error || 'Error en chunk ' + i);
+                mergeStats(mergedStats, res.partial_stats || {});
+                totalRows += res.rows_in_chunk || 0;
+                setProgress(i + 1, chunks.length);
+                document.getElementById('status-text').innerText = (i+1) + ' / ' + chunks.length + ' chunks';
+            }
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Finalizando...';
+            const result = await postJson('/clasificacion/finalize', { session_id: sessionId, original_name: file.name, default_val: defaultVal, total_rows: totalRows });
+            document.getElementById('progress-container').style.display = 'none';
+            if (result.success) showResults(result);
+            else throw new Error(result.error || "Error desconocido");
         } catch (error) {
             console.error(error);
+            document.getElementById('progress-container').style.display = 'none';
             alert("Error: " + error.message);
             btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
             btn.disabled = false;
@@ -228,159 +356,39 @@
     }
 
     function showResults(result) {
-        console.log('[DEBUG] showResults called with:', result);
-        
-        if (!result || !result.stats) { 
-            console.error('[DEBUG] Missing result or stats');
-            alert("Error: El servidor no devolvio las estadisticas."); 
-            resetForm(); 
-            return; 
-        }
-
-        console.log('[DEBUG] Hiding settings and action bar...');
+        if (!result || !result.stats) { alert("Error: El servidor no devolvio las estadisticas."); resetForm(); return; }
         document.getElementById('settings-card').style.display = 'none';
         document.getElementById('action-bar-container').style.display = 'none';
-        
-        console.log('[DEBUG] Showing results card...');
-        const resultsCard = document.getElementById('results-card');
-        console.log('[DEBUG] results-card element:', resultsCard);
-        resultsCard.style.display = 'block';
-
-        console.log('[DEBUG] Querying child elements...');
-        let summary = document.getElementById('results-summary');
-        let insightsDiv = document.getElementById('insights-text');
-        
-        console.log('[DEBUG] Initial query results:', { 
-            summary: summary, 
-            insightsDiv: insightsDiv,
-            summaryExists: !!summary,
-            insightsDivExists: !!insightsDiv
-        });
-        
-        if (!summary || !insightsDiv) {
-            console.error("[DEBUG] Missing expected results elements:", { summary, insightsDiv });
-            console.log('[DEBUG] Attempting recovery...');
-            
-            // Fallback for missing elements
-            const card = document.getElementById('results-card');
-            if (card) {
-                 // Try to recover if somehow they were deleted from DOM
-                 if (!summary) {
-                     console.log('[DEBUG] Creating summary element...');
-                     const gridContainer = card.querySelector('div[style*="display: grid"]');
-                     console.log('[DEBUG] Grid container found:', gridContainer);
-                     if (gridContainer) {
-                         let s = document.createElement('div');
-                         s.id = 'results-summary';
-                         gridContainer.appendChild(s);
-                         summary = s; // Update the reference
-                         console.log('[DEBUG] Summary created and appended');
-                     }
-                 }
-                 if (!insightsDiv) {
-                     console.log('[DEBUG] Creating insights element...');
-                     let i = document.createElement('div');
-                     i.id = 'insights-text';
-                     i.className = 'flash-msg info';
-                     i.style.marginBottom = '24px';
-                     card.insertBefore(i, card.firstChild.nextSibling);
-                     insightsDiv = i; // Update the reference
-                     console.log('[DEBUG] Insights created and inserted');
-                 }
-            }
-            
-            // Re-query to ensure we have the elements
-            console.log('[DEBUG] Re-querying elements...');
-            if (!summary) summary = document.getElementById('results-summary');
-            if (!insightsDiv) insightsDiv = document.getElementById('insights-text');
-            
-            console.log('[DEBUG] After recovery:', { 
-                summary: summary, 
-                insightsDiv: insightsDiv,
-                summaryExists: !!summary,
-                insightsDivExists: !!insightsDiv
-            });
-            
-            // If still null, abort with error
-            if (!summary || !insightsDiv) {
-                console.error('[DEBUG] FATAL: Elements still null after recovery!');
-                alert('Error: No se pudieron cargar los elementos de resultados. Por favor, recarga la pagina.');
-                resetForm();
-                return;
-            }
-        }
-        
-        console.log('[DEBUG] Elements verified, proceeding with data population...');
-        
+        document.getElementById('mapping-card').style.display = 'none';
+        document.getElementById('results-card').style.display = 'block';
+        const summary = document.getElementById('results-summary');
+        const insightsDiv = document.getElementById('insights-text');
         const defaultVal = document.getElementById('default_val').value || "Sin Clasificar";
-
-        const statsForDefault = result.stats[defaultVal] || { total: 0 };
-        const unclassifiedCount = statsForDefault.total || 0;
+        const unclassifiedCount = (result.stats[defaultVal] || { total: 0 }).total;
         const totalRows = result.total_rows || 0;
         const classifiedCount = totalRows - unclassifiedCount;
         const percent = totalRows > 0 ? ((classifiedCount / totalRows) * 100).toFixed(1) : 0;
-
-        let insightMsg = "";
-        if (result.insights && result.insights.top_category != "N/A") {
-            insightMsg = `<strong>Insights:</strong> La categoria mas impactante es <strong>"${result.insights.top_category}"</strong> con ${result.insights.top_count} menciones. `;
-        } else {
-            insightMsg = `<strong>Resumen:</strong> No se han detectado categorias predominantes fuera del valor por defecto. `;
-        }
-        insightMsg += `Se ha logrado clasificar el <strong>${percent}%</strong> del total de datos.`;
-        insightsDiv.innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${insightMsg}`;
-        summary.innerHTML = `
-            <div style="background: var(--c-primary-light); padding: 20px; border-radius: var(--r-lg); height: 100%;">
-                <div style="margin-bottom: 16px;">
-                    <div style="font-size: 2.2rem; font-weight: 700; color: var(--c-primary); line-height:1;">${percent}%</div>
-                    <div style="font-size: 0.82rem; color: var(--c-text-secondary);">Tasa de Clasificacion</div>
-                </div>
-                <div style="font-size: 0.92rem;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span>Total Analizado:</span> <strong>${totalRows}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--c-success);">
-                        <span>Clasificados:</span> <strong>${classifiedCount}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; color: var(--c-danger);">
-                        <span>Sin Clasificar:</span> <strong>${unclassifiedCount}</strong>
-                    </div>
-                </div>
-            </div>
-        `;
-
+        let insightMsg = result.insights && result.insights.top_category != "N/A"
+            ? '<strong>Insights:</strong> La categoria mas impactante es <strong>"' + result.insights.top_category + '"</strong> con ' + result.insights.top_count + ' menciones. '
+            : '<strong>Resumen:</strong> No se han detectado categorias predominantes. ';
+        insightMsg += 'Clasificado: <strong>' + percent + '%</strong> del total.';
+        insightsDiv.innerHTML = '<i class="fa-solid fa-lightbulb"></i> ' + insightMsg;
+        summary.innerHTML = '<div style="background:var(--c-primary-light); padding:20px; border-radius:var(--r-lg); height:100%;">' +
+            '<div style="margin-bottom:16px;"><div style="font-size:2.2rem; font-weight:700; color:var(--c-primary);">' + percent + '%</div><div style="font-size:0.82rem; color:var(--c-text-secondary);">Tasa de Clasificacion</div></div>' +
+            '<div style="font-size:0.92rem;">' +
+            '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>Total:</span><strong>' + totalRows + '</strong></div>' +
+            '<div style="display:flex; justify-content:space-between; margin-bottom:8px; color:var(--c-success);"><span>Clasificados:</span><strong>' + classifiedCount + '</strong></div>' +
+            '<div style="display:flex; justify-content:space-between; color:var(--c-danger);"><span>Sin Clasificar:</span><strong>' + unclassifiedCount + '</strong></div></div></div>';
         renderChart(result.stats, defaultVal);
-
         const tree = document.getElementById('results-tree');
-        if (tree) tree.innerHTML = "<h4 style='margin-bottom: 16px; border-bottom: 2px solid var(--c-primary); display: inline-block; padding-bottom: 4px;'>Desglose por Categoria</h4>";
-
-        const sortedCats = Object.keys(result.stats).sort((a, b) => {
-            if (a === defaultVal) return 1;
-            if (b === defaultVal) return -1;
-            return a.localeCompare(b);
-        });
-
-        sortedCats.forEach(catName => {
-            const data = result.stats[catName];
-            if (!data || !tree) return;
-            const catNode = document.createElement('div');
-            catNode.style.marginBottom = "12px";
-            catNode.innerHTML = `
-                <div style="display: flex; justify-content: space-between; font-weight: 600; background: var(--c-white); padding: 10px 14px; border-radius: var(--r-md); border: 1px solid var(--c-border-light);">
-                    <span><i class="fa-solid fa-folder-open" style="color: var(--c-accent); margin-right: 8px;"></i> ${catName}</span>
-                    <span class="badge badge-primary">${data.total || 0}</span>
-                </div>
-                <div style="padding-left: 20px; margin-top: 4px;">
-                    ${data.tematicas ? Object.entries(data.tematicas).sort((a,b) => b[1]-a[1]).map(([tem, count]) => `
-                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 5px 10px; border-bottom: 1px dashed var(--c-border-light);">
-                            <span style="color: var(--c-text-secondary);">&#x2022; ${tem}</span>
-                            <span style="font-weight: 600;">${count}</span>
-                        </div>
-                    `).join('') : ''}
-                </div>
-            `;
+        if (tree) { tree.innerHTML = "<h4 style='margin-bottom:16px; border-bottom:2px solid var(--c-primary); display:inline-block; padding-bottom:4px;'>Desglose por Categoria</h4>"; }
+        Object.keys(result.stats).sort((a,b) => a === defaultVal ? 1 : b === defaultVal ? -1 : a.localeCompare(b)).forEach(catName => {
+            const data = result.stats[catName]; if (!data || !tree) return;
+            const catNode = document.createElement('div'); catNode.style.marginBottom = "12px";
+            catNode.innerHTML = '<div style="display:flex; justify-content:space-between; font-weight:600; background:var(--c-white); padding:10px 14px; border-radius:var(--r-md); border:1px solid var(--c-border-light);"><span><i class="fa-solid fa-folder-open" style="color:var(--c-accent); margin-right:8px;"></i>' + catName + '</span><span class="badge badge-primary">' + (data.total||0) + '</span></div>' +
+                '<div style="padding-left:20px; margin-top:4px;">' + (data.tematicas ? Object.entries(data.tematicas).sort((a,b)=>b[1]-a[1]).map(([tem,count])=>'<div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:5px 10px; border-bottom:1px dashed var(--c-border-light);"><span style="color:var(--c-text-secondary);">&#x2022; '+tem+'</span><span style="font-weight:600;">'+count+'</span></div>').join(''):'') + '</div>';
             tree.appendChild(catNode);
         });
-
         document.getElementById('download-link').href = result.download_url;
     }
 
@@ -388,41 +396,21 @@
         const ctx = document.getElementById('distChart').getContext('2d');
         const labels = Object.keys(stats).filter(k => k !== defaultVal);
         const data = labels.map(l => stats[l].total);
-
         if (stats[defaultVal]) { labels.push("Otras"); data.push(stats[defaultVal].total); }
-
-        const colors = ['#3f3fff', '#22c55e', '#f59e0b', '#a855f7', '#ffdd00', '#ef4444', '#14b8a6', '#334155', '#ea580c', '#94a3b8'];
-
+        const colors = ['#3f3fff','#22c55e','#f59e0b','#a855f7','#ffdd00','#ef4444','#14b8a6','#334155','#ea580c','#94a3b8'];
         const chartTextColor = getComputedStyle(document.documentElement).getPropertyValue('--c-chart-text').trim();
-
+        if (myChart) myChart.destroy();
         myChart = new Chart(ctx, {
             type: 'doughnut',
             data: { labels, datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }] },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { 
-                        position: 'right', 
-                        labels: { 
-                            boxWidth: 12, 
-                            color: chartTextColor,
-                            font: { size: 11, family: 'Inter' } 
-                        } 
-                    },
-                    title: { 
-                        display: true, 
-                        text: 'Distribucion por Categorias', 
-                        color: chartTextColor,
-                        font: { size: 13, weight: '600', family: 'Inter' } 
-                    }
-                },
-                cutout: '70%'
-            }
+            options: { responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'right', labels: { boxWidth:12, color:chartTextColor, font:{size:11,family:'Inter'} } }, title: { display:true, text:'Distribucion por Categorias', color:chartTextColor, font:{size:13,weight:'600',family:'Inter'} } },
+                cutout: '70%' }
         });
     }
 
     renderRules();
+    loadPresetList();
 </script>
 
 <style>

@@ -1,4 +1,4 @@
-# models.py
+﻿# models.py
 from flask_login import UserMixin
 from extensions import db
 from extensions import login_manager
@@ -91,6 +91,27 @@ class ActivityLog(db.Model):
     def __repr__(self):
         return f"<ActivityLog {self.action} by user_id={self.user_id}>"
 
+
+class ClassificationPreset(db.Model):
+    """Saved classification rule sets, scoped per user."""
+    __tablename__ = 'classification_presets'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name       = db.Column(db.String(100), nullable=False)
+    rules_json = db.Column(db.Text, nullable=False)   # JSON array of categories+tematicas
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='classification_presets')
+
+    def get_rules(self):
+        try:
+            return json.loads(self.rules_json)
+        except Exception:
+            return []
+
+    def __repr__(self):
+        return f"<ClassificationPreset {self.name} (user={self.user_id})>"
 
 @login_manager.user_loader
 def load_user(user_id):

@@ -1,4 +1,5 @@
-import os
+﻿import os
+import pandas as pd
 import uuid
 import zipfile
 import shutil
@@ -8,6 +9,7 @@ import functools
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
 from services.classifier import classify_mentions
+from services.file_loader import detect_format, read_full_as_tsv
 from werkzeug.utils import secure_filename
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -19,7 +21,7 @@ from dotenv import load_dotenv
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
 from extensions import db, login_manager
-from models import User, Report, ActivityLog
+from models import User, Report, ActivityLog, ClassificationPreset
 from services import calculation as report
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 from pptx_builder import engine as ppt_engine
@@ -38,7 +40,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 if not app.config['SECRET_KEY']:
     raise RuntimeError("SECRET_KEY must be set in .env file. Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'")
 
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB upload limit
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB upload limit
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 
 db.init_app(app)
@@ -133,13 +135,32 @@ def clean_scratch_folder():
 # Tool access decorator
 # ─────────────────────────────────────────────────────────────
 
+def _is_ajax():
+    """Return True if the request is an AJAX/fetch call expecting JSON."""
+    return (
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or 'application/json' in request.headers.get('Accept', '')
+        or request.headers.get('Content-Type', '').startswith('multipart')  # FormData fetch
+    )
+
+
 def tool_required(tool_key):
-    """Decorator: blocks access if user lacks permission for *tool_key*."""
+    """Decorator: blocks access if user lacks permission for *tool_key*.
+    For AJAX/fetch requests returns JSON errors instead of HTML redirects.
+    """
     def wrapper(f):
         @functools.wraps(f)
-        @login_required
         def decorated(*args, **kwargs):
+            if not current_user.is_authenticated:
+                if _is_ajax():
+                    from flask import jsonify as _jsonify
+                    return _jsonify({"success": False, "error": "Sesion expirada. Por favor recarga la pagina e inicia sesion nuevamente."}), 401
+                return redirect(url_for('auth.login'))
             if not current_user.has_tool_access(tool_key):
+                if _is_ajax():
+                    from flask import jsonify as _jsonify
+                    return _jsonify({"success": False, "error": "No tienes permiso para acceder a esta herramienta."}), 403
                 flash('No tienes permiso para acceder a esta herramienta.', 'error')
                 return redirect(url_for('menu'))
             return f(*args, **kwargs)
@@ -624,6 +645,230 @@ def clasificacion():
             
     return render_template('clasificacion.html')
 
+
+# ─────────────────────────────────────────────────────────────
+
+
+# ─────────────────────────────────────────────────────────────
+# File format detection
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/clasificacion/detect', methods=['POST'])
+@tool_required('classification')
+def clasificacion_detect():
+    """Auto-detect format + return column list and preview rows."""
+    file = request.files.get('csv_file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No se recibio ningun archivo.'}), 400
+    try:
+        raw = file.read()
+        result = detect_format(raw, file.filename)
+        if result.get('error'):
+            return jsonify({'success': False, 'error': result['error']}), 400
+        return jsonify({'success': True,
+                        'columns': result['columns'],
+                        'preview': result['preview'],
+                        'encoding': result.get('encoding'),
+                        'sep': result.get('sep'),
+                        'file_type': result.get('file_type')})
+    except Exception as e:
+        app.logger.error(f"Error en detect: {e}")
+        return jsonify({'success': False, 'error': 'No se pudo analizar el archivo.'}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Classification Presets CRUD
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/clasificacion/presets', methods=['GET'])
+@tool_required('classification')
+def presets_list():
+    presets = (ClassificationPreset.query
+               .filter_by(user_id=current_user.id)
+               .order_by(ClassificationPreset.created_at.desc())
+               .all())
+    return jsonify([{'id': p.id, 'name': p.name,
+                     'created_at': p.created_at.strftime('%d/%m/%Y')} for p in presets])
+
+
+@app.route('/clasificacion/presets', methods=['POST'])
+@tool_required('classification')
+def presets_create():
+    data = request.get_json(force=True)
+    name  = (data.get('name') or '').strip()[:100]
+    rules = data.get('rules', [])
+    if not name:
+        return jsonify({'success': False, 'error': 'El nombre del preset es obligatorio.'}), 400
+    try:
+        preset = ClassificationPreset(
+            user_id=current_user.id,
+            name=name,
+            rules_json=json.dumps(rules, ensure_ascii=False)
+        )
+        db.session.add(preset)
+        db.session.commit()
+        log_activity('preset_create', f'Preset guardado: {name}')
+        return jsonify({'success': True, 'id': preset.id, 'name': preset.name})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error guardando preset: {e}")
+        return jsonify({'success': False, 'error': 'No se pudo guardar el preset.'}), 500
+
+
+@app.route('/clasificacion/presets/<int:preset_id>', methods=['GET'])
+@tool_required('classification')
+def presets_load(preset_id):
+    preset = ClassificationPreset.query.filter_by(id=preset_id, user_id=current_user.id).first()
+    if not preset:
+        return jsonify({'success': False, 'error': 'Preset no encontrado.'}), 404
+    return jsonify({'success': True, 'rules': preset.get_rules(), 'name': preset.name})
+
+
+@app.route('/clasificacion/presets/<int:preset_id>', methods=['DELETE'])
+@tool_required('classification')
+def presets_delete(preset_id):
+    preset = ClassificationPreset.query.filter_by(id=preset_id, user_id=current_user.id).first()
+    if not preset:
+        return jsonify({'success': False, 'error': 'Preset no encontrado.'}), 404
+    try:
+        name = preset.name
+        db.session.delete(preset)
+        db.session.commit()
+        log_activity('preset_delete', f'Preset eliminado: {name}')
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'No se pudo eliminar el preset.'}), 500
+# Chunked classification endpoints
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/clasificacion/chunk', methods=['POST'])
+@tool_required('classification')
+def clasificacion_chunk():
+    """Receive one batch of CSV rows, classify it, append to a temp session file."""
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"success": False, "error": "No se recibieron datos."}), 400
+
+        session_id   = data.get('session_id', '')
+        header_text  = data.get('header', '')
+        rows_text    = data.get('rows', '')
+        rules        = data.get('rules', [])
+        default_val  = data.get('default_val', 'Sin Clasificar')
+        use_keywords = bool(data.get('use_keywords', False))
+        chunk_index  = int(data.get('chunk_index', 0))
+        text_col     = data.get('text_col', 'Hit Sentence') or 'Hit Sentence'
+        keywords_col = data.get('keywords_col', '') or ''
+
+        safe_sid = secure_filename(session_id)
+        if not safe_sid or safe_sid != session_id:
+            return jsonify({"success": False, "error": "session_id invalido."}), 400
+
+        if not header_text or not rows_text:
+            return jsonify({"success": False, "error": "Datos de chunk vacios."}), 400
+
+        from services.classifier import classify_chunk as _classify_chunk
+        df_chunk = _classify_chunk(rows_text, header_text, rules,
+                                   default_val=default_val, use_keywords=use_keywords,
+                                   text_col=text_col, keywords_col=keywords_col)
+
+        if df_chunk is None or df_chunk.empty:
+            return jsonify({"success": True, "partial_stats": {}, "rows_in_chunk": 0})
+
+        session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"session_{safe_sid}.csv")
+        write_header = (chunk_index == 0) or (not os.path.exists(session_file))
+        df_chunk.to_csv(session_file, sep='\t', encoding='utf-16',
+                        index=False, mode='w' if write_header else 'a',
+                        header=write_header)
+
+        partial_stats = {}
+        grouped = df_chunk.groupby(['Categoria', 'Tematica']).size().reset_index(name='count')
+        for _, row in grouped.iterrows():
+            cat   = str(row['Categoria'])
+            tem   = str(row['Tematica'])
+            count = int(row['count'])
+            if cat not in partial_stats:
+                partial_stats[cat] = {"total": 0, "tematicas": {}}
+            partial_stats[cat]["total"] += count
+            partial_stats[cat]["tematicas"][tem] = partial_stats[cat]["tematicas"].get(tem, 0) + count
+
+        return jsonify({
+            "success": True,
+            "partial_stats": partial_stats,
+            "rows_in_chunk": len(df_chunk)
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error en chunk de clasificacion: {e}")
+        return jsonify({"success": False, "error": "Error procesando el chunk."}), 500
+
+
+@app.route('/clasificacion/finalize', methods=['POST'])
+@tool_required('classification')
+def clasificacion_finalize():
+    """Read the assembled session file, compute final stats, return download URL."""
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"success": False, "error": "No se recibieron datos."}), 400
+
+        session_id    = data.get('session_id', '')
+        original_name = data.get('original_name', 'archivo.csv')
+        default_val   = data.get('default_val', 'Sin Clasificar')
+
+        safe_sid = secure_filename(session_id)
+        if not safe_sid or safe_sid != session_id:
+            return jsonify({"success": False, "error": "session_id invalido."}), 400
+
+        session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"session_{safe_sid}.csv")
+        if not os.path.exists(session_file):
+            return jsonify({"success": False, "error": "Sesion no encontrada. Reinicia el proceso."}), 404
+
+        df_full = pd.read_csv(session_file, sep='\t', encoding='utf-16', on_bad_lines='skip')
+
+        stats = {}
+        if not df_full.empty and 'Categoria' in df_full.columns and 'Tematica' in df_full.columns:
+            grouped = df_full.groupby(['Categoria', 'Tematica']).size().reset_index(name='count')
+            for _, row in grouped.iterrows():
+                cat   = str(row['Categoria'])
+                tem   = str(row['Tematica'])
+                count = int(row['count'])
+                if cat not in stats:
+                    stats[cat] = {"total": 0, "tematicas": {}}
+                stats[cat]["total"] += count
+                stats[cat]["tematicas"][tem] = stats[cat]["tematicas"].get(tem, 0) + count
+
+        top_category = "N/A"
+        max_val = -1
+        for cat, d in stats.items():
+            if cat != default_val and d['total'] > max_val:
+                max_val = d['total']
+                top_category = cat
+
+        safe_orig = secure_filename(original_name)
+        output_filename = f"Clasificado_{safe_orig}"
+        output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{safe_sid}.csv")
+        os.replace(session_file, output_path)
+
+        log_activity('classify_data',
+                     f'Clasificacion (chunked): {safe_orig} ({len(df_full)} filas, {len(stats)} categorias)')
+
+        return jsonify({
+            "success": True,
+            "download_url": url_for('download_classified', file_id=safe_sid, original_name=output_filename),
+            "stats": stats,
+            "total_rows": len(df_full),
+            "insights": {
+                "top_category": top_category,
+                "top_count": max_val if max_val != -1 else 0
+            }
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error en finalizacion de clasificacion: {e}")
+        return jsonify({"success": False, "error": "Error finalizando la clasificacion."}), 500
+
 @app.route('/download_classified/<file_id>/<original_name>')
 @login_required
 def download_classified(file_id, original_name):
@@ -783,6 +1028,15 @@ def page_not_found(e):
     return render_template('error.html',
                            title="Error 404 - Página no encontrada",
                            message="La página que estás buscando no existe."), 404
+
+
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    if _is_ajax():
+        return jsonify({"success": False, "error": "El archivo es demasiado grande. El limite maximo es 200 MB."}), 413
+    return render_template('error.html',
+                           title="Archivo demasiado grande",
+                           message="El archivo que subiste supera el limite de 200 MB."), 413
 
 
 @app.errorhandler(500)

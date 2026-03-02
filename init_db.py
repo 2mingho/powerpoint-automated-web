@@ -1,4 +1,4 @@
-# init_db.py
+﻿# init_db.py
 import os
 import sys
 import sqlite3
@@ -92,6 +92,17 @@ def update_structure_if_needed():
     except Exception:
         pass
 
+    # Classification presets table
+    create_table_if_not_exists(conn, "classification_presets", """
+        CREATE TABLE classification_presets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            rules_json TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
     conn.commit()
     conn.close()
     print("[ok] Verificacion de estructura completada.")
