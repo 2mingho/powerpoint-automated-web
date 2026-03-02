@@ -3,12 +3,638 @@
 {% block page_name %}Union de Archivos{% endblock %}
 
 {% block content %}
-<div class="card coming-soon-card">
-  <i class="fa-solid fa-hammer"></i>
-  <h2>Union de Archivos</h2>
-  <p>Esta herramienta estara disponible proximamente. Permitira unir archivos de diferentes redes sociales y estandarizar la estructura.</p>
-  <div style="margin-top: 20px;">
-    <span class="badge badge-warning"><i class="fa-solid fa-clock"></i> En desarrollo</span>
+<div class="page-header">
+  <h1>Union de Archivos</h1>
+  <p>Une multiples archivos tabulares en uno solo. Soporta CSV, Excel (.xlsx, .xls) con deteccion automatica de formato.</p>
+</div>
+
+<!-- PASO 1: SELECCION DE MODO -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-sliders"></i> 1. Seleccionar Modo</div>
+  <div class="merge-mode-toggle">
+    <button id="btn-mode-default" class="merge-mode-btn active" onclick="setMode('default')">
+      <i class="fa-solid fa-layer-group"></i>
+      <div>
+        <strong>Modo Predeterminado</strong>
+        <span>Une 2+ archivos con la misma estructura de columnas</span>
+      </div>
+    </button>
+    <button id="btn-mode-advanced" class="merge-mode-btn" onclick="setMode('advanced')">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      <div>
+        <strong>Modo Avanzado</strong>
+        <span>Mapea columnas visualmente entre 2 archivos diferentes</span>
+      </div>
+    </button>
   </div>
 </div>
+
+<!-- PASO 2: CARGA DE ARCHIVOS (DEFAULT MODE) -->
+<div id="section-default" class="card animate-fade" style="margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-file-arrow-up"></i> 2. Subir Archivos (minimo 2)</div>
+  <div class="upload-zone" id="drop-zone-default" onclick="document.getElementById('files-default').click()">
+    <i class="fa-solid fa-cloud-arrow-up"></i>
+    <div class="upload-zone-title">Haz clic o arrastra tus archivos aqui</div>
+    <div class="upload-zone-hint">.csv, .xlsx, .xls — Puedes seleccionar varios</div>
+    <input type="file" id="files-default" accept=".csv,.xlsx,.xls,.txt" multiple style="display:none;" />
+  </div>
+  <div id="file-list-default" style="margin-top: 16px;"></div>
+</div>
+
+<!-- PASO 2: CARGA DE ARCHIVOS (ADVANCED MODE) -->
+<div id="section-advanced" class="card animate-fade" style="display:none; margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-file-arrow-up"></i> 2. Subir Archivos (2 archivos)</div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <!-- File A -->
+    <div>
+      <h4 style="margin-bottom: 12px; color: var(--c-primary);"><i class="fa-solid fa-a"></i> Archivo Principal (estructura base)</h4>
+      <div class="upload-zone upload-zone-sm" id="drop-zone-a" onclick="document.getElementById('file-a').click()">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        <div class="upload-zone-hint" id="file-a-name">Seleccionar archivo A</div>
+        <input type="file" id="file-a" accept=".csv,.xlsx,.xls,.txt" style="display:none;" />
+      </div>
+      <div id="settings-a" class="file-settings" style="display:none;">
+        <div class="form-row" style="gap: 8px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" style="font-size:0.72rem;">Codificacion</label>
+            <select id="enc-a" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+              <option value="">Auto</option>
+              <option value="utf-8">UTF-8</option>
+              <option value="utf-16">UTF-16</option>
+              <option value="latin-1">Latin-1</option>
+              <option value="cp1252">CP-1252</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" style="font-size:0.72rem;">Separador</label>
+            <select id="sep-a" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+              <option value="">Auto</option>
+              <option value="&#9;">Tab</option>
+              <option value=",">Coma</option>
+              <option value=";">Punto y coma</option>
+              <option value="|">Pipe</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="preview-a" style="margin-top: 8px;"></div>
+    </div>
+    <!-- File B -->
+    <div>
+      <h4 style="margin-bottom: 12px; color: var(--c-text-secondary);"><i class="fa-solid fa-b"></i> Archivo Secundario</h4>
+      <div class="upload-zone upload-zone-sm" id="drop-zone-b" onclick="document.getElementById('file-b').click()">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        <div class="upload-zone-hint" id="file-b-name">Seleccionar archivo B</div>
+        <input type="file" id="file-b" accept=".csv,.xlsx,.xls,.txt" style="display:none;" />
+      </div>
+      <div id="settings-b" class="file-settings" style="display:none;">
+        <div class="form-row" style="gap: 8px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" style="font-size:0.72rem;">Codificacion</label>
+            <select id="enc-b" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+              <option value="">Auto</option>
+              <option value="utf-8">UTF-8</option>
+              <option value="utf-16">UTF-16</option>
+              <option value="latin-1">Latin-1</option>
+              <option value="cp1252">CP-1252</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" style="font-size:0.72rem;">Separador</label>
+            <select id="sep-b" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+              <option value="">Auto</option>
+              <option value="&#9;">Tab</option>
+              <option value=",">Coma</option>
+              <option value=";">Punto y coma</option>
+              <option value="|">Pipe</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="preview-b" style="margin-top: 8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PASO 3: MAPEO DE COLUMNAS (ADVANCED ONLY) -->
+<div id="section-mapping" class="card animate-fade" style="display:none; margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-arrows-left-right"></i> 3. Mapeo de Columnas</div>
+  <p class="form-hint" style="margin-bottom: 16px;">Empareja cada columna del <strong>Archivo A</strong> con su equivalente en el <strong>Archivo B</strong>. Las columnas con nombres similares se auto-sugieren.</p>
+  <div id="mapping-grid" style="display: flex; flex-direction: column; gap: 8px;"></div>
+</div>
+
+<!-- PASO: RESULTADOS -->
+<div id="section-results" class="card animate-fade" style="display:none; margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-circle-check"></i> Resultado</div>
+  <div id="result-insights" class="flash-msg info" style="margin-bottom: 16px;"></div>
+  <div id="result-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"></div>
+  <div style="display: flex; gap: 12px;">
+    <button class="btn btn-secondary" onclick="resetAll()"><i class="fa-solid fa-arrow-left"></i> Nueva Union</button>
+    <a id="download-link" href="#" class="btn btn-primary" style="flex-grow:1; text-align:center;">
+      <i class="fa-solid fa-download"></i> Descargar Archivo Unido
+    </a>
+  </div>
+</div>
+
+<!-- ACCION FINAL -->
+<div id="action-bar" style="text-align:center; margin-top: 32px;">
+  <div class="classifier-actions">
+    <div>
+      <span style="color: var(--c-text-secondary); font-size: 0.88rem;">Estado:</span>
+      <strong style="color: var(--c-primary);" id="status-text">Selecciona archivos para empezar</strong>
+    </div>
+    <div style="width: 1px; height: 20px; background: var(--c-border);"></div>
+    <button id="btnMerge" onclick="doMerge()" class="btn btn-primary" disabled>
+      <i class="fa-solid fa-bolt"></i> Unir Archivos
+    </button>
+  </div>
+</div>
+
+<!-- PROGRESS BAR -->
+<div id="progress-container" style="display:none; margin-top: 20px; padding: 20px; background: var(--c-white); border: 1px solid var(--c-border-light); border-radius: var(--r-lg);">
+  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+    <span style="font-size: 0.88rem; color: var(--c-text-secondary);">Procesando union...</span>
+    <span id="progress-label" style="font-size: 0.88rem; font-weight: 600; color: var(--c-primary);">...</span>
+  </div>
+  <div style="background: var(--c-bg); border-radius: 999px; height: 10px; overflow: hidden;">
+    <div id="progress-bar" style="height: 100%; width: 100%; background: var(--c-primary); border-radius: 999px; animation: progressPulse 1.5s ease infinite;"></div>
+  </div>
+</div>
+
+<script>
+// ─── State ───
+let currentMode = 'default';
+let defaultFiles = [];       // [{file, info}]
+let advFileA = null;         // {file, info, raw}
+let advFileB = null;
+
+// ─── Mode Toggle ───
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn-mode-default').classList.toggle('active', mode === 'default');
+  document.getElementById('btn-mode-advanced').classList.toggle('active', mode === 'advanced');
+  document.getElementById('section-default').style.display = mode === 'default' ? 'block' : 'none';
+  document.getElementById('section-advanced').style.display = mode === 'advanced' ? 'block' : 'none';
+  document.getElementById('section-mapping').style.display = 'none';
+  document.getElementById('section-results').style.display = 'none';
+  updateStatus();
+}
+
+// ─── Default Mode: File list ───
+const filesInput = document.getElementById('files-default');
+const dropDefault = document.getElementById('drop-zone-default');
+
+filesInput.onchange = (e) => { addDefaultFiles(Array.from(e.target.files)); };
+dropDefault.addEventListener('dragover', (e) => { e.preventDefault(); dropDefault.classList.add('dragover'); });
+dropDefault.addEventListener('dragleave', () => { dropDefault.classList.remove('dragover'); });
+dropDefault.addEventListener('drop', (e) => {
+  e.preventDefault(); dropDefault.classList.remove('dragover');
+  addDefaultFiles(Array.from(e.dataTransfer.files));
+});
+
+async function addDefaultFiles(newFiles) {
+  for (const f of newFiles) {
+    const info = await detectFile(f);
+    if (info) defaultFiles.push({ file: f, info });
+  }
+  renderDefaultFileList();
+  updateStatus();
+}
+
+function removeDefaultFile(idx) {
+  defaultFiles.splice(idx, 1);
+  renderDefaultFileList();
+  updateStatus();
+}
+
+function renderDefaultFileList() {
+  const container = document.getElementById('file-list-default');
+  if (defaultFiles.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = defaultFiles.map((item, i) => {
+    const cols = item.info.columns.slice(0, 6).join(', ') + (item.info.columns.length > 6 ? '...' : '');
+    return '<div class="file-item animate-fade">' +
+      '<div class="file-item-info">' +
+        '<i class="fa-solid fa-file-lines" style="color:var(--c-primary); font-size:1.1rem;"></i>' +
+        '<div>' +
+          '<strong>' + esc(item.file.name) + '</strong>' +
+          '<div style="font-size:0.78rem; color:var(--c-text-secondary);">' + item.info.columns.length + ' columnas · ' + esc(item.info.file_type) +
+            (item.info.encoding ? ' · ' + esc(item.info.encoding) : '') +
+          '</div>' +
+          '<div style="font-size:0.72rem; color:var(--c-text-secondary); margin-top:2px;" title="' + esc(cols) + '">' + esc(cols) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<button class="btn btn-icon btn-outline" onclick="removeDefaultFile(' + i + ')" title="Quitar"><i class="fa-solid fa-xmark"></i></button>' +
+    '</div>';
+  }).join('');
+}
+
+// ─── Advanced Mode: File A / B ───
+const fileAInput = document.getElementById('file-a');
+const fileBInput = document.getElementById('file-b');
+const dropA = document.getElementById('drop-zone-a');
+const dropB = document.getElementById('drop-zone-b');
+
+fileAInput.onchange = (e) => { if (e.target.files[0]) loadAdvFile('a', e.target.files[0]); };
+fileBInput.onchange = (e) => { if (e.target.files[0]) loadAdvFile('b', e.target.files[0]); };
+
+['a', 'b'].forEach(side => {
+  const dz = side === 'a' ? dropA : dropB;
+  dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => { dz.classList.remove('dragover'); });
+  dz.addEventListener('drop', (e) => {
+    e.preventDefault(); dz.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) loadAdvFile(side, e.dataTransfer.files[0]);
+  });
+});
+
+async function loadAdvFile(side, file) {
+  const info = await detectFile(file);
+  if (!info) return;
+  const obj = { file, info };
+  if (side === 'a') {
+    advFileA = obj;
+    document.getElementById('file-a-name').innerText = file.name;
+    document.getElementById('settings-a').style.display = 'block';
+    renderPreview('preview-a', info);
+  } else {
+    advFileB = obj;
+    document.getElementById('file-b-name').innerText = file.name;
+    document.getElementById('settings-b').style.display = 'block';
+    renderPreview('preview-b', info);
+  }
+  if (advFileA && advFileB) buildMappingGrid();
+  updateStatus();
+}
+
+function renderPreview(containerId, info) {
+  const el = document.getElementById(containerId);
+  const cols = info.columns;
+  el.innerHTML = '<div style="font-size:0.75rem; color:var(--c-text-secondary); margin-bottom:4px;">' + cols.length + ' columnas detectadas</div>' +
+    '<div style="display:flex; flex-wrap:wrap; gap:4px;">' +
+    cols.map(c => '<span class="col-tag">' + esc(c) + '</span>').join('') +
+    '</div>';
+}
+
+// ─── Column Mapping Grid ───
+function buildMappingGrid() {
+  document.getElementById('section-mapping').style.display = 'block';
+  const grid = document.getElementById('mapping-grid');
+  const colsA = advFileA.info.columns;
+  const colsB = advFileB.info.columns;
+  const colsBLower = colsB.map(c => c.toLowerCase().trim());
+
+  grid.innerHTML = '<div class="mapping-header">' +
+    '<div>Archivo A (estructura final)</div><div></div><div>Archivo B (origen)</div></div>' +
+    colsA.map((colA, i) => {
+      // Auto-suggest: find matching column in B
+      const lowerA = colA.toLowerCase().trim();
+      let bestMatch = '';
+      const exactIdx = colsBLower.indexOf(lowerA);
+      if (exactIdx >= 0) bestMatch = colsB[exactIdx];
+
+      return '<div class="mapping-row animate-fade" style="animation-delay:' + (i * 30) + 'ms">' +
+        '<div class="mapping-col-a"><i class="fa-solid fa-table-columns" style="color:var(--c-primary);"></i> ' + esc(colA) + '</div>' +
+        '<div class="mapping-arrow"><i class="fa-solid fa-arrow-left"></i></div>' +
+        '<div><select class="form-select mapping-select" data-col-a="' + esc(colA) + '">' +
+          '<option value="">— Ignorar —</option>' +
+          colsB.map(cb => '<option value="' + esc(cb) + '"' + (cb === bestMatch ? ' selected' : '') + '>' + esc(cb) + '</option>').join('') +
+        '</select></div>' +
+      '</div>';
+    }).join('');
+}
+
+// ─── Detect File ───
+async function detectFile(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const resp = await fetch('/union/detect', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!data.success) { alert('Error: ' + data.error); return null; }
+    return data;
+  } catch (e) {
+    alert('No se pudo analizar el archivo: ' + file.name);
+    return null;
+  }
+}
+
+// ─── Merge ───
+async function doMerge() {
+  const btn = document.getElementById('btnMerge');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+  document.getElementById('progress-container').style.display = 'block';
+  document.getElementById('status-text').innerText = 'Procesando union...';
+
+  try {
+    const fd = new FormData();
+    fd.append('mode', currentMode);
+
+    if (currentMode === 'advanced') {
+      fd.append('file_a', advFileA.file);
+      fd.append('file_b', advFileB.file);
+      fd.append('encoding_a', document.getElementById('enc-a').value);
+      fd.append('sep_a', document.getElementById('sep-a').value);
+      fd.append('encoding_b', document.getElementById('enc-b').value);
+      fd.append('sep_b', document.getElementById('sep-b').value);
+
+      // Build mapping: {col_b: col_a}
+      const mapping = {};
+      document.querySelectorAll('.mapping-select').forEach(sel => {
+        if (sel.value) mapping[sel.value] = sel.dataset.colA;
+      });
+      fd.append('mapping', JSON.stringify(mapping));
+    } else {
+      defaultFiles.forEach(item => fd.append('files', item.file));
+      // Encoding/separator overrides not exposed in default mode UI (auto-detect used)
+      fd.append('encodings', JSON.stringify([]));
+      fd.append('separators', JSON.stringify([]));
+    }
+
+    const resp = await fetch('/union/merge', { method: 'POST', body: fd });
+    const result = await resp.json();
+    document.getElementById('progress-container').style.display = 'none';
+
+    if (!result.success) throw new Error(result.error);
+    showResults(result);
+
+  } catch (error) {
+    document.getElementById('progress-container').style.display = 'none';
+    alert('Error: ' + error.message);
+    btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
+    btn.disabled = false;
+  }
+}
+
+function showResults(result) {
+  document.getElementById('section-default').style.display = 'none';
+  document.getElementById('section-advanced').style.display = 'none';
+  document.getElementById('section-mapping').style.display = 'none';
+  document.getElementById('action-bar').style.display = 'none';
+  document.getElementById('section-results').style.display = 'block';
+
+  document.getElementById('result-insights').innerHTML =
+    '<i class="fa-solid fa-circle-check"></i> <strong>Union completada!</strong> Se unieron ' +
+    result.files_merged + ' archivos con un total de ' + result.total_rows + ' filas y ' + result.total_columns + ' columnas.';
+
+  document.getElementById('result-stats').innerHTML =
+    '<div class="merge-stat"><div class="merge-stat-value">' + result.files_merged + '</div><div class="merge-stat-label">Archivos</div></div>' +
+    '<div class="merge-stat"><div class="merge-stat-value">' + result.total_rows.toLocaleString() + '</div><div class="merge-stat-label">Filas Totales</div></div>' +
+    '<div class="merge-stat"><div class="merge-stat-value">' + result.total_columns + '</div><div class="merge-stat-label">Columnas</div></div>';
+
+  document.getElementById('download-link').href = result.download_url;
+}
+
+// ─── Status ───
+function updateStatus() {
+  const txt = document.getElementById('status-text');
+  const btn = document.getElementById('btnMerge');
+  if (currentMode === 'default') {
+    const n = defaultFiles.length;
+    txt.innerText = n === 0 ? 'Selecciona archivos para empezar' : n + ' archivo(s) cargados';
+    btn.disabled = n < 2;
+  } else {
+    const hasA = !!advFileA, hasB = !!advFileB;
+    txt.innerText = !hasA && !hasB ? 'Sube ambos archivos' : !hasA ? 'Falta Archivo A' : !hasB ? 'Falta Archivo B' : 'Listo para unir';
+    btn.disabled = !(hasA && hasB);
+  }
+}
+
+function resetAll() {
+  defaultFiles = [];
+  advFileA = null;
+  advFileB = null;
+  document.getElementById('file-list-default').innerHTML = '';
+  document.getElementById('file-a-name').innerText = 'Seleccionar archivo A';
+  document.getElementById('file-b-name').innerText = 'Seleccionar archivo B';
+  document.getElementById('settings-a').style.display = 'none';
+  document.getElementById('settings-b').style.display = 'none';
+  document.getElementById('preview-a').innerHTML = '';
+  document.getElementById('preview-b').innerHTML = '';
+  document.getElementById('mapping-grid').innerHTML = '';
+  document.getElementById('section-mapping').style.display = 'none';
+  document.getElementById('section-results').style.display = 'none';
+  document.getElementById('action-bar').style.display = 'block';
+  document.getElementById('btnMerge').disabled = true;
+  document.getElementById('btnMerge').innerHTML = '<i class="fa-solid fa-bolt"></i> Unir Archivos';
+  setMode(currentMode);
+  updateStatus();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+
+<style>
+/* ─── Upload Zone ─── */
+.upload-zone {
+  border: 2px dashed var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--c-bg);
+  color: var(--c-text-secondary);
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--c-primary);
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+}
+.upload-zone i { font-size: 2rem; margin-bottom: 8px; display: block; }
+.upload-zone-title { font-weight: 600; font-size: 0.92rem; margin-bottom: 4px; }
+.upload-zone-hint { font-size: 0.78rem; }
+
+/* ─── Animate ─── */
+.animate-fade { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── Mode Toggle ─── */
+.merge-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.merge-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 2px solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-white);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  font-family: inherit;
+  color: var(--c-text);
+}
+.merge-mode-btn i {
+  font-size: 1.4rem;
+  color: var(--c-text-secondary);
+  flex-shrink: 0;
+}
+.merge-mode-btn strong {
+  display: block;
+  font-size: 0.92rem;
+  margin-bottom: 2px;
+}
+.merge-mode-btn span {
+  font-size: 0.78rem;
+  color: var(--c-text-secondary);
+}
+.merge-mode-btn:hover {
+  border-color: var(--c-primary);
+  background: var(--c-primary-light);
+}
+.merge-mode-btn.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-light);
+}
+.merge-mode-btn.active i {
+  color: var(--c-primary);
+}
+
+/* ─── File Items (Default list) ─── */
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-md);
+  margin-bottom: 8px;
+}
+.file-item-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Upload zone small variant ─── */
+.upload-zone-sm {
+  padding: 20px;
+  min-height: auto;
+}
+.upload-zone-sm i { font-size: 1.3rem; }
+
+/* ─── Column Tags ─── */
+.col-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  border-radius: var(--r-sm);
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid var(--c-border-light);
+}
+
+/* ─── File Settings ─── */
+.file-settings {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--c-bg);
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-border-light);
+}
+
+/* ─── Mapping Grid ─── */
+.mapping-header {
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--c-text-secondary);
+  border-bottom: 2px solid var(--c-border);
+}
+.mapping-row {
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--c-border-light);
+  transition: background 0.15s ease;
+}
+.mapping-row:hover { background: var(--c-bg); }
+.mapping-col-a {
+  font-weight: 600;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mapping-arrow {
+  text-align: center;
+  color: var(--c-text-secondary);
+  font-size: 0.85rem;
+}
+.mapping-select {
+  font-size: 0.85rem !important;
+  padding: 6px 10px !important;
+}
+
+/* ─── Result Stats ─── */
+.merge-stat {
+  background: var(--c-primary-light);
+  padding: 20px;
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+.merge-stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--c-primary);
+  line-height: 1.2;
+}
+.merge-stat-label {
+  font-size: 0.8rem;
+  color: var(--c-text-secondary);
+  margin-top: 4px;
+}
+
+/* ─── Progress pulse ─── */
+@keyframes progressPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─── Action Bar ─── */
+.classifier-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+}
+
+.flash-msg.info {
+  padding: 14px 18px;
+  background: var(--c-success-bg);
+  color: var(--c-success);
+  border-radius: var(--r-md);
+  font-size: 0.88rem;
+  border: 1px solid var(--c-success);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .merge-mode-toggle { grid-template-columns: 1fr; }
+  #section-advanced > div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  .mapping-header, .mapping-row { grid-template-columns: 1fr; gap: 4px; }
+  .mapping-arrow { display: none; }
+  #result-stats { grid-template-columns: 1fr !important; }
+}
+</style>
 {% endblock %}

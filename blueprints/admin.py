@@ -64,6 +64,8 @@ def dashboard():
         'DI': User.query.filter_by(role='DI').count(),
         'MW': User.query.filter_by(role='MW').count(),
     }
+    total_logs = ActivityLog.query.count()
+    
     # Exclude default admin's activity from dashboard
     default_admin = User.query.filter_by(email=DEFAULT_ADMIN_EMAIL).first()
     log_query = ActivityLog.query
@@ -77,6 +79,7 @@ def dashboard():
                            total_users=total_users,
                            active_users=active_users,
                            roles_count=roles_count,
+                           total_logs=total_logs,
                            recent_logs=recent_logs)
 
 
@@ -287,6 +290,8 @@ def user_delete(user_id):
 def activity_log():
     user_filter = request.args.get('user_id', '', type=str)
     action_filter = request.args.get('action', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = 50
 
@@ -304,6 +309,21 @@ def activity_log():
             pass
     if action_filter:
         query = query.filter(ActivityLog.action.ilike(f'%{action_filter}%'))
+    
+    if date_from:
+        try:
+            from datetime import datetime as dt
+            df = dt.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(ActivityLog.timestamp >= df)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime as dt, timedelta
+            dt_to = dt.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(ActivityLog.timestamp < dt_to)
+        except ValueError:
+            pass
 
     logs = (query
             .order_by(ActivityLog.timestamp.desc())
@@ -315,7 +335,9 @@ def activity_log():
                            logs=logs,
                            users=users,
                            user_filter=user_filter,
-                           action_filter=action_filter)
+                           action_filter=action_filter,
+                           date_from=date_from,
+                           date_to=date_to)
 
 
 @admin_bp.route('/activity/<int:user_id>')
@@ -327,11 +349,30 @@ def user_activity(user_id):
     if is_default_admin(user):
         flash('No se puede ver la actividad del administrador predeterminado.', 'error')
         return redirect(url_for('admin.activity_log'))
+    
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = 50
 
-    logs = (ActivityLog.query
-            .filter_by(user_id=user_id)
+    query = ActivityLog.query.filter_by(user_id=user_id)
+    
+    if date_from:
+        try:
+            from datetime import datetime as dt
+            df = dt.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(ActivityLog.timestamp >= df)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime as dt, timedelta
+            dt_to = dt.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(ActivityLog.timestamp < dt_to)
+        except ValueError:
+            pass
+
+    logs = (query
             .order_by(ActivityLog.timestamp.desc())
             .paginate(page=page, per_page=per_page, error_out=False))
 
@@ -340,4 +381,6 @@ def user_activity(user_id):
                            users=[user],
                            user_filter=str(user_id),
                            action_filter='',
+                           date_from=date_from,
+                           date_to=date_to,
                            single_user=user)

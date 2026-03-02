@@ -20,6 +20,8 @@ from dotenv import load_dotenv
 
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
+
+
 from extensions import db, login_manager
 from models import User, Report, ActivityLog, ClassificationPreset
 from services import calculation as report
@@ -49,6 +51,36 @@ login_manager.init_app(app)
 # Registrar blueprints
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
+
+# ─────────────────────────────────────────────────────────────
+# Automatic Request Logging (after_request)
+# ─────────────────────────────────────────────────────────────
+
+# Endpoints that already log manually — skip auto-log to avoid duplicates
+_MANUALLY_LOGGED = {
+    'index', 'clasificacion', 'download_file', 'download_classified',
+    'clasificacion_finalize', 'analisis_csv', 'auth.login', 'auth.logout',
+    'auth.register', 'union_archivos', 'union_detect', 'union_merge',
+    'union_download',
+}
+
+@app.after_request
+def auto_log_request(response):
+    """Automatically log successful authenticated GET page-views."""
+    if (current_user.is_authenticated
+            and response.status_code < 400
+            and request.endpoint
+            and not request.endpoint.startswith('static')
+            and not request.endpoint.startswith('admin.')
+            and request.endpoint not in _MANUALLY_LOGGED
+            and not request.is_json
+            and request.method == 'GET'):
+        try:
+            log_activity('page_view', f'{request.method} {request.endpoint}')
+        except Exception:
+            pass
+    return response
+
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -903,6 +935,134 @@ def download_classified(file_id, original_name):
 @tool_required('file_merge')
 def union_archivos():
     return render_template('union.html')
+
+
+@app.route('/union/detect', methods=['POST'])
+@tool_required('file_merge')
+def union_detect():
+    """Auto-detect format of an uploaded file and return columns + preview."""
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No se recibio ningun archivo.'}), 400
+    try:
+        raw = file.read()
+        result = detect_format(raw, file.filename)
+        if result.get('error'):
+            return jsonify({'success': False, 'error': result['error']}), 400
+        return jsonify({
+            'success': True,
+            'columns': result['columns'],
+            'preview': result['preview'],
+            'encoding': result.get('encoding'),
+            'sep': result.get('sep'),
+            'file_type': result.get('file_type'),
+        })
+    except Exception as e:
+        app.logger.error(f"Error en union/detect: {e}")
+        return jsonify({'success': False, 'error': 'No se pudo analizar el archivo.'}), 500
+
+
+@app.route('/union/merge', methods=['POST'])
+@tool_required('file_merge')
+def union_merge():
+    """Merge uploaded files using default or advanced mode."""
+    from services.file_merger import read_file, merge_default, merge_advanced, save_merged
+
+    mode = request.form.get('mode', 'default')
+
+    try:
+        if mode == 'advanced':
+            # Advanced: exactly 2 files + column mapping
+            file_a = request.files.get('file_a')
+            file_b = request.files.get('file_b')
+            if not file_a or not file_b:
+                return jsonify({'success': False, 'error': 'Se necesitan ambos archivos para el modo avanzado.'}), 400
+
+            mapping_str = request.form.get('mapping', '{}')
+            try:
+                mapping = json.loads(mapping_str)
+            except json.JSONDecodeError:
+                return jsonify({'success': False, 'error': 'Mapeo de columnas invalido.'}), 400
+
+            enc_a = request.form.get('encoding_a') or None
+            sep_a = request.form.get('sep_a') or None
+            enc_b = request.form.get('encoding_b') or None
+            sep_b = request.form.get('sep_b') or None
+
+            raw_a = file_a.read()
+            raw_b = file_b.read()
+            df_a = read_file(raw_a, file_a.filename, encoding=enc_a, sep=sep_a)
+            df_b = read_file(raw_b, file_b.filename, encoding=enc_b, sep=sep_b)
+
+            merged = merge_advanced(df_a, df_b, mapping)
+            files_merged = 2
+            detail = f'Union avanzada: {file_a.filename} + {file_b.filename} ({len(merged)} filas)'
+
+        else:
+            # Default: 2+ files
+            files = request.files.getlist('files')
+            if len(files) < 2:
+                return jsonify({'success': False, 'error': 'Se necesitan al menos 2 archivos.'}), 400
+
+            # Per-file encoding/separator overrides come as JSON arrays
+            encodings_str = request.form.get('encodings', '[]')
+            seps_str = request.form.get('separators', '[]')
+            try:
+                encodings = json.loads(encodings_str)
+                seps = json.loads(seps_str)
+            except json.JSONDecodeError:
+                encodings, seps = [], []
+
+            dataframes = []
+            filenames = []
+            for i, f in enumerate(files):
+                raw = f.read()
+                enc = encodings[i] if i < len(encodings) and encodings[i] else None
+                sep = seps[i] if i < len(seps) and seps[i] else None
+                df = read_file(raw, f.filename, encoding=enc, sep=sep)
+                dataframes.append(df)
+                filenames.append(f.filename)
+
+            merged = merge_default(dataframes)
+            files_merged = len(files)
+            detail = f'Union predeterminada: {", ".join(filenames)} ({len(merged)} filas)'
+
+        # Save result
+        unique_id = uuid.uuid4().hex[:10]
+        output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"merged_{unique_id}.csv")
+        save_merged(merged, output_path)
+
+        log_activity('file_merge', detail)
+
+        return jsonify({
+            'success': True,
+            'download_url': url_for('union_download', file_id=unique_id),
+            'total_rows': len(merged),
+            'total_columns': len(merged.columns),
+            'files_merged': files_merged,
+        })
+
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Error en union/merge: {e}")
+        return jsonify({'success': False, 'error': 'Error procesando la union de archivos.'}), 500
+
+
+@app.route('/union/download/<file_id>')
+@login_required
+def union_download(file_id):
+    """Download a merged file."""
+    safe_id = secure_filename(file_id)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"merged_{safe_id}.csv")
+
+    if not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+        abort(403)
+
+    if not os.path.exists(file_path):
+        abort(404)
+
+    return send_file(file_path, as_attachment=True, download_name=f"Union_{safe_id}.csv")
 
 
 @app.route('/analisis-csv', methods=['GET', 'POST'])
