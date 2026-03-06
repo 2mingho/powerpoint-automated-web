@@ -38,6 +38,45 @@
     </div>
   </div>
 
+  <!-- Manual encoding / separator overrides -->
+  <details style="margin-bottom:16px;">
+    <summary style="cursor:pointer; font-size:0.85rem; color:var(--c-text-secondary); user-select:none;">
+      <i class="fa-solid fa-wrench" style="margin-right:4px;"></i>
+      Opciones avanzadas de formato
+      <span style="font-size:0.78rem; margin-left:6px; color:var(--c-warning);">(cambia solo si los datos se ven incorrectos)</span>
+    </summary>
+    <div class="form-row" style="margin-top:12px; align-items:flex-end;">
+      <div class="form-group">
+        <label class="form-label" for="sel_encoding">Codificacion</label>
+        <select id="sel_encoding" class="form-input" style="font-size:0.85rem;">
+          <option value="">Auto-detectada</option>
+          <option value="utf-8">UTF-8</option>
+          <option value="utf-16">UTF-16</option>
+          <option value="latin-1">Latin-1 (ISO-8859-1)</option>
+          <option value="cp1252">CP-1252 (Windows)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sel_separator">Separador</label>
+        <select id="sel_separator" class="form-input" style="font-size:0.85rem;">
+          <option value="">Auto-detectado</option>
+          <option value=",">Coma ( , )</option>
+          <option value=";">Punto y Coma ( ; )</option>
+          <option value="&#9;">Tabulador ( \t )</option>
+          <option value="|">Pipes ( | )</option>
+        </select>
+      </div>
+    </div>
+    <p class="form-hint" style="margin-top:4px; font-size:0.78rem;">
+      <i class="fa-solid fa-circle-info"></i>
+      Si cambias la codificacion o separador, haz clic en
+      <strong>Volver a detectar</strong> para actualizar la vista previa.
+    </p>
+    <button type="button" class="btn btn-secondary" style="margin-top:8px; padding:6px 14px; font-size:0.83rem;" onclick="redetectFile()">
+      <i class="fa-solid fa-rotate"></i> Volver a detectar
+    </button>
+  </details>
+
   <div id="col-preview-wrap" style="overflow-x:auto; max-height:180px; border:1px solid var(--c-border-light); border-radius:var(--r-md);">
     <table id="col-preview-table" style="width:100%; border-collapse:collapse; font-size:0.8rem;"></table>
   </div>
@@ -284,7 +323,8 @@
         } catch(e) { alert('No se pudo guardar el preset.'); }
     }
 
-    const CHUNK_SIZE = 2000;
+
+
     function mergeStats(target, partial) {
         for (const [cat, data] of Object.entries(partial)) {
             if (!target[cat]) target[cat] = { total: 0, tematicas: {} };
@@ -304,6 +344,23 @@
         try { return JSON.parse(text); } catch { throw new Error('Error del servidor (HTTP ' + resp.status + ').'); }
     }
 
+    async function redetectFile() {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('csv_file', file);
+        // Re-send to detect using the updated manual overrides
+        // (detect endpoint auto-detects; changes are applied at upload time)
+        try {
+            const resp = await fetch('/clasificacion/detect', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (!data.success) { alert('Error al analizar el archivo: ' + data.error); return; }
+            detectedFmt = data;
+            populateMappingCard(data);
+            document.getElementById('status-text').innerText = 'Columnas detectadas';
+        } catch(e) { alert('No se pudo analizar el archivo.'); }
+    }
+
     async function processClassification() {
         const btn = document.getElementById('btnProcess');
         const file = fileInput.files[0];
@@ -311,6 +368,8 @@
         const useKeywords = document.getElementById('use_keywords').checked;
         const textCol = document.getElementById('sel_text_col')?.value || 'Hit Sentence';
         const kwCol   = document.getElementById('sel_keywords_col')?.value || '';
+        const manualEncoding = document.getElementById('sel_encoding')?.value || '';
+        const manualSep      = document.getElementById('sel_separator')?.value || '';
 
         if (!file) { alert("Por favor, selecciona un archivo primero."); return; }
         if (categories.length === 0) { alert("Define al menos una categoria y tematica."); return; }
@@ -320,19 +379,39 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Leyendo archivo...';
             document.getElementById('status-text').innerText = "Preparando...";
+            document.getElementById('progress-container').style.display = 'block';
+
+            // 1. Upload full file to server — server reads it with proper encoding
+            //    (avoids browser's file.text() which always decodes as UTF-8)
+            const uploadFd = new FormData();
+            uploadFd.append('csv_file', file);
+            if (manualEncoding) uploadFd.append('encoding', manualEncoding);
+            if (manualSep)      uploadFd.append('sep', manualSep);
+
+            const uploadResp = await fetch('/clasificacion/upload', { method: 'POST', body: uploadFd });
+            const uploadData = await uploadResp.json();
+            if (!uploadData.success) throw new Error(uploadData.error || 'Error al subir el archivo.');
+
+            const sessionId    = uploadData.session_id;
+            const headerLine   = uploadData.header;
+            const totalRowsSrv = uploadData.total_rows;
+            const chunkSize    = uploadData.chunk_size || 2000;
+
+            // 2. Fetch the stored TSV body and split into chunks
+            //    We do NOT call file.text() here — we use the UTF-8 TSV from the server
+            const tsvResp = await fetch('/clasificacion/upload_body/' + sessionId);
+            const tsvText = await tsvResp.text();
+            const dataLines = tsvText.split(/\r?\n/).filter(l => l.trim() !== '');
+
             const rulesPayload = categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(tem => ({ name: tem.name, keywords: tem.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
-            const csvText = await file.text();
-            const allLines = csvText.split(/\r?\n/);
-            const headerLine = allLines[0] + '\n';
-            const dataLines = allLines.slice(1).filter(l => l.trim() !== '');
             const chunks = [];
-            for (let i = 0; i < dataLines.length; i += CHUNK_SIZE) chunks.push(dataLines.slice(i, i + CHUNK_SIZE).join('\n'));
-            const sessionId = crypto.randomUUID().replace(/-/g, '');
+            for (let i = 0; i < dataLines.length; i += chunkSize) chunks.push(dataLines.slice(i, i + chunkSize).join('\n'));
+
             const mergedStats = {};
             let totalRows = 0;
-            document.getElementById('progress-container').style.display = 'block';
             setProgress(0, chunks.length);
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clasificando...';
+
             for (let i = 0; i < chunks.length; i++) {
                 const res = await postJson('/clasificacion/chunk', { session_id: sessionId, header: headerLine, rows: chunks[i], rules: rulesPayload, default_val: defaultVal, use_keywords: useKeywords, chunk_index: i, text_col: textCol, keywords_col: kwCol });
                 if (!res.success) throw new Error(res.error || 'Error en chunk ' + i);
