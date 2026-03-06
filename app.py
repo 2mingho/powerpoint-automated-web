@@ -709,6 +709,103 @@ def clasificacion_detect():
 
 
 # ─────────────────────────────────────────────────────────────
+# Full-file upload for chunked classification
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/clasificacion/upload', methods=['POST'])
+@tool_required('classification')
+def clasificacion_upload():
+    """
+    Receive the full file, read it properly (respecting encoding/sep overrides),
+    convert to UTF-8 TSV, store in a session temp file, and return chunk metadata.
+    This avoids using the browser's file.text() API which always decodes as UTF-8.
+    """
+    from services.file_loader import detect_format as _detect_fmt, read_full_as_tsv as _read_tsv
+
+    file = request.files.get('csv_file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No se recibio ningun archivo.'}), 400
+
+    try:
+        raw = file.read()
+
+        # Auto-detect format first
+        fmt = _detect_fmt(raw, file.filename)
+        if fmt.get('error'):
+            return jsonify({'success': False, 'error': fmt['error']}), 400
+
+        # Apply manual overrides if provided
+        manual_encoding = (request.form.get('encoding') or '').strip() or None
+        manual_sep      = (request.form.get('sep') or '').strip() or None
+
+        if manual_encoding:
+            fmt['encoding'] = manual_encoding
+        if manual_sep:
+            fmt['sep'] = manual_sep
+
+        # Read full file as UTF-8 TSV using the correct encoding/format
+        header, body = _read_tsv(raw, fmt)
+        if not header:
+            return jsonify({'success': False, 'error': 'No se pudo leer el archivo con el formato indicado.'}), 400
+
+        # Count data rows
+        data_lines = [l for l in body.split('\n') if l.strip()]
+        total_rows = len(data_lines)
+
+        # Store TSV in a session temp file for the chunk endpoint to use
+        session_id = uuid.uuid4().hex
+        session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"upload_{session_id}.tsv")
+        with open(session_file, 'w', encoding='utf-8') as f:
+            f.write(header)
+            f.write(body)
+
+        CHUNK_SIZE = 2000
+        total_chunks = max(1, -(-total_rows // CHUNK_SIZE))  # ceiling division
+
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'header': header,
+            'total_rows': total_rows,
+            'total_chunks': total_chunks,
+            'chunk_size': CHUNK_SIZE,
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error en clasificacion/upload: {e}")
+        return jsonify({'success': False, 'error': 'Error leyendo el archivo. Verifica el formato y la codificacion.'}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Serve TSV body for chunked classification
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/clasificacion/upload_body/<session_id>', methods=['GET'])
+@tool_required('classification')
+def clasificacion_upload_body(session_id):
+    """
+    Return the body (data rows, no header) of the stored UTF-8 TSV session file
+    so the frontend can split it into chunks without touching the raw binary file.
+    """
+    safe_sid = secure_filename(session_id)
+    if not safe_sid or safe_sid != session_id:
+        abort(400)
+    session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"upload_{safe_sid}.tsv")
+    if not os.path.exists(session_file):
+        abort(404)
+    try:
+        with open(session_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        # First line is the header; return only the body rows
+        body = ''.join(lines[1:])
+        from flask import Response
+        return Response(body, mimetype='text/plain; charset=utf-8')
+    except Exception as e:
+        app.logger.error(f"Error sirviendo upload_body: {e}")
+        abort(500)
+
+
+# ─────────────────────────────────────────────────────────────
 # Classification Presets CRUD
 # ─────────────────────────────────────────────────────────────
 
