@@ -106,15 +106,24 @@
     Las menciones se buscaran primero en <strong>'Hit Sentence'</strong> y opcionalmente en <strong>'Keywords'</strong>.
   </p>
 
-  <!-- Preset bar -->
-  <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:12px 16px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light);">
+  <!-- Preset management bar -->
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; padding:12px 16px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light); flex-wrap:wrap;">
     <i class="fa-solid fa-bookmark" style="color:var(--c-primary);"></i>
     <span style="font-size:0.85rem; color:var(--c-text-secondary);">Presets:</span>
-    <select id="preset-select" class="form-input" style="flex:1; max-width:260px; font-size:0.85rem;" onchange="loadPreset(this.value)">
+    <select id="preset-select" class="form-input" style="flex:1; max-width:260px; font-size:0.85rem;" onchange="onPresetChanged(this.value)">
       <option value="">-- Seleccionar preset guardado --</option>
     </select>
-    <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="savePreset()">
-      <i class="fa-solid fa-floppy-disk"></i> Guardar Preset
+    <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="savePreset()" title="Guardar nuevo preset">
+      <i class="fa-solid fa-floppy-disk"></i> Guardar
+    </button>
+    <button id="btn-preset-overwrite" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem;" onclick="overwritePreset()" disabled title="Sobrescribir reglas del preset seleccionado">
+      <i class="fa-solid fa-arrows-rotate"></i> Actualizar
+    </button>
+    <button id="btn-preset-rename" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem;" onclick="renamePreset()" disabled title="Renombrar preset">
+      <i class="fa-solid fa-pen"></i>
+    </button>
+    <button id="btn-preset-delete" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem; color:var(--c-danger); border-color:var(--c-danger);" onclick="deletePreset()" disabled title="Eliminar preset">
+      <i class="fa-solid fa-trash"></i>
     </button>
   </div>
   <div id="rules-container"></div>
@@ -201,6 +210,7 @@
         document.getElementById('mapping-card').style.display = 'none';
         const fd = new FormData();
         fd.append('csv_file', file);
+        showLoading('Analizando archivo...', 'Detectando formato y columnas.');
         try {
             const resp = await fetch('/clasificacion/detect', { method: 'POST', body: fd });
             const data = await resp.json();
@@ -208,7 +218,8 @@
             detectedFmt = data;
             populateMappingCard(data);
             document.getElementById('status-text').innerText = 'Columnas detectadas';
-        } catch(e) { alert('No se pudo analizar el archivo.'); }
+            hideLoading();
+        } catch(e) { hideLoading(); alert('No se pudo analizar el archivo.'); }
     }
 
     function populateMappingCard(data) {
@@ -293,7 +304,23 @@
             const sel = document.getElementById('preset-select');
             sel.innerHTML = '<option value="">-- Seleccionar preset guardado --</option>';
             list.forEach(p => { sel.innerHTML += '<option value="' + p.id + '">' + p.name + ' (' + p.created_at + ')</option>'; });
+            // Disable management buttons since nothing is selected after refresh
+            togglePresetButtons(false);
         } catch(e) {}
+    }
+
+    let selectedPresetId = null;
+
+    function onPresetChanged(id) {
+        selectedPresetId = id || null;
+        togglePresetButtons(!!id);
+        if (id) loadPreset(id);
+    }
+
+    function togglePresetButtons(enabled) {
+        document.getElementById('btn-preset-overwrite').disabled = !enabled;
+        document.getElementById('btn-preset-rename').disabled = !enabled;
+        document.getElementById('btn-preset-delete').disabled = !enabled;
     }
 
     async function loadPreset(id) {
@@ -307,14 +334,17 @@
                 tematicas: cat.tematicas.map(t => ({ id: Date.now() + Math.random(), name: t.name, keywords: Array.isArray(t.keywords) ? t.keywords.join(', ') : (t.keywords || '') }))
             }));
             renderRules();
-            document.getElementById('preset-select').value = '';
         } catch(e) { alert('No se pudo cargar el preset.'); }
+    }
+
+    function getCurrentRulesPayload() {
+        return categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(t => ({ name: t.name, keywords: t.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
     }
 
     async function savePreset() {
         const name = prompt('Nombre del preset:');
         if (!name || !name.trim()) return;
-        const rules = categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(t => ({ name: t.name, keywords: t.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
+        const rules = getCurrentRulesPayload();
         try {
             const resp = await fetch('/clasificacion/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), rules }) });
             const data = await resp.json();
@@ -322,6 +352,44 @@
             else { alert('Error: ' + data.error); }
         } catch(e) { alert('No se pudo guardar el preset.'); }
     }
+
+    async function overwritePreset() {
+        if (!selectedPresetId) return;
+        if (!confirm('¿Sobrescribir las reglas del preset seleccionado con las reglas actuales?')) return;
+        const rules = getCurrentRulesPayload();
+        try {
+            const resp = await fetch('/clasificacion/presets/' + selectedPresetId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules }) });
+            const data = await resp.json();
+            if (data.success) { alert('Preset actualizado correctamente.'); }
+            else { alert('Error: ' + data.error); }
+        } catch(e) { alert('No se pudo actualizar el preset.'); }
+    }
+
+    async function renamePreset() {
+        if (!selectedPresetId) return;
+        const sel = document.getElementById('preset-select');
+        const currentName = sel.options[sel.selectedIndex]?.text.split(' (')[0] || '';
+        const newName = prompt('Nuevo nombre:', currentName);
+        if (!newName || !newName.trim() || newName.trim() === currentName) return;
+        try {
+            const resp = await fetch('/clasificacion/presets/' + selectedPresetId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName.trim() }) });
+            const data = await resp.json();
+            if (data.success) { await loadPresetList(); alert('Nombre actualizado.'); }
+            else { alert('Error: ' + data.error); }
+        } catch(e) { alert('No se pudo renombrar el preset.'); }
+    }
+
+    async function deletePreset() {
+        if (!selectedPresetId) return;
+        if (!confirm('¿Eliminar este preset? Esta accion no se puede deshacer.')) return;
+        try {
+            const resp = await fetch('/clasificacion/presets/' + selectedPresetId, { method: 'DELETE' });
+            const data = await resp.json();
+            if (data.success) { selectedPresetId = null; await loadPresetList(); alert('Preset eliminado.'); }
+            else { alert('Error: ' + data.error); }
+        } catch(e) { alert('No se pudo eliminar el preset.'); }
+    }
+
 
 
 

@@ -253,6 +253,76 @@ def categorical_distribution(df, max_columns=10):
     return distributions
 
 
+def generate_insights(df, general_data, missing_data, numeric_data, correlation_data, categorical_data):
+    """
+    Generate contextual, plain-language interpretations of the analysis results.
+    Returns a list of insight strings.
+    """
+    insights = []
+    rows = general_data['row_count']
+    cols = general_data['column_count']
+    num_cols = len(general_data.get('numeric_columns', []))
+    cat_cols = len(general_data.get('categorical_columns', []))
+    dt_cols = len(general_data.get('datetime_columns', []))
+
+    # 1. Dataset overview
+    type_parts = []
+    if num_cols: type_parts.append(f"{num_cols} numerica{'s' if num_cols > 1 else ''}")
+    if cat_cols: type_parts.append(f"{cat_cols} de texto")
+    if dt_cols: type_parts.append(f"{dt_cols} de fecha")
+    insights.append(f"Tu archivo contiene {rows:,} filas y {cols} columnas: {', '.join(type_parts)}.")
+
+    # 2. Missing data quality
+    total_missing_pct = missing_data.get('total_missing_percentage', 0)
+    if total_missing_pct == 0:
+        insights.append("No se encontraron valores faltantes — la calidad de los datos es excelente.")
+    elif total_missing_pct < 5:
+        insights.append(f"Solo un {total_missing_pct}% de los datos esta faltante — calidad aceptable.")
+    else:
+        worst = [c for c in missing_data.get('columns_with_missing', []) if c['missing_percentage'] and c['missing_percentage'] > 10][:3]
+        if worst:
+            names = ', '.join([f"'{c['column']}' ({c['missing_percentage']}%)" for c in worst])
+            insights.append(f"Atencion: {total_missing_pct}% de datos faltantes. Columnas mas afectadas: {names}.")
+        else:
+            insights.append(f"Hay un {total_missing_pct}% de datos faltantes en el archivo.")
+
+    # 3. Numeric insights — high variation
+    if numeric_data.get('stats'):
+        for s in numeric_data['stats']:
+            mean_val = s.get('mean')
+            std_val = s.get('std')
+            if mean_val and std_val and mean_val != 0 and std_val / abs(mean_val) > 1:
+                insights.append(f"La columna '{s['column']}' tiene alta variabilidad (desv. est. {std_val:,.2f} vs media {mean_val:,.2f}), indicando valores muy dispersos.")
+                break
+
+    # 4. Strong correlations
+    if correlation_data.get('matrix'):
+        seen = set()
+        for row in correlation_data['matrix']:
+            col_a = row['column']
+            for col_b, val in row.get('correlations', {}).items():
+                if col_a != col_b and val is not None and abs(val) >= 0.8:
+                    pair = tuple(sorted([col_a, col_b]))
+                    if pair not in seen:
+                        seen.add(pair)
+                        direction = 'positiva' if val > 0 else 'negativa'
+                        insights.append(f"'{col_a}' y '{col_b}' tienen correlacion {direction} fuerte ({val:.2f}) — probablemente miden algo similar.")
+                        break
+            if seen:
+                break
+
+    # 5. Top categorical value
+    if categorical_data.get('stats'):
+        best = max(categorical_data['stats'], key=lambda s: s.get('most_common_count', 0))
+        if best.get('most_common') and rows > 0:
+            pct = round(best['most_common_count'] / rows * 100, 1)
+            insights.append(f"El valor mas frecuente en '{best['column']}' es '{best['most_common']}' con {best['most_common_count']:,} apariciones ({pct}% del total).")
+            if pct > 50:
+                insights.append(f"La columna '{best['column']}' esta dominada por un solo valor — puede tener baja utilidad analitica.")
+
+    return insights
+
+
 def analyze_csv(file_path, encoding='utf-8', separator=','):
     """
     Main orchestrator function that runs all analyses.
@@ -271,20 +341,30 @@ def analyze_csv(file_path, encoding='utf-8', separator=','):
     
     # Run all analyses
     try:
+        gen = general_info(df)
+        miss = missing_analysis(df)
+        num = numeric_stats(df)
+        cat = categorical_stats(df)
+        corr = correlation_matrix(df)
+        dist_num = distribution_data(df)
+        dist_cat = categorical_distribution(df)
+        insights = generate_insights(df, gen, miss, num, corr, cat)
+
         result = {
             'success': True,
-            'version': '1.0.2', # Added version tag
+            'version': '1.1.0',
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'file_info': load_info,
-            'general': general_info(df),
-            'missing': missing_analysis(df),
-            'numeric': numeric_stats(df),
-            'categorical': categorical_stats(df),
-            'correlation': correlation_matrix(df),
+            'general': gen,
+            'missing': miss,
+            'numeric': num,
+            'categorical': cat,
+            'correlation': corr,
             'distributions': {
-                'numeric': distribution_data(df),
-                'categorical': categorical_distribution(df)
-            }
+                'numeric': dist_num,
+                'categorical': dist_cat
+            },
+            'insights': insights
         }
         
         return result

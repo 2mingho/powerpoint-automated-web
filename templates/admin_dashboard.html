@@ -24,27 +24,15 @@
       <div class="stat-label">Activos</div>
     </div>
   </div>
+  {% for role_code, count in roles_count.items() %}
   <div class="stat-card">
-    <div class="stat-icon warning"><i class="fa-solid fa-shield-halved"></i></div>
+    <div class="stat-icon {{ 'warning' if role_code == 'admin' else 'primary' }}"><i class="fa-solid {{ 'fa-shield-halved' if role_code == 'admin' else 'fa-user-tag' }}"></i></div>
     <div class="stat-info">
-      <div class="stat-value">{{ roles_count.admin }}</div>
-      <div class="stat-label">Admins</div>
+      <div class="stat-value">{{ count }}</div>
+      <div class="stat-label">{{ role_code }}</div>
     </div>
   </div>
-  <div class="stat-card">
-    <div class="stat-icon primary"><i class="fa-solid fa-chart-bar"></i></div>
-    <div class="stat-info">
-      <div class="stat-value">{{ roles_count.DI }}</div>
-      <div class="stat-label">DI</div>
-    </div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-icon accent"><i class="fa-solid fa-satellite-dish"></i></div>
-    <div class="stat-info">
-      <div class="stat-value">{{ roles_count.MW }}</div>
-      <div class="stat-label">MW</div>
-    </div>
-  </div>
+  {% endfor %}
   <div class="stat-card">
     <div class="stat-icon primary" style="background: rgba(100, 116, 139, 0.1); color: #64748b;"><i class="fa-solid fa-list-check"></i></div>
     <div class="stat-info">
@@ -61,6 +49,12 @@
   </a>
   <a href="{{ url_for('admin.user_create') }}" class="btn btn-secondary">
     <i class="fa-solid fa-user-plus"></i> Crear Usuario
+  </a>
+  <a href="{{ url_for('admin.roles_list') }}" class="btn btn-outline">
+    <i class="fa-solid fa-user-tag"></i> Roles ({{ total_roles }})
+  </a>
+  <a href="{{ url_for('admin.areas_list') }}" class="btn btn-outline">
+    <i class="fa-solid fa-building"></i> Areas ({{ total_areas }})
   </a>
   <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline">
     <i class="fa-solid fa-clock-rotate-left"></i> Ver Actividad

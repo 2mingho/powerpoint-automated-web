@@ -1,3 +1,29 @@
+// ─── Global CSRF Token Injection for fetch() ───
+// Intercepts all fetch() calls and adds X-CSRFToken header automatically
+(function() {
+  const _originalFetch = window.fetch;
+  window.fetch = function(url, options = {}) {
+    const method = (options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') {
+      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+      if (csrfMeta) {
+        options.headers = options.headers || {};
+        // Support both Headers object and plain object
+        if (options.headers instanceof Headers) {
+          if (!options.headers.has('X-CSRFToken')) {
+            options.headers.set('X-CSRFToken', csrfMeta.content);
+          }
+        } else {
+          if (!options.headers['X-CSRFToken']) {
+            options.headers['X-CSRFToken'] = csrfMeta.content;
+          }
+        }
+      }
+    }
+    return _originalFetch.call(this, url, options);
+  };
+})();
+
 // ─── Theme Toggle ───
 const initTheme = () => {
   const savedTheme = localStorage.getItem("theme");

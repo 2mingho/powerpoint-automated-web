@@ -11,6 +11,7 @@
 
 <div class="card">
   <form action="/upload_csv" method="POST" enctype="multipart/form-data" id="reportForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="form-group">
       <label class="form-label" for="template_name">Plantilla de reporte</label>
@@ -105,6 +106,7 @@
     document.getElementById('mensaje-cargando').style.display = 'flex';
     document.getElementById('btnSubmit').disabled = true;
     document.getElementById('btnSubmit').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+    showLoading('Generando reporte...', 'Esto puede tardar dependiendo del tamano del archivo.');
   });
 </script>
 {% endblock %}
