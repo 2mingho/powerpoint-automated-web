@@ -5,6 +5,7 @@
 <h2 class="auth-title">Crear Cuenta</h2>
 
 <form method="POST" action="{{ url_for('auth.register') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="form-group">
     <label class="form-label" for="username">Nombre de usuario</label>
     <div class="input-icon-group">

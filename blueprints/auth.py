@@ -1,23 +1,15 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 import re
 from models import User
-from extensions import db, login_manager
-# Note: 'admin' import inside functions uses blueprints.admin
+from extensions import db, login_manager, limiter
 
 auth = Blueprint('auth', __name__)
 
-# Rate limiter
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
 
 @auth.route('/register', methods=['GET', 'POST'])
+@limiter.limit("10 per hour")
 def register():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -41,7 +33,7 @@ def register():
             flash('El correo ya está registrado. Inicia sesión.', category='error')
             return redirect(url_for('auth.login'))
 
-        hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+        hashed_pw = generate_password_hash(password, method='scrypt')
         new_user = User(username=username, email=email, password=hashed_pw)
 
         db.session.add(new_user)
