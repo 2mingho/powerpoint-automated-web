@@ -5,6 +5,7 @@
 <h2 class="auth-title">Iniciar Sesion</h2>
 
 <form method="POST" action="{{ url_for('auth.login') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="form-group">
     <label class="form-label" for="email">Correo electronico</label>
     <div class="input-icon-group">

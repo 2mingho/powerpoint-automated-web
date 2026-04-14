@@ -6,6 +6,33 @@ from datetime import datetime
 import json
 
 
+class Role(db.Model):
+    """Dynamic roles that can be managed by admins."""
+    __tablename__ = 'roles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(30), unique=True, nullable=False)
+    display_name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Role {self.code} ({self.display_name})>"
+
+
+class Area(db.Model):
+    """Organizational areas for grouping users."""
+    __tablename__ = 'areas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Area {self.name}>"
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
@@ -17,16 +44,19 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     allowed_tools = db.Column(db.Text, nullable=True)  # JSON list, None = all
+    session_token = db.Column(db.String(64), nullable=True)
+    force_logout = db.Column(db.Boolean, default=False)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
 
-    VALID_ROLES = ('admin', 'DI', 'MW')
+    area = db.relationship('Area', backref='users')
 
     # All available tools that can be gated
     ALL_TOOLS = {
-        'reports':        'Generar Reporte',
+        'reports': 'Generar Reporte',
         'classification': 'Clasificacion de Data',
-        'file_merge':     'Union de Archivos',
-        'csv_analysis':   'Analisis Rapido CSV',
-        'tasks':          'Gestión de Tareas',
+        'file_merge': 'Union de Archivos',
+        'csv_analysis': 'Analisis Rapido CSV',
+        'tasks': 'Gestion de Tareas',
     }
 
     @property
@@ -97,10 +127,10 @@ class ClassificationPreset(db.Model):
     """Saved classification rule sets, scoped per user."""
     __tablename__ = 'classification_presets'
 
-    id         = db.Column(db.Integer, primary_key=True)
-    user_id    = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    name       = db.Column(db.String(100), nullable=False)
-    rules_json = db.Column(db.Text, nullable=False)   # JSON array of categories+tematicas
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    rules_json = db.Column(db.Text, nullable=False)  # JSON array of categories+tematicas
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='classification_presets')
@@ -122,22 +152,22 @@ class Task(db.Model):
     VALID_STATUSES = ('Pendiente', 'En Progreso', 'Completado')
     RECURRENCE_TYPES = ('Diaria', 'Semanal', 'Mensual')
 
-    id              = db.Column(db.Integer, primary_key=True)
-    title           = db.Column(db.String(255), nullable=False)
-    description     = db.Column(db.Text, nullable=True)
-    client          = db.Column(db.String(100), nullable=True)
-    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
-    due_date        = db.Column(db.Date, nullable=False)
-    status          = db.Column(db.String(30), nullable=False, default='Pendiente')
-    is_recurrent    = db.Column(db.Boolean, default=False)
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    client = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    due_date = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(30), nullable=False, default='Pendiente')
+    is_recurrent = db.Column(db.Boolean, default=False)
     recurrence_type = db.Column(db.String(20), nullable=True)
-    parent_task_id  = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
-    area            = db.Column(db.String(20), nullable=False)
+    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+    area = db.Column(db.String(20), nullable=False)
 
-    creator_id  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     assignee_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
-    creator  = db.relationship('User', foreign_keys=[creator_id], backref='created_tasks')
+    creator = db.relationship('User', foreign_keys=[creator_id], backref='created_tasks')
     assignee = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_tasks')
     children = db.relationship('Task', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
 
@@ -167,4 +197,4 @@ class Task(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return User.query.get(int(user_id))

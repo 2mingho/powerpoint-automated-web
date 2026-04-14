@@ -38,6 +38,45 @@
     </div>
   </div>
 
+  <!-- Manual encoding / separator overrides -->
+  <details style="margin-bottom:16px;">
+    <summary style="cursor:pointer; font-size:0.85rem; color:var(--c-text-secondary); user-select:none;">
+      <i class="fa-solid fa-wrench" style="margin-right:4px;"></i>
+      Opciones avanzadas de formato
+      <span style="font-size:0.78rem; margin-left:6px; color:var(--c-warning);">(cambia solo si los datos se ven incorrectos)</span>
+    </summary>
+    <div class="form-row" style="margin-top:12px; align-items:flex-end;">
+      <div class="form-group">
+        <label class="form-label" for="sel_encoding">Codificacion</label>
+        <select id="sel_encoding" class="form-input" style="font-size:0.85rem;">
+          <option value="">Auto-detectada</option>
+          <option value="utf-8">UTF-8</option>
+          <option value="utf-16">UTF-16</option>
+          <option value="latin-1">Latin-1 (ISO-8859-1)</option>
+          <option value="cp1252">CP-1252 (Windows)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sel_separator">Separador</label>
+        <select id="sel_separator" class="form-input" style="font-size:0.85rem;">
+          <option value="">Auto-detectado</option>
+          <option value=",">Coma ( , )</option>
+          <option value=";">Punto y Coma ( ; )</option>
+          <option value="&#9;">Tabulador ( \t )</option>
+          <option value="|">Pipes ( | )</option>
+        </select>
+      </div>
+    </div>
+    <p class="form-hint" style="margin-top:4px; font-size:0.78rem;">
+      <i class="fa-solid fa-circle-info"></i>
+      Si cambias la codificacion o separador, haz clic en
+      <strong>Volver a detectar</strong> para actualizar la vista previa.
+    </p>
+    <button type="button" class="btn btn-secondary" style="margin-top:8px; padding:6px 14px; font-size:0.83rem;" onclick="redetectFile()">
+      <i class="fa-solid fa-rotate"></i> Volver a detectar
+    </button>
+  </details>
+
   <div id="col-preview-wrap" style="overflow-x:auto; max-height:180px; border:1px solid var(--c-border-light); border-radius:var(--r-md);">
     <table id="col-preview-table" style="width:100%; border-collapse:collapse; font-size:0.8rem;"></table>
   </div>
@@ -67,15 +106,24 @@
     Las menciones se buscaran primero en <strong>'Hit Sentence'</strong> y opcionalmente en <strong>'Keywords'</strong>.
   </p>
 
-  <!-- Preset bar -->
-  <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:12px 16px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light);">
+  <!-- Preset management bar -->
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; padding:12px 16px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light); flex-wrap:wrap;">
     <i class="fa-solid fa-bookmark" style="color:var(--c-primary);"></i>
     <span style="font-size:0.85rem; color:var(--c-text-secondary);">Presets:</span>
-    <select id="preset-select" class="form-input" style="flex:1; max-width:260px; font-size:0.85rem;" onchange="loadPreset(this.value)">
+    <select id="preset-select" class="form-input" style="flex:1; max-width:260px; font-size:0.85rem;" onchange="onPresetChanged(this.value)">
       <option value="">-- Seleccionar preset guardado --</option>
     </select>
-    <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="savePreset()">
-      <i class="fa-solid fa-floppy-disk"></i> Guardar Preset
+    <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="savePreset()" title="Guardar nuevo preset">
+      <i class="fa-solid fa-floppy-disk"></i> Guardar
+    </button>
+    <button id="btn-preset-overwrite" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem;" onclick="overwritePreset()" disabled title="Sobrescribir reglas del preset seleccionado">
+      <i class="fa-solid fa-arrows-rotate"></i> Actualizar
+    </button>
+    <button id="btn-preset-rename" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem;" onclick="renamePreset()" disabled title="Renombrar preset">
+      <i class="fa-solid fa-pen"></i>
+    </button>
+    <button id="btn-preset-delete" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem; color:var(--c-danger); border-color:var(--c-danger);" onclick="deletePreset()" disabled title="Eliminar preset">
+      <i class="fa-solid fa-trash"></i>
     </button>
   </div>
   <div id="rules-container"></div>
@@ -162,6 +210,7 @@
         document.getElementById('mapping-card').style.display = 'none';
         const fd = new FormData();
         fd.append('csv_file', file);
+        showLoading('Analizando archivo...', 'Detectando formato y columnas.');
         try {
             const resp = await fetch('/clasificacion/detect', { method: 'POST', body: fd });
             const data = await resp.json();
@@ -169,7 +218,8 @@
             detectedFmt = data;
             populateMappingCard(data);
             document.getElementById('status-text').innerText = 'Columnas detectadas';
-        } catch(e) { alert('No se pudo analizar el archivo.'); }
+            hideLoading();
+        } catch(e) { hideLoading(); alert('No se pudo analizar el archivo.'); }
     }
 
     function populateMappingCard(data) {
@@ -254,7 +304,23 @@
             const sel = document.getElementById('preset-select');
             sel.innerHTML = '<option value="">-- Seleccionar preset guardado --</option>';
             list.forEach(p => { sel.innerHTML += '<option value="' + p.id + '">' + p.name + ' (' + p.created_at + ')</option>'; });
+            // Disable management buttons since nothing is selected after refresh
+            togglePresetButtons(false);
         } catch(e) {}
+    }
+
+    let selectedPresetId = null;
+
+    function onPresetChanged(id) {
+        selectedPresetId = id || null;
+        togglePresetButtons(!!id);
+        if (id) loadPreset(id);
+    }
+
+    function togglePresetButtons(enabled) {
+        document.getElementById('btn-preset-overwrite').disabled = !enabled;
+        document.getElementById('btn-preset-rename').disabled = !enabled;
+        document.getElementById('btn-preset-delete').disabled = !enabled;
     }
 
     async function loadPreset(id) {
@@ -268,14 +334,17 @@
                 tematicas: cat.tematicas.map(t => ({ id: Date.now() + Math.random(), name: t.name, keywords: Array.isArray(t.keywords) ? t.keywords.join(', ') : (t.keywords || '') }))
             }));
             renderRules();
-            document.getElementById('preset-select').value = '';
         } catch(e) { alert('No se pudo cargar el preset.'); }
+    }
+
+    function getCurrentRulesPayload() {
+        return categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(t => ({ name: t.name, keywords: t.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
     }
 
     async function savePreset() {
         const name = prompt('Nombre del preset:');
         if (!name || !name.trim()) return;
-        const rules = categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(t => ({ name: t.name, keywords: t.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
+        const rules = getCurrentRulesPayload();
         try {
             const resp = await fetch('/clasificacion/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), rules }) });
             const data = await resp.json();
@@ -284,7 +353,46 @@
         } catch(e) { alert('No se pudo guardar el preset.'); }
     }
 
-    const CHUNK_SIZE = 2000;
+    async function overwritePreset() {
+        if (!selectedPresetId) return;
+        if (!confirm('¿Sobrescribir las reglas del preset seleccionado con las reglas actuales?')) return;
+        const rules = getCurrentRulesPayload();
+        try {
+            const resp = await fetch('/clasificacion/presets/' + selectedPresetId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules }) });
+            const data = await resp.json();
+            if (data.success) { alert('Preset actualizado correctamente.'); }
+            else { alert('Error: ' + data.error); }
+        } catch(e) { alert('No se pudo actualizar el preset.'); }
+    }
+
+    async function renamePreset() {
+        if (!selectedPresetId) return;
+        const sel = document.getElementById('preset-select');
+        const currentName = sel.options[sel.selectedIndex]?.text.split(' (')[0] || '';
+        const newName = prompt('Nuevo nombre:', currentName);
+        if (!newName || !newName.trim() || newName.trim() === currentName) return;
+        try {
+            const resp = await fetch('/clasificacion/presets/' + selectedPresetId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName.trim() }) });
+            const data = await resp.json();
+            if (data.success) { await loadPresetList(); alert('Nombre actualizado.'); }
+            else { alert('Error: ' + data.error); }
+        } catch(e) { alert('No se pudo renombrar el preset.'); }
+    }
+
+    async function deletePreset() {
+        if (!selectedPresetId) return;
+        if (!confirm('¿Eliminar este preset? Esta accion no se puede deshacer.')) return;
+        try {
+            const resp = await fetch('/clasificacion/presets/' + selectedPresetId, { method: 'DELETE' });
+            const data = await resp.json();
+            if (data.success) { selectedPresetId = null; await loadPresetList(); alert('Preset eliminado.'); }
+            else { alert('Error: ' + data.error); }
+        } catch(e) { alert('No se pudo eliminar el preset.'); }
+    }
+
+
+
+
     function mergeStats(target, partial) {
         for (const [cat, data] of Object.entries(partial)) {
             if (!target[cat]) target[cat] = { total: 0, tematicas: {} };
@@ -304,6 +412,23 @@
         try { return JSON.parse(text); } catch { throw new Error('Error del servidor (HTTP ' + resp.status + ').'); }
     }
 
+    async function redetectFile() {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('csv_file', file);
+        // Re-send to detect using the updated manual overrides
+        // (detect endpoint auto-detects; changes are applied at upload time)
+        try {
+            const resp = await fetch('/clasificacion/detect', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (!data.success) { alert('Error al analizar el archivo: ' + data.error); return; }
+            detectedFmt = data;
+            populateMappingCard(data);
+            document.getElementById('status-text').innerText = 'Columnas detectadas';
+        } catch(e) { alert('No se pudo analizar el archivo.'); }
+    }
+
     async function processClassification() {
         const btn = document.getElementById('btnProcess');
         const file = fileInput.files[0];
@@ -311,6 +436,8 @@
         const useKeywords = document.getElementById('use_keywords').checked;
         const textCol = document.getElementById('sel_text_col')?.value || 'Hit Sentence';
         const kwCol   = document.getElementById('sel_keywords_col')?.value || '';
+        const manualEncoding = document.getElementById('sel_encoding')?.value || '';
+        const manualSep      = document.getElementById('sel_separator')?.value || '';
 
         if (!file) { alert("Por favor, selecciona un archivo primero."); return; }
         if (categories.length === 0) { alert("Define al menos una categoria y tematica."); return; }
@@ -320,19 +447,39 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Leyendo archivo...';
             document.getElementById('status-text').innerText = "Preparando...";
+            document.getElementById('progress-container').style.display = 'block';
+
+            // 1. Upload full file to server — server reads it with proper encoding
+            //    (avoids browser's file.text() which always decodes as UTF-8)
+            const uploadFd = new FormData();
+            uploadFd.append('csv_file', file);
+            if (manualEncoding) uploadFd.append('encoding', manualEncoding);
+            if (manualSep)      uploadFd.append('sep', manualSep);
+
+            const uploadResp = await fetch('/clasificacion/upload', { method: 'POST', body: uploadFd });
+            const uploadData = await uploadResp.json();
+            if (!uploadData.success) throw new Error(uploadData.error || 'Error al subir el archivo.');
+
+            const sessionId    = uploadData.session_id;
+            const headerLine   = uploadData.header;
+            const totalRowsSrv = uploadData.total_rows;
+            const chunkSize    = uploadData.chunk_size || 2000;
+
+            // 2. Fetch the stored TSV body and split into chunks
+            //    We do NOT call file.text() here — we use the UTF-8 TSV from the server
+            const tsvResp = await fetch('/clasificacion/upload_body/' + sessionId);
+            const tsvText = await tsvResp.text();
+            const dataLines = tsvText.split(/\r?\n/).filter(l => l.trim() !== '');
+
             const rulesPayload = categories.map(cat => ({ category: cat.name, tematicas: cat.tematicas.map(tem => ({ name: tem.name, keywords: tem.keywords.split(',').map(k => k.trim()).filter(k => k) })) }));
-            const csvText = await file.text();
-            const allLines = csvText.split(/\r?\n/);
-            const headerLine = allLines[0] + '\n';
-            const dataLines = allLines.slice(1).filter(l => l.trim() !== '');
             const chunks = [];
-            for (let i = 0; i < dataLines.length; i += CHUNK_SIZE) chunks.push(dataLines.slice(i, i + CHUNK_SIZE).join('\n'));
-            const sessionId = crypto.randomUUID().replace(/-/g, '');
+            for (let i = 0; i < dataLines.length; i += chunkSize) chunks.push(dataLines.slice(i, i + chunkSize).join('\n'));
+
             const mergedStats = {};
             let totalRows = 0;
-            document.getElementById('progress-container').style.display = 'block';
             setProgress(0, chunks.length);
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clasificando...';
+
             for (let i = 0; i < chunks.length; i++) {
                 const res = await postJson('/clasificacion/chunk', { session_id: sessionId, header: headerLine, rows: chunks[i], rules: rulesPayload, default_val: defaultVal, use_keywords: useKeywords, chunk_index: i, text_col: textCol, keywords_col: kwCol });
                 if (!res.success) throw new Error(res.error || 'Error en chunk ' + i);

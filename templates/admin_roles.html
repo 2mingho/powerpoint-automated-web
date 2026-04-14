@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block title %}Roles | Admin{% endblock %}
+{% block page_name %}Gestion de Roles{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Gestion de Roles</h1>
+  <p>Administra los roles disponibles en la plataforma.</p>
+</div>
+
+<!-- Create Role -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-plus-circle"></i> Nuevo Rol</div>
+  <form method="POST" action="{{ url_for('admin.role_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row" style="margin-bottom: 16px;">
+      <div class="form-group">
+        <label class="form-label" for="code">Codigo (unico)</label>
+        <input type="text" id="code" name="code" class="form-input" placeholder="Ej: MANAGER" required maxlength="30" style="text-transform:uppercase;">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="display_name">Nombre para mostrar</label>
+        <input type="text" id="display_name" name="display_name" class="form-input" placeholder="Ej: Gerente" required maxlength="100">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="description">Descripcion (opcional)</label>
+        <input type="text" id="description" name="description" class="form-input" placeholder="Descripcion breve">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Crear Rol</button>
+  </form>
+</div>
+
+<!-- Roles Table -->
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-user-tag"></i> Roles Existentes</div>
+  {% if roles | length == 0 %}
+    <p style="color:var(--c-text-secondary); text-align:center; padding:20px;">No hay roles definidos aun.</p>
+  {% else %}
+  <div style="overflow-x: auto;">
+    <table class="stats-table" style="width:100%;">
+      <thead>
+        <tr><th>Codigo</th><th>Nombre</th><th>Descripcion</th><th>Usuarios</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for role in roles %}
+        <tr>
+          <td><strong>{{ role.code }}</strong></td>
+          <td>{{ role.display_name }}</td>
+          <td style="color:var(--c-text-secondary); font-size:0.85rem;">{{ role.description or '—' }}</td>
+          <td>
+            {% set count = namespace(val=0) %}
+            {% for u in users_list if u.role == role.code %}{% set count.val = count.val + 1 %}{% endfor %}
+            {{ count.val if count is defined else '—' }}
+          </td>
+          <td>
+            <div style="display:flex; gap:6px;">
+              <form method="POST" action="{{ url_for('admin.role_edit', role_id=role.id) }}" style="display:inline;" onsubmit="return editRole(event, this);">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="display_name" value="{{ role.display_name }}">
+                <input type="hidden" name="description" value="{{ role.description or '' }}">
+                <button type="submit" class="btn btn-outline" style="padding:4px 10px; font-size:0.8rem;" title="Editar">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+              </form>
+              <form method="POST" action="{{ url_for('admin.role_delete', role_id=role.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar este rol?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline" style="padding:4px 10px; font-size:0.8rem; color:var(--c-danger); border-color:var(--c-danger);" title="Eliminar">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function editRole(e, form) {
+  e.preventDefault();
+  const currentName = form.querySelector('[name="display_name"]').value;
+  const currentDesc = form.querySelector('[name="description"]').value;
+  const newName = prompt('Nombre:', currentName);
+  if (!newName || !newName.trim()) return false;
+  const newDesc = prompt('Descripcion:', currentDesc);
+  form.querySelector('[name="display_name"]').value = newName.trim();
+  form.querySelector('[name="description"]').value = newDesc || '';
+  form.submit();
+  return false;
+}
+</script>
+{% endblock %}

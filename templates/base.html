@@ -12,6 +12,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Data Intel{% endblock %}</title>
     <meta name="description" content="Data Intelligence — Herramientas de análisis y reportes para Newlink Dominicana">
     <link rel="shortcut icon" href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}" type="image/x-icon" />
@@ -20,8 +21,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/loading-overlay.css') }}" />
   </head>
   <body>
+    {% if session.get('impersonating_from') %}
+    <div class="impersonation-banner">
+      <i class="fa-solid fa-user-secret"></i>
+      Viendo como <strong>{{ current_user.username }}</strong>
+      <a href="{{ url_for('admin.stop_impersonation') }}">Volver a mi cuenta</a>
+    </div>
+    {% endif %}
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite">
+      <div class="loading-overlay-box">
+        <div class="loading-spinner"></div>
+        <div class="loading-overlay-text" id="loadingText">Procesando...</div>
+        <div class="loading-overlay-hint" id="loadingHint">Por favor espera, esto puede tardar unos segundos.</div>
+      </div>
+    </div>
+
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar" role="navigation" aria-label="Navegacion principal">
       <div class="sidebar-logo">
@@ -154,6 +173,22 @@
     </main>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+      // Global loading overlay helpers
+      function showLoading(text, hint) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (text) document.getElementById('loadingText').textContent = text;
+        if (hint) document.getElementById('loadingHint').textContent = hint;
+        overlay.classList.add('active');
+      }
+      function hideLoading() {
+        const overlay = document.getElementById('loadingOverlay');
+        overlay.classList.remove('active');
+        // Reset text
+        document.getElementById('loadingText').textContent = 'Procesando...';
+        document.getElementById('loadingHint').textContent = 'Por favor espera, esto puede tardar unos segundos.';
+      }
+    </script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

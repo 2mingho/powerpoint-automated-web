@@ -1,120 +1,163 @@
-# PowerPoint Automated Web
+# Data Intel — Social Listening & Reporting Platform
 
-A professional web application for generating automated, data-driven reports from CSV data. This tool provides visual analysis, social listening insights powered by AI (Groq/Llama3), and generates professional PowerPoint presentations ready for download.
+A multi-tool web application for media analysts and social listening teams. Upload CSV or Excel exports from monitoring tools and generate automated PowerPoint reports, classify mentions by topic, analyze file structure, and merge datasets — all through a clean browser interface.
 
 ---
 
-## Key Features
+## Features
 
-*   **User Authentication**: Secure login and registration system.
-*   **Data Visualization**: Automatic generation of sentiment pie charts and conversation evolution line graphs.
-*   **Hierarchical Data Classification**: Advanced engine to categorize mentions based on a Two-Pass (Hit Sentence & Keywords) rule system.
-*   **AI Social Listening**: Advanced analysis of social media mentions using **Groq API (Llama3)** to identify themes and sentiment.
-*   **PowerPoint Engine**: Automated generation of native `.pptx` files with dynamic tables, charts, and text replacement.
-*   **Automated Diagnostic System**: One-command health check for environment, auth, logic, calculation, and AI modules with PDF report export.
-*   **Report Management**: Personal dashboard to browse and download previous reports.
-*   **Interactive Insights**: Visual distribution trees and Chart.js dashboards for classified data.
-*   **Clean Export**: Generates a ZIP file containing the presentation and supporting data.
+| Tool | Description |
+|---|---|
+| **Report Generator** | Produces a full `.pptx` + CSV ZIP from a social listening export. Includes line charts, pie charts, influencer tables, and an AI-powered analysis summary. |
+| **Data Classification** | Classifies mentions by user-defined categories and topics using keyword rules. Supports chunked processing, column mapping, encoding/separator overrides, and saveable presets. |
+| **File Merge** | Concatenates 2+ CSV or Excel files with the same structure (default mode), or maps columns from two differently structured files (advanced mode). |
+| **CSV Analysis** | Exploratory analysis of any CSV: row/column counts, missing-value audit, numeric statistics, categorical distributions, and a Pearson correlation matrix. |
 
 ---
 
 ## Tech Stack
 
-*   **Backend**: Python, Flask, Flask-Login, Flask-SQLAlchemy (SQLite)
-*   **AI**: Groq API (Llama3-70b)
-*   **Data & Charts**: Pandas, Matplotlib
-*   **PPTX Generation**: Python-pptx
-*   **Styling**: Vanilla CSS (Responsive Design)
+| Layer | Libraries |
+|---|---|
+| Backend | Python 3.10+, Flask, Flask-Login, Flask-SQLAlchemy, Flask-Limiter |
+| Data | Pandas, NumPy, chardet, openpyxl, xlrd |
+| AI | Groq API (Llama3-70b-8192) |
+| PPTX | python-pptx, Matplotlib, WordCloud |
+| Frontend | Vanilla HTML/CSS/JS, Chart.js (CDN), Font Awesome (CDN) |
+| Database | SQLite (via SQLAlchemy) |
+| Deployment | Gunicorn (production), Flask dev server (local) |
 
 ---
 
 ## Prerequisites
 
-*   Python 3.10 or higher
-*   Groq API Key (for AI analysis)
-*   CSV files encoded in **UTF-16** (standard for many social listening tools)
+- Python 3.10 or higher
+- A [Groq API key](https://console.groq.com/) (free tier available)
+- Input files: **CSV** (any encoding/separator auto-detected) or **Excel** (`.xlsx` / `.xls`)
 
 ---
 
 ## Getting Started
 
-### 1. Clone & Setup
-1. Clone the repository or download the source code.
-2. Create a `.env` file in the root directory:
-   ```env
-   GROQ_API_KEY=your_api_key_here
-   SECRET_KEY=your_flask_secret_key
-   ```
+### 1. Environment Variables
 
-### 2. Automatic Installation (Windows)
-Run the provided batch script to create a virtual environment, install dependencies, and launch the app:
-```bash
+Create a `.env` file in the project root:
+
+```env
+SECRET_KEY=your_random_flask_secret_key
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### 2. Quick Setup (Windows)
+
+```bat
 setup_env.bat
 ```
 
-### 3. Manual Installation (Any OS)
-If you prefer manual setup:
+This scripts creates a virtual environment, installs all dependencies, and launches the app.
+
+### 3. Manual Setup (Any OS)
+
 ```bash
-# Create and activate venv
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Run the app
 python app.py
 ```
-Access the application at `http://localhost:5000/`.
+
+Open `http://localhost:5000` in your browser. Register a first user — the first registration auto-assigns the `admin` role.
 
 ---
 
 ## Project Structure
 
-```text
-POWERPOINT-AUTOMATED-WEB/  
-├── app.py                   # Main Flask application and routing
-├── auth.py                  # Authentication logic (Login/Register/Logout)
-├── calculation.py           # Data processing and chart generation
-├── classifier.py            # Hierarchical data classification engine
-├── groq_analysis.py         # AI analysis integration via Groq
-├── ppt_engine.py            # PowerPoint generation engine
-├── models.py                # Database models (User, Reports)
-├── extensions.py            # Shared extensions (DB, LoginManager)
-├── documentation.md         # Technical deep-dive and internal logic
-├── requirements.txt         # Project dependencies
-├── run_diagnostic.py        # System health-check orchestrator
-├── setup_env.bat            # Automated setup script
-├── users.db                 # SQLite database
-│  
-├── tests/                   # Automated diagnostic test modules
-├── powerpoints/             # Slide templates and templates storage
-│   └── Reporte_plantilla.pptx  
-├── static/                  
-│   ├── css/style.css        # Global styles
-│   └── img/                 # Static assets
-├── templates/               # Jinja2 HTML templates
-└── scratch/                 # Temporary data (cleared after generation)
 ```
+powerpoint-automated-web/
+├── app.py                     # All Flask routes and workflow orchestration
+├── models.py                  # SQLAlchemy models: User, Report, ActivityLog, ClassificationPreset
+├── extensions.py              # Shared db + login_manager instances
+├── init_db.py                 # DB schema initializer (run once or on deploy)
+├── requirements.txt
+├── setup_env.bat / setup_env.sh
+│
+├── services/                  # Business logic (no Flask dependencies)
+│   ├── classifier.py          # Keyword-based chunked classification engine
+│   ├── calculation.py         # Data cleaning, KPI calc, chart-data formatting
+│   ├── csv_analysis.py        # Generic CSV exploratory analysis
+│   ├── file_loader.py         # Auto-detect encoding/sep; read CSV/Excel → TSV
+│   ├── file_merger.py         # Merge multiple CSV/Excel files
+│   └── groq_analysis.py       # Groq/Llama3 API integration
+│
+├── pptx_builder/              # PowerPoint generation engine
+│   └── (native_charts, ppt_engine, etc.)
+│
+├── blueprints/
+│   ├── auth.py                # Login / Register / Logout routes
+│   └── admin.py               # Admin dashboard, user management, activity log
+│
+├── templates/                 # Jinja2 HTML templates
+│   ├── base.html              # Shared layout with sidebar navigation
+│   ├── index.html             # Report generator
+│   ├── clasificacion.html     # Data classification tool
+│   ├── union.html             # File merge tool
+│   ├── analisis_csv.html      # CSV analysis tool
+│   └── ...
+│
+├── static/
+│   ├── css/style.css          # Global design system (CSS custom properties)
+│   └── img/
+│
+├── powerpoints/               # PPTX template files
+├── scratch/                   # Temporary upload/output files (auto-cleaned)
+├── instance/users.db          # SQLite database
+└── tests/                     # Pytest test suite
+```
+
+---
+
+## User Roles & Access Control
+
+| Role | Access |
+|---|---|
+| `admin` | Full access to all tools and the admin dashboard |
+| `DI` (default) | Access controlled per-tool via admin panel |
+| `MW` | Access controlled per-tool via admin panel |
+
+Admins can enable/disable individual tools (`reports`, `classification`, `file_merge`, `csv_analysis`) per user.
+
+---
+
+## File Compatibility
+
+The classification, merge, and analysis tools accept:
+- **CSV / TXT**: Any encoding (UTF-8, UTF-16, Latin-1, CP1252 auto-detected via `chardet`). Any separator (`,` `;` `\t` `|` auto-detected).
+- **Excel**: `.xlsx` (openpyxl) and `.xls` (xlrd).
+
+If auto-detection fails, encoding and separator can be manually overridden in the UI.
 
 ---
 
 ## Maintenance & Diagnostics
 
-Keep the system healthy using the built-in diagnostic suite:
+Run the built-in test suite:
 
-1. **Run Diagnostics**: Execute the following command in the terminal:
-   ```bash
-   python run_diagnostic.py
-   ```
-2. **Review Report**: Open the generated `diagnostic_report.html` in any browser.
-3. **Export**: Use the **"Save as PDF"** button within the report to share the results.
+```bash
+pytest tests/
+```
+
+Check environment, auth, logic, and AI modules:
+
+```bash
+python -m pytest tests/ -v
+```
+
+Temporary files in `scratch/` are automatically purged when they are older than 1 hour.
 
 ---
 
 ## Important Notes
 
-*   **CSV Encoding**: Ensure your input CSVs use **UTF-16** encoding to avoid parsing errors.
-*   **Two-Pass Classification**: Enable "Doble Pasada" in settings to use the `Keywords` column as a fallback.
-*   **Security**: Always check your `.env` file if AI analysis fails.
-
+- **SECRET_KEY** must be set before starting the app — it will raise a `RuntimeError` at startup if missing.
+- **GROQ_API_KEY** is optional but AI report analysis will display "No disponible" without it.
+- The report generator expects social listening CSV exports in **UTF-16 tab-delimited format** (standard Meltwater/similar export). Other tools accept any format.
+- The `scratch/` folder must be writable by the process user.
