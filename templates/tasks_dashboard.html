@@ -1,0 +1,317 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard Tareas | Data Intel{% endblock %}
+{% block page_name %}Dashboard de Tareas{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="td-layout">
+  <!-- Hero -->
+  <div class="td-hero">
+    <div>
+      <h1>Dashboard de Tareas</h1>
+      <p>Vista general de todas las tareas del equipo</p>
+    </div>
+  </div>
+
+  <!-- Analytics Section -->
+  <div class="td-analytics">
+    <!-- Summary -->
+    <div class="td-ana-card td-ana-summary">
+      <div class="td-summary-main">
+        <span class="td-stat-value" id="statTotal">—</span>
+        <span class="td-stat-label">Total Tareas</span>
+      </div>
+      <div class="td-summary-list">
+        <div class="td-sum-item">
+          <span class="dot st-pendiente"></span>
+          <span class="lbl">Pendientes</span>
+          <span class="val" id="statPending">0</span>
+        </div>
+        <div class="td-sum-item">
+          <span class="dot st-en-progreso"></span>
+          <span class="lbl">En Progreso</span>
+          <span class="val" id="statActive">0</span>
+        </div>
+        <div class="td-sum-item">
+          <span class="dot st-completado"></span>
+          <span class="lbl">Completadas</span>
+          <span class="val" id="statDone">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Donut -->
+    <div class="td-ana-card">
+      <div class="td-ana-header">
+        <h3>Distribución de Estados</h3>
+      </div>
+      <div class="td-chart-wrap">
+        <canvas id="chartStatus"></canvas>
+      </div>
+    </div>
+
+    <!-- Configurable Bar Chart -->
+    <div class="td-ana-card">
+      <div class="td-ana-header">
+        <h3 id="barChartTitle">Tareas por Cliente</h3>
+        <select class="td-preset-select" id="barChartPreset" aria-label="Cambiar vista de gráfico">
+          <option value="client">Ver Clientes</option>
+          <option value="area">Ver Áreas</option>
+          <option value="assignee">Ver Asignados</option>
+        </select>
+      </div>
+      <div class="td-chart-wrap">
+        <canvas id="chartDistribution"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="td-filters" id="tdFilters">
+    <label>Filtros</label>
+
+    <select class="td-filter-select" id="filterStatus">
+      <option value="">Estado</option>
+    </select>
+
+    <select class="td-filter-select" id="filterClient">
+      <option value="">Cliente</option>
+    </select>
+
+    <select class="td-filter-select" id="filterAssignee">
+      <option value="">Asignado a</option>
+    </select>
+
+    <select class="td-filter-select" id="filterCreator">
+      <option value="">Creado por</option>
+    </select>
+
+    <select class="td-filter-select" id="filterArea">
+      <option value="">Área</option>
+    </select>
+
+    <button class="td-filter-reset" id="btnResetFilters">
+      <i class="fa-solid fa-rotate-left"></i> Limpiar
+    </button>
+  </div>
+
+  <!-- Task cards grid -->
+  <div class="td-grid" id="tdGrid">
+    <div class="td-loading"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tareas...</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const grid = document.getElementById('tdGrid');
+  const selStatus = document.getElementById('filterStatus');
+  const selClient = document.getElementById('filterClient');
+  const selAssignee = document.getElementById('filterAssignee');
+  const selCreator = document.getElementById('filterCreator');
+  const selArea = document.getElementById('filterArea');
+  const btnReset = document.getElementById('btnResetFilters');
+  const selPreset = document.getElementById('barChartPreset');
+  const barTitle = document.getElementById('barChartTitle');
+
+  let chartStatus = null;
+  let chartDistribution = null;
+
+  // ─── Load filter options ───
+  fetch('/api/admin/tasks/filters')
+    .then(r => r.json())
+    .then(data => {
+      data.statuses.forEach(s => {
+        const o = document.createElement('option');
+        o.value = s; o.textContent = s;
+        selStatus.appendChild(o);
+      });
+      data.clients.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c; o.textContent = c;
+        selClient.appendChild(o);
+      });
+      data.users.forEach(u => {
+        const o1 = document.createElement('option');
+        o1.value = u.id; o1.textContent = u.username;
+        selAssignee.appendChild(o1);
+
+        const o2 = document.createElement('option');
+        o2.value = u.id; o2.textContent = u.username;
+        selCreator.appendChild(o2);
+      });
+      data.areas.forEach(a => {
+        const o = document.createElement('option');
+        o.value = a; o.textContent = a;
+        selArea.appendChild(o);
+      });
+    });
+
+  // ─── Analytics Rendering ───
+  function updateCharts(stats, tasks) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDark ? '#a0aec0' : '#718096';
+    const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+
+    // 1. Status Donut
+    if (chartStatus) chartStatus.destroy();
+    const ctxStatus = document.getElementById('chartStatus').getContext('2d');
+    chartStatus = new Chart(ctxStatus, {
+      type: 'doughnut',
+      data: {
+        labels: ['Pendiente', 'En Progreso', 'Completada'],
+        datasets: [{
+          data: [stats.pendiente, stats.en_progreso, stats.completado],
+          backgroundColor: ['#f59e0b', '#2563eb', '#10b981'],
+          borderWidth: 0,
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: textColor, padding: 20, usePointStyle: true, font: { size: 10, weight: '600' } } }
+        },
+        cutout: '70%'
+      }
+    });
+
+    // 2. Dynamic Distribution Bar
+    const preset = selPreset.value;
+    const grouping = {};
+    tasks.forEach(t => {
+      let key = 'Sin clasificar';
+      if (preset === 'client') key = t.client || 'Sin Cliente';
+      else if (preset === 'area') key = t.area || 'Sin Área';
+      else if (preset === 'assignee') key = t.assignee_name || 'Sin Asignar';
+      grouping[key] = (grouping[key] || 0) + 1;
+    });
+
+    const sortedLabels = Object.keys(grouping).sort((a,b) => grouping[b] - grouping[a]).slice(0, 5);
+    const sortedData = sortedLabels.map(l => grouping[l]);
+
+    barTitle.textContent = preset === 'client' ? 'Tareas por Cliente' : preset === 'area' ? 'Tareas por Área' : 'Carga por Asignado';
+
+    if (chartDistribution) chartDistribution.destroy();
+    const ctxDist = document.getElementById('chartDistribution').getContext('2d');
+    chartDistribution = new Chart(ctxDist, {
+      type: 'bar',
+      data: {
+        labels: sortedLabels,
+        datasets: [{
+          label: 'Tareas',
+          data: sortedData,
+          backgroundColor: '#3b82f6',
+          borderRadius: 6,
+          maxBarThickness: 32
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: textColor, stepSize: 1 } },
+          y: { grid: { display: false }, ticks: { color: textColor, font: { weight: '600', size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // ─── Load tasks ───
+  function loadTasks() {
+    const params = new URLSearchParams();
+    if (selStatus.value)   params.set('status', selStatus.value);
+    if (selClient.value)   params.set('client', selClient.value);
+    if (selAssignee.value) params.set('assignee_id', selAssignee.value);
+    if (selCreator.value)  params.set('creator_id', selCreator.value);
+    if (selArea.value)     params.set('area', selArea.value);
+
+    fetch('/api/admin/tasks?' + params.toString())
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) return;
+
+        // Update counts
+        document.getElementById('statTotal').textContent = data.stats.total;
+        document.getElementById('statPending').textContent = data.stats.pendiente;
+        document.getElementById('statActive').textContent = data.stats.en_progreso;
+        document.getElementById('statDone').textContent = data.stats.completado;
+
+        // Render Charts
+        updateCharts(data.stats, data.tasks);
+
+        // Render cards
+        if (data.tasks.length === 0) {
+          grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-inbox"></i><p>No se encontraron tareas con estos filtros.</p></div>';
+          return;
+        }
+
+        grid.innerHTML = data.tasks.map(t => {
+          const statusClass = t.status === 'Pendiente'
+            ? 'st-pendiente'
+            : t.status === 'En Progreso'
+              ? 'st-en-progreso'
+              : 'st-completado';
+
+          const dueDate = t.due_date
+            ? new Date(t.due_date + 'T00:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '';
+
+          return `
+            <div class="td-card">
+              <div class="td-card-top">
+                <h3 class="td-card-title">${escapeHtml(t.title)}</h3>
+                <span class="td-card-status ${statusClass}">${escapeHtml(t.status)}</span>
+              </div>
+              ${t.client ? `<span class="td-card-client">${escapeHtml(t.client)}</span>` : ''}
+              ${t.description ? `<p class="td-card-desc">${escapeHtml(t.description)}</p>` : ''}
+              <div class="td-card-meta">
+                <span class="td-meta-item"><i class="fa-solid fa-calendar"></i> ${dueDate}</span>
+                <span class="td-meta-item"><i class="fa-solid fa-user"></i> ${escapeHtml(t.assignee_name)}</span>
+                <span class="td-meta-item"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t.area)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      })
+      .catch(() => {
+        grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-exclamation-triangle"></i><p>Error al cargar tareas.</p></div>';
+      });
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Events
+  [selStatus, selClient, selAssignee, selCreator, selArea].forEach(el => {
+    el.addEventListener('change', loadTasks);
+  });
+
+  selPreset.addEventListener('change', loadTasks);
+
+  btnReset.addEventListener('click', function() {
+    selStatus.value = '';
+    selClient.value = '';
+    selAssignee.value = '';
+    selCreator.value = '';
+    selArea.value = '';
+    loadTasks();
+  });
+
+  // Initial load
+  loadTasks();
+});
+</script>
+{% endblock %}

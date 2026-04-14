@@ -1,4 +1,4 @@
-﻿# init_db.py
+# init_db.py
 import os
 import sys
 import sqlite3
@@ -103,6 +103,29 @@ def update_structure_if_needed():
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
+
+    # Tasks table
+    create_table_if_not_exists(conn, "tasks", """
+        CREATE TABLE tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            client VARCHAR(100),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            due_date DATE NOT NULL,
+            status VARCHAR(30) NOT NULL DEFAULT 'Pendiente',
+            is_recurrent BOOLEAN DEFAULT 0,
+            recurrence_type VARCHAR(20),
+            parent_task_id INTEGER,
+            area VARCHAR(20) NOT NULL,
+            creator_id INTEGER NOT NULL,
+            assignee_id INTEGER NOT NULL,
+            FOREIGN KEY (parent_task_id) REFERENCES tasks(id),
+            FOREIGN KEY (creator_id) REFERENCES users(id),
+            FOREIGN KEY (assignee_id) REFERENCES users(id)
+        )
+    """)
+
     conn.commit()
     conn.close()
     print("[ok] Verificacion de estructura completada.")

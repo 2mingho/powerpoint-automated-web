@@ -82,6 +82,12 @@
           <span>Analisis Rapido</span>
         </a>
         {% endif %}
+        {% if has_tool_access('tasks') %}
+        <a href="{{ url_for('tasks.tasks_page') }}" class="sidebar-item {% if request.endpoint == 'tasks.tasks_page' %}active{% endif %}" aria-label="Gestion de Tareas">
+          <i class="fa-solid fa-calendar-check"></i>
+          <span>Gestión de Tareas</span>
+        </a>
+        {% endif %}
 
         <div class="sidebar-section-label">Cuenta</div>
         <a href="{{ url_for('mis_reportes') }}" class="sidebar-item {% if request.endpoint == 'mis_reportes' %}active{% endif %}" aria-label="Mis Reportes">
@@ -92,6 +98,10 @@
         <a href="{{ url_for('admin.dashboard') }}" class="sidebar-item {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" aria-label="Admin Panel">
           <i class="fa-solid fa-gear"></i>
           <span>Admin Panel</span>
+        </a>
+        <a href="{{ url_for('tasks.tasks_dashboard') }}" class="sidebar-item {% if request.endpoint == 'tasks.tasks_dashboard' %}active{% endif %}" aria-label="Dashboard Tareas">
+          <i class="fa-solid fa-clipboard-list"></i>
+          <span>Dashboard Tareas</span>
         </a>
         {% endif %}
       </nav>
