@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block title %}Gestión de Tareas | Data Intel{% endblock %}
+{% block page_name %}Gestión de Tareas{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
+
+<!-- FullCalendar CSS -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+
+<div class="tasks-header">
+  <div>
+    <h1>Gestión de Tareas</h1>
+    <p class="tasks-subtitle">Calendario interactivo · Toca un día para crear una tarea</p>
+  </div>
+  <div class="tasks-header-actions">
+    <button class="btn btn-primary" id="btnNewTask" aria-label="Nueva tarea">
+      <i class="fa-solid fa-plus"></i> <span class="btn-label-desktop">Nueva Tarea</span>
+    </button>
+  </div>
+</div>
+
+<div class="tasks-calendar-wrap">
+  <div id="tasksCalendar"></div>
+</div>
+
+<!-- ═══ Task Modal ═══ -->
+<div class="task-modal-overlay" id="taskModalOverlay">
+  <div class="task-modal" role="dialog" aria-labelledby="taskModalTitle">
+    <div class="task-modal-handle" aria-hidden="true"></div>
+    <div class="task-modal-header">
+      <h2 id="taskModalTitle">Nueva Tarea</h2>
+      <button class="task-modal-close" id="taskModalClose" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="task-modal-body">
+      <input type="hidden" id="taskId" value="">
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Título *</label>
+        <input type="text" class="form-input" id="taskTitle" placeholder="Título de la tarea" maxlength="255">
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Cliente</label>
+        <div class="autocomplete-wrap">
+          <input type="text" class="form-input" id="taskClient" placeholder="Cliente" maxlength="100" autocomplete="off">
+          <div class="autocomplete-list" id="clientAutocomplete"></div>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Descripción</label>
+        <textarea class="form-textarea" id="taskDesc" rows="3" placeholder="Descripción"></textarea>
+      </div>
+
+      <div class="form-row" style="margin-bottom:0">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Asignar a *</label>
+          <select class="form-select" id="taskAssignee">
+            {% for u in area_users %}
+            <option value="{{ u.id }}">{{ u.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Fecha de Entrega *</label>
+          <input type="date" class="form-input" id="taskDueDate">
+        </div>
+      </div>
+
+      <!-- Status (only in edit mode) -->
+      <div class="form-group" id="statusGroup" style="display:none; margin-bottom:0">
+        <label class="form-label">Estado</label>
+        <div class="status-select-group">
+          <div class="status-chip selected" data-status="Pendiente">Pendiente</div>
+          <div class="status-chip" data-status="En Progreso">En Progreso</div>
+          <div class="status-chip" data-status="Completado">Completado</div>
+        </div>
+      </div>
+
+      <!-- Recurrence -->
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-check">
+          <input type="checkbox" id="taskRecurrent"> Tarea recurrente
+        </label>
+      </div>
+
+      <div class="recurrence-fields" id="recurrenceFields">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Frecuencia</label>
+          <select class="form-select" id="taskRecurrenceType">
+            <option value="Diaria">Diaria</option>
+            <option value="Semanal" selected>Semanal</option>
+            <option value="Mensual">Mensual</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Hasta</label>
+          <input type="date" class="form-input" id="taskRecurrenceEnd">
+        </div>
+      </div>
+    </div>
+
+    <div class="task-modal-footer">
+      <button class="btn btn-danger btn-sm" id="btnDeleteTask" style="display:none; margin-right:auto;">
+        <i class="fa-solid fa-trash"></i> Eliminar
+      </button>
+      <button class="btn btn-secondary" id="btnCancelTask">Cancelar</button>
+      <button class="btn btn-primary" id="btnSaveTask">
+        <i class="fa-solid fa-check"></i> Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- FullCalendar JS -->
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+{% endblock %}

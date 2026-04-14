@@ -1,4 +1,4 @@
-﻿import os
+import os
 import pandas as pd
 import uuid
 import zipfile
@@ -20,10 +20,11 @@ from dotenv import load_dotenv
 
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
+from blueprints.tasks import tasks_bp
 
 
 from extensions import db, login_manager
-from models import User, Report, ActivityLog, ClassificationPreset
+from models import User, Report, ActivityLog, ClassificationPreset, Task
 from services import calculation as report
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 from pptx_builder import engine as ppt_engine
@@ -51,6 +52,7 @@ login_manager.init_app(app)
 # Registrar blueprints
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
+app.register_blueprint(tasks_bp)
 
 # ─────────────────────────────────────────────────────────────
 # Automatic Request Logging (after_request)
