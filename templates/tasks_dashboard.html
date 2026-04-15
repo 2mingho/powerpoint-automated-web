@@ -192,6 +192,25 @@ document.addEventListener('DOMContentLoaded', function() {
   let currentTasks = [];
   let selectedTaskIds = new Set();
 
+  function notify(type, message) {
+    if (typeof window.appNotify === 'function') {
+      window.appNotify({ type: type || 'info', message: message || '' });
+      return;
+    }
+    if (type === 'error') {
+      console.error(message);
+    }
+  }
+
+  function confirmAction(options) {
+    const opts = options || {};
+    if (typeof window.appConfirm === 'function') {
+      return window.appConfirm(opts);
+    }
+    console.error('appConfirm no esta disponible para confirmar la accion.');
+    return Promise.resolve(false);
+  }
+
   function parseJsonResponse(response) {
     return response.json().catch(() => ({}));
   }
@@ -499,11 +518,16 @@ document.addEventListener('DOMContentLoaded', function() {
     openBulkModal();
   });
 
-  btnBulkDelete.addEventListener('click', function() {
+  btnBulkDelete.addEventListener('click', async function() {
     if (selectedTaskIds.size === 0) return;
 
     const count = selectedTaskIds.size;
-    const confirmed = window.confirm(`Se eliminarán ${count} tarea(s) seleccionada(s). Esta acción no se puede deshacer. ¿Deseas continuar?`);
+    const confirmed = await confirmAction({
+      title: 'Eliminar tareas seleccionadas',
+      message: `Se eliminaran ${count} tarea(s) seleccionada(s). Esta accion no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      danger: true
+    });
     if (!confirmed) return;
 
     this.disabled = true;
@@ -515,15 +539,16 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(parseJsonResponse)
       .then(data => {
         if (!data.success) {
-          alert(data.error || 'No se pudieron eliminar las tareas seleccionadas.');
+          notify('error', data.error || 'No se pudieron eliminar las tareas seleccionadas.');
           return;
         }
 
         selectedTaskIds.clear();
         loadTasks();
+        notify('success', `${count} tarea(s) eliminada(s).`);
       })
       .catch(() => {
-        alert('Error de conexión al eliminar tareas.');
+        notify('error', 'Error de conexion al eliminar tareas.');
       })
       .finally(() => {
         btnBulkDelete.disabled = false;
@@ -550,7 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (bulkDueDate.value) payload.due_date = bulkDueDate.value;
 
     if (!payload.status && !payload.assignee_id && !payload.due_date) {
-      alert('Selecciona al menos un campo para aplicar cambios.');
+      notify('warning', 'Selecciona al menos un campo para aplicar cambios.');
       return;
     }
 
@@ -563,16 +588,17 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(parseJsonResponse)
       .then(data => {
         if (!data.success) {
-          alert(data.error || 'No se pudieron aplicar los cambios masivos.');
+          notify('error', data.error || 'No se pudieron aplicar los cambios masivos.');
           return;
         }
 
         closeBulkModal();
         selectedTaskIds.clear();
         loadTasks();
+        notify('success', 'Cambios masivos aplicados correctamente.');
       })
       .catch(() => {
-        alert('Error de conexión al actualizar tareas.');
+        notify('error', 'Error de conexion al actualizar tareas.');
       })
       .finally(() => {
         bulkModalApply.disabled = false;

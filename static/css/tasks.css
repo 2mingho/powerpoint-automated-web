@@ -421,57 +421,6 @@
   color: var(--c-danger);
 }
 
-.task-toast-container {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 2200;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.task-toast {
-  min-width: 240px;
-  max-width: 360px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--c-border);
-  background: var(--c-white);
-  box-shadow: var(--shadow-md);
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  pointer-events: auto;
-  animation: toastIn 0.18s ease;
-}
-
-.task-toast.success {
-  border-color: rgba(22, 163, 74, 0.24);
-}
-
-.task-toast.error {
-  border-color: rgba(220, 38, 38, 0.24);
-}
-
-.task-toast button {
-  background: transparent;
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-sm);
-  padding: 4px 8px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: var(--c-text);
-  cursor: pointer;
-}
-
-@keyframes toastIn {
-  from { transform: translateY(8px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
 /* Recurrence group */
 .recurrence-fields {
   display: none;
@@ -1072,17 +1021,6 @@
 
   .tasks-filters .btn {
     grid-column: 1 / -1;
-    width: 100%;
-  }
-
-  .task-toast-container {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-  }
-
-  .task-toast {
-    max-width: 100%;
     width: 100%;
   }
 

@@ -161,6 +161,7 @@ const initAppFeedback = () => {
     const type = conf.type || "info";
     const message = conf.message || "Operacion completada.";
     const duration = conf.duration || 2800;
+    const action = conf.action;
 
     const iconMap = {
       success: "fa-circle-check",
@@ -175,9 +176,25 @@ const initAppFeedback = () => {
     const iconEl = document.createElement("i");
     iconEl.className = `fa-solid ${iconMap[type] || iconMap.info}`;
     const textEl = document.createElement("span");
+    textEl.className = "app-toast-text";
     textEl.textContent = message;
     toast.appendChild(iconEl);
     toast.appendChild(textEl);
+
+    if (action && action.label && typeof action.onClick === "function") {
+      const actionBtn = document.createElement("button");
+      actionBtn.type = "button";
+      actionBtn.className = "app-toast-action";
+      actionBtn.textContent = action.label;
+      actionBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        action.onClick();
+        closeToast();
+      });
+      toast.appendChild(actionBtn);
+    }
+
     toastLayer.appendChild(toast);
 
     requestAnimationFrame(() => toast.classList.add("show"));
@@ -187,7 +204,7 @@ const initAppFeedback = () => {
       setTimeout(() => toast.remove(), 180);
     };
 
-    const timer = setTimeout(closeToast, duration);
+    const timer = setTimeout(closeToast, action ? 6000 : duration);
     toast.addEventListener("click", () => {
       clearTimeout(timer);
       closeToast();

@@ -997,6 +997,10 @@ img { max-width: 100%; }
   cursor: pointer;
 }
 
+.app-toast-text {
+  flex: 1;
+}
+
 .app-toast.show {
   opacity: 1;
   transform: translateY(0);
@@ -1005,6 +1009,23 @@ img { max-width: 100%; }
 .app-toast i {
   width: 14px;
   text-align: center;
+}
+
+.app-toast-action {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-text);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.app-toast-action:hover {
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  border-color: var(--c-primary);
 }
 
 .app-toast-success {
