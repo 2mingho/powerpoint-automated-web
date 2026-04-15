@@ -5,13 +5,16 @@ import zipfile
 import shutil
 import json
 import threading
+import random
 from datetime import datetime, timedelta
 import functools
+import click
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
 from services.classifier import classify_mentions
 from services.file_loader import detect_format, read_full_as_tsv
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -37,6 +40,51 @@ from services.csv_analysis import analyze_csv, generate_summary_csv
 # Load environment variables
 load_dotenv()
 
+
+def _env_bool(name, default=False):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _env_int(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _resolve_database_uri():
+    uri = os.environ.get('DATABASE_URL') or os.environ.get('SQLALCHEMY_DATABASE_URI')
+    if uri:
+        if uri.startswith('postgres://'):
+            return 'postgresql://' + uri[len('postgres://'):]
+        return uri
+    return 'sqlite:///users.db'
+
+
+def _is_production_mode():
+    return (
+        os.environ.get('FLASK_ENV') == 'production'
+        or _env_bool('RENDER', False)
+        or _env_bool('FORCE_PRODUCTION_MODE', False)
+    )
+
+
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'scratch'
 
@@ -46,14 +94,21 @@ if not app.config['SECRET_KEY']:
     raise RuntimeError("SECRET_KEY must be set in .env file. Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'")
 
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB upload limit
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = _resolve_database_uri()
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
 
 # Session security
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 # Only set Secure cookie when not in debug/local mode
-if os.environ.get('FLASK_ENV') == 'production':
+if _is_production_mode():
     app.config['SESSION_COOKIE_SECURE'] = True
 
 # ─────────────────────────────────────────────────────────────
@@ -68,7 +123,7 @@ limiter.init_app(app)
 # Using 'unsafe-inline' for scripts/styles since templates use inline code extensively
 # NOTE: Do NOT use content_security_policy_nonce_in — it causes browsers to ignore 'unsafe-inline'
 Talisman(app,
-         force_https=os.environ.get('FLASK_ENV') == 'production',
+         force_https=_is_production_mode(),
          content_security_policy={
              'default-src': "'self'",
              'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
@@ -122,9 +177,23 @@ _MANUALLY_LOGGED = {
     'union_download',
 }
 
+DEFAULT_ENABLE_PAGE_VIEW_LOGS = not _is_production_mode()
+ENABLE_PAGE_VIEW_LOGS = _env_bool('ENABLE_PAGE_VIEW_LOGS', DEFAULT_ENABLE_PAGE_VIEW_LOGS)
+PAGE_VIEW_LOG_SAMPLE_RATE = max(0.0, min(1.0, _env_float(
+    'PAGE_VIEW_LOG_SAMPLE_RATE',
+    1.0 if ENABLE_PAGE_VIEW_LOGS else 0.0,
+)))
+
 @app.after_request
 def auto_log_request(response):
     """Automatically log successful authenticated GET page-views."""
+    if not ENABLE_PAGE_VIEW_LOGS:
+        return response
+    if PAGE_VIEW_LOG_SAMPLE_RATE <= 0:
+        return response
+    if PAGE_VIEW_LOG_SAMPLE_RATE < 1.0 and random.random() > PAGE_VIEW_LOG_SAMPLE_RATE:
+        return response
+
     if (current_user.is_authenticated
             and response.status_code < 400
             and request.endpoint
@@ -145,6 +214,32 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 
 
 # ✅ NUEVO: aseguramos esquema en la misma DB que usa la app
+def ensure_default_admin():
+    """Create default admin if none exists (idempotent)."""
+    admin_email = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
+    admin_password = os.environ.get('ADMIN_PASSWORD', 'Admin2024!')
+    admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+
+    existing_admin = User.query.filter_by(role='admin').first()
+    if existing_admin:
+        return existing_admin
+
+    if _is_production_mode() and admin_password == 'Admin2024!':
+        app.logger.warning("Using default ADMIN_PASSWORD in production. Set ADMIN_PASSWORD in environment.")
+
+    admin_user = User(
+        username=admin_username,
+        email=admin_email,
+        password=generate_password_hash(admin_password, method='scrypt'),
+        role='admin',
+        is_active=True,
+    )
+    db.session.add(admin_user)
+    db.session.commit()
+    app.logger.info(f"[startup] Admin created: {admin_username} ({admin_email})")
+    return admin_user
+
+
 def ensure_reports_schema():
     """
     Garantiza que la tabla reports exista y tenga la columna template_name.
@@ -156,16 +251,14 @@ def ensure_reports_schema():
 
         insp = inspect(db.engine)
         tables = set(insp.get_table_names())
-        if 'reports' not in tables:
-            return  # la tabla se acaba de crear con create_all, ya tiene la columna.
-
-        cols = {c['name'] for c in insp.get_columns('reports')}
-        if 'template_name' not in cols:
-            try:
-                db.session.execute(text("ALTER TABLE reports ADD COLUMN template_name TEXT"))
-                db.session.commit()
-            except Exception as e:
-                print(f"[ensure_reports_schema] Aviso al agregar columna template_name: {e}")
+        if 'reports' in tables:
+            cols = {c['name'] for c in insp.get_columns('reports')}
+            if 'template_name' not in cols:
+                try:
+                    db.session.execute(text("ALTER TABLE reports ADD COLUMN template_name TEXT"))
+                    db.session.commit()
+                except Exception as e:
+                    print(f"[ensure_reports_schema] Aviso al agregar columna template_name: {e}")
 
         # Migrate users table for session control + area columns
         if 'users' in tables:
@@ -184,9 +277,103 @@ def ensure_reports_schema():
                     except Exception as e:
                         print(f"[migration] Aviso al agregar users.{col_name}: {e}")
 
+        ensure_default_admin()
+
+
+ACTIVITY_LOG_RETENTION_DAYS = max(1, _env_int('ACTIVITY_LOG_RETENTION_DAYS', 90))
+ACTIVITY_LOG_MAX_ROWS = max(1000, _env_int('ACTIVITY_LOG_MAX_ROWS', 100000))
+REPORT_METADATA_RETENTION_DAYS = max(1, _env_int('REPORT_METADATA_RETENTION_DAYS', 180))
+
+
+def prune_activity_logs(retention_days=ACTIVITY_LOG_RETENTION_DAYS, max_rows=ACTIVITY_LOG_MAX_ROWS):
+    """Prune old activity logs by retention and hard row cap."""
+    deleted_by_age = 0
+    deleted_by_cap = 0
+
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    deleted_by_age = (
+        ActivityLog.query
+        .filter(ActivityLog.timestamp < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.session.commit()
+
+    total_rows = ActivityLog.query.count()
+    overflow = max(0, total_rows - max_rows)
+    if overflow > 0:
+        ids_to_delete = [
+            row.id
+            for row in (
+                ActivityLog.query
+                .with_entities(ActivityLog.id)
+                .order_by(ActivityLog.timestamp.asc())
+                .limit(overflow)
+                .all()
+            )
+        ]
+        if ids_to_delete:
+            deleted_by_cap = (
+                ActivityLog.query
+                .filter(ActivityLog.id.in_(ids_to_delete))
+                .delete(synchronize_session=False)
+            )
+            db.session.commit()
+
+    return {
+        'deleted_by_age': deleted_by_age,
+        'deleted_by_cap': deleted_by_cap,
+        'remaining_rows': ActivityLog.query.count(),
+    }
+
+
+def prune_report_metadata(retention_days=REPORT_METADATA_RETENTION_DAYS):
+    """Prune report metadata rows older than retention window."""
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    deleted = (
+        Report.query
+        .filter(Report.created_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.session.commit()
+    return {'deleted_rows': deleted}
+
+
+def prune_database_storage():
+    """Run all DB pruning tasks and return stats."""
+    logs_stats = prune_activity_logs()
+    reports_stats = prune_report_metadata()
+    return {
+        'activity_logs': logs_stats,
+        'reports': reports_stats,
+    }
+
+
+@app.cli.command('maintenance-prune')
+def maintenance_prune_command():
+    """Prune DB metadata tables to control storage usage."""
+    with app.app_context():
+        stats = prune_database_storage()
+    click.echo(f"Activity logs pruned: {stats['activity_logs']}")
+    click.echo(f"Reports metadata pruned: {stats['reports']}")
+
 
 # Ejecutar guardado de esquema al iniciar
 ensure_reports_schema()
+
+if _env_bool('RUN_STARTUP_MAINTENANCE', True):
+    try:
+        with app.app_context():
+            stats = prune_database_storage()
+        app.logger.info(f"[startup] DB pruning completed: {stats}")
+    except Exception as e:
+        app.logger.warning(f"[startup] DB pruning warning: {e}")
+
+try:
+    with app.app_context():
+        app.logger.info(f"[startup] Database URL: {db.engine.url.render_as_string(hide_password=True)}")
+        app.logger.info(f"[startup] Admin users: {User.query.filter_by(role='admin').count()}")
+except Exception as e:
+    app.logger.warning(f"[startup] DB diagnostics warning: {e}")
 
 
 # ─────────────────────────────────────────────────────────────

@@ -786,6 +786,11 @@ Component classes: `.card`, `.card-title`, `.form-input`, `.form-label`, `.form-
 |---|---|---|
 | `SECRET_KEY` | ✅ | Flask session signing key. App raises `RuntimeError` at startup if missing. |
 | `GROQ_API_KEY` | ⚠️ | Groq API key. App starts without it but AI analysis returns "No disponible". |
+| `DATABASE_URL` | ⚠️ | Postgres/Neon connection string. Recommended in production; app falls back to SQLite when missing. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_USERNAME` | ⚠️ | Default admin bootstrap credentials at startup (used only if no admin exists). |
+| `ENABLE_PAGE_VIEW_LOGS` | ⚠️ | Enables low-value page-view logging. Defaults to off in production to save storage. |
+| `ACTIVITY_LOG_RETENTION_DAYS` / `ACTIVITY_LOG_MAX_ROWS` | ⚠️ | Log pruning controls to keep DB size bounded. |
+| `REPORT_METADATA_RETENTION_DAYS` | ⚠️ | Deletes old report metadata rows beyond retention window. |
 
 Other configuration in `app.py`:
 
@@ -794,7 +799,7 @@ app.config['UPLOAD_FOLDER'] = 'scratch'
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB
 ```
 
-Database URI defaults to `sqlite:///users.db` in the `instance/` folder.
+If `DATABASE_URL` is set, SQLAlchemy connects to that DB (e.g., Neon/Postgres). Otherwise it defaults to local SQLite at `instance/users.db`.
 
 ---
 

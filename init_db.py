@@ -1,182 +1,116 @@
-# init_db.py
 import os
 import sys
-import sqlite3
-from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
+from sqlalchemy import inspect, text
+from werkzeug.security import generate_password_hash
 
 load_dotenv()
 
-# Import app context lazily to avoid circular imports at module level
-DB_PATH = os.path.join(os.path.dirname(__file__), 'instance', 'users.db')
-# Fallback: some setups place the DB at root level
-if not os.path.exists(os.path.dirname(DB_PATH)):
-    DB_PATH = os.path.join(os.path.dirname(__file__), 'users.db')
 
-
-def add_column_if_not_exists(conn, table, column, col_type):
-    cursor = conn.execute(f"PRAGMA table_info({table})")
-    columns = [row[1] for row in cursor.fetchall()]
-    if column not in columns:
-        print(f"[+] Agregando columna '{column}' a la tabla '{table}'...")
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-    else:
-        print(f"[ok] La columna '{column}' ya existe en la tabla '{table}'.")
-
-
-def create_table_if_not_exists(conn, table_name, create_sql):
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        (table_name,)
-    )
-    if cursor.fetchone() is None:
-        print(f"[+] Creando tabla '{table_name}'...")
-        conn.execute(create_sql)
-    else:
-        print(f"[ok] La tabla '{table_name}' ya existe.")
-
-
-def recreate_database():
+def _load_app():
     from app import app
+    return app
+
+
+def _is_sqlite_url(url):
+    return str(url).startswith('sqlite')
+
+
+def seed_admin(app):
+    """Create default admin if none exists."""
+    from models import User
     from extensions import db
-
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-        print("[!] Base de datos anterior eliminada.")
-
-    with app.app_context():
-        db.create_all()
-        print("[ok] Nueva base de datos creada correctamente como 'users.db'")
-        seed_admin(app)
-
-
-def update_structure_if_needed():
-    print("[!] La base de datos ya existe. Verificando estructura...")
-
-    # Determine actual DB path
-    db_path = DB_PATH
-    if not os.path.exists(db_path):
-        db_path = os.path.join(os.path.dirname(__file__), 'users.db')
-    if not os.path.exists(db_path):
-        db_path = os.path.join(os.path.dirname(__file__), 'instance', 'users.db')
-
-    conn = sqlite3.connect(db_path)
-
-    # Existing columns
-    add_column_if_not_exists(conn, "reports", "title", "TEXT")
-    add_column_if_not_exists(conn, "reports", "description", "TEXT")
-    add_column_if_not_exists(conn, "reports", "template_name", "TEXT")
-
-    # New admin columns
-    add_column_if_not_exists(conn, "users", "role", "TEXT DEFAULT 'DI'")
-    add_column_if_not_exists(conn, "users", "is_active", "BOOLEAN DEFAULT 1")
-    add_column_if_not_exists(conn, "users", "created_at", "DATETIME")
-    add_column_if_not_exists(conn, "users", "allowed_tools", "TEXT")
-
-    # Activity logs table
-    create_table_if_not_exists(conn, "activity_logs", """
-        CREATE TABLE activity_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            action VARCHAR(100) NOT NULL,
-            detail TEXT,
-            ip_address VARCHAR(45),
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-    """)
-
-    # Create index on timestamp for faster queries
-    try:
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_activity_logs_timestamp ON activity_logs(timestamp)")
-    except Exception:
-        pass
-
-    # Classification presets table
-    create_table_if_not_exists(conn, "classification_presets", """
-        CREATE TABLE classification_presets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            name VARCHAR(100) NOT NULL,
-            rules_json TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-    """)
-
-    # Tasks table
-    create_table_if_not_exists(conn, "tasks", """
-        CREATE TABLE tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title VARCHAR(255) NOT NULL,
-            description TEXT,
-            client VARCHAR(100),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            due_date DATE NOT NULL,
-            status VARCHAR(30) NOT NULL DEFAULT 'Pendiente',
-            is_recurrent BOOLEAN DEFAULT 0,
-            recurrence_type VARCHAR(20),
-            parent_task_id INTEGER,
-            area VARCHAR(20) NOT NULL,
-            creator_id INTEGER NOT NULL,
-            assignee_id INTEGER NOT NULL,
-            FOREIGN KEY (parent_task_id) REFERENCES tasks(id),
-            FOREIGN KEY (creator_id) REFERENCES users(id),
-            FOREIGN KEY (assignee_id) REFERENCES users(id)
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-    print("[ok] Verificacion de estructura completada.")
-
-
-def seed_admin(app=None):
-    """Create a default admin user if none exists."""
-    if app is None:
-        from app import app
 
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
     admin_password = os.environ.get('ADMIN_PASSWORD', 'Admin2024!')
     admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
 
     with app.app_context():
-        from models import User
-        from extensions import db
-
         existing_admin = User.query.filter_by(role='admin').first()
         if existing_admin:
-            print(f"[ok] Ya existe un administrador: {existing_admin.username} ({existing_admin.email})")
+            print(f"[ok] Admin exists: {existing_admin.username} ({existing_admin.email})")
             return
 
         admin_user = User(
             username=admin_username,
             email=admin_email,
-            password=generate_password_hash(admin_password, method='pbkdf2:sha256'),
+            password=generate_password_hash(admin_password, method='scrypt'),
             role='admin',
             is_active=True,
         )
         db.session.add(admin_user)
         db.session.commit()
-        print(f"[ADMIN] Admin creado: {admin_username} ({admin_email})")
+        print(f"[ADMIN] Admin created: {admin_username} ({admin_email})")
 
 
-# ---------------------------------------------------------------
+def ensure_schema(app):
+    """Create missing tables and run lightweight column migrations."""
+    from extensions import db
+
+    with app.app_context():
+        db.create_all()
+
+        insp = inspect(db.engine)
+        tables = set(insp.get_table_names())
+
+        if 'reports' in tables:
+            report_cols = {c['name'] for c in insp.get_columns('reports')}
+            if 'template_name' not in report_cols:
+                try:
+                    db.session.execute(text("ALTER TABLE reports ADD COLUMN template_name TEXT"))
+                    db.session.commit()
+                    print("[migration] Added reports.template_name")
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"[migration] Warning adding reports.template_name: {e}")
+
+        if 'users' in tables:
+            user_cols = {c['name'] for c in insp.get_columns('users')}
+            new_user_cols = {
+                'session_token': 'VARCHAR(64)',
+                'force_logout': 'BOOLEAN DEFAULT 0',
+                'area_id': 'INTEGER REFERENCES areas(id)',
+            }
+            for col_name, col_type in new_user_cols.items():
+                if col_name not in user_cols:
+                    try:
+                        db.session.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                        db.session.commit()
+                        print(f"[migration] Added users.{col_name}")
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"[migration] Warning adding users.{col_name}: {e}")
+
+        seed_admin(app)
+        print(f"[ok] Schema ensured on: {db.engine.url.render_as_string(hide_password=True)}")
+
+
+def reset_sqlite_database(app):
+    """Drop local SQLite file and recreate schema. Not for Postgres."""
+    from extensions import db
+
+    with app.app_context():
+        if not _is_sqlite_url(db.engine.url):
+            print("[warn] --reset is only supported for SQLite databases.")
+            return
+
+        sqlite_path = db.engine.url.database
+        if sqlite_path and os.path.exists(sqlite_path):
+            os.remove(sqlite_path)
+            print(f"[!] Removed SQLite file: {sqlite_path}")
+
+        db.create_all()
+        print("[ok] SQLite database recreated.")
+
+    seed_admin(app)
+
 
 if __name__ == '__main__':
+    app = _load_app()
+
     if '--reset' in sys.argv:
-        recreate_database()
+        reset_sqlite_database(app)
     elif '--seed-admin' in sys.argv:
-        from app import app
         seed_admin(app)
     else:
-        # Determine if DB exists at either location
-        root_db = os.path.join(os.path.dirname(__file__), 'users.db')
-        instance_db = os.path.join(os.path.dirname(__file__), 'instance', 'users.db')
-        if not os.path.exists(root_db) and not os.path.exists(instance_db):
-            recreate_database()
-        else:
-            update_structure_if_needed()
-            # Also seed admin if no admin exists
-            from app import app
-            seed_admin(app)
+        ensure_schema(app)

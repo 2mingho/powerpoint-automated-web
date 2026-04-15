@@ -17,3 +17,4 @@ openpyxl
 chardet>=5,<6
 xlrd
 APScheduler
+psycopg2-binary
