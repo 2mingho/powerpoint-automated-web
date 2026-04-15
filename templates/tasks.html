@@ -20,6 +20,39 @@
   </div>
 </div>
 
+<div class="tasks-filters" id="tasksFilters">
+  <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
+    <option value="">Todos los estados</option>
+    <option value="Pendiente">Pendiente</option>
+    <option value="En Progreso">En Progreso</option>
+    <option value="Completado">Completado</option>
+  </select>
+
+  <select class="form-select" id="tasksFilterAssignee" aria-label="Filtrar por asignado">
+    <option value="">Todos los asignados</option>
+    {% for u in area_users %}
+    <option value="{{ u.id }}">
+      {{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}
+    </option>
+    {% endfor %}
+  </select>
+
+  <input type="search" class="form-input" id="tasksFilterClient" placeholder="Filtrar por cliente" maxlength="100" aria-label="Filtrar por cliente">
+
+  {% if current_user.is_admin %}
+  <select class="form-select" id="tasksFilterArea" aria-label="Filtrar por unidad">
+    <option value="">Todas las unidades</option>
+    {% for area_name in area_options %}
+    <option value="{{ area_name }}">{{ area_name }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+
+  <button class="btn btn-secondary btn-sm" id="btnClearTaskFilters" type="button">
+    <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar filtros
+  </button>
+</div>
+
 <div class="tasks-calendar-wrap">
   <div id="tasksCalendar"></div>
 </div>
@@ -34,10 +67,12 @@
     </div>
     <div class="task-modal-body">
       <input type="hidden" id="taskId" value="">
+      <div class="task-form-message" id="taskFormMessage" role="status" aria-live="polite"></div>
 
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label">Título *</label>
         <input type="text" class="form-input" id="taskTitle" placeholder="Título de la tarea" maxlength="255">
+        <div class="field-error" id="taskTitleError"></div>
       </div>
 
       <div class="form-group" style="margin-bottom:0">
@@ -58,13 +93,17 @@
           <label class="form-label">Asignar a *</label>
           <select class="form-select" id="taskAssignee">
             {% for u in area_users %}
-            <option value="{{ u.id }}">{{ u.username }}</option>
+            <option value="{{ u.id }}">
+              {{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}
+            </option>
             {% endfor %}
           </select>
+          <div class="field-error" id="taskAssigneeError"></div>
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Fecha de Entrega *</label>
           <input type="date" class="form-input" id="taskDueDate">
+          <div class="field-error" id="taskDueDateError"></div>
         </div>
       </div>
 
@@ -97,11 +136,16 @@
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Hasta</label>
           <input type="date" class="form-input" id="taskRecurrenceEnd">
+          <div class="field-error" id="taskRecurrenceEndError"></div>
         </div>
+        <div class="recurrence-preview" id="recurrencePreview"></div>
       </div>
     </div>
 
     <div class="task-modal-footer">
+      <label class="form-check delete-series-check" id="deleteSeriesWrap" style="display:none; margin-right:auto;">
+        <input type="checkbox" id="taskDeleteSeries"> Eliminar toda la serie
+      </label>
       <button class="btn btn-danger btn-sm" id="btnDeleteTask" style="display:none; margin-right:auto;">
         <i class="fa-solid fa-trash"></i> Eliminar
       </button>
@@ -112,6 +156,8 @@
     </div>
   </div>
 </div>
+
+<div class="task-toast-container" id="taskToastContainer" aria-live="polite" aria-atomic="true"></div>
 
 <!-- FullCalendar JS -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
