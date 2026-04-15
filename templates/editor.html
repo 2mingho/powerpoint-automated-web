@@ -134,6 +134,14 @@
 <script>
     const reportData = {{ context | tojson }};
 
+    function notify(type, message) {
+        if (window.appNotify) {
+            window.appNotify({ type, message });
+            return;
+        }
+        console.error(message);
+    }
+
     // Evolution Chart
     const ctxEvo = document.getElementById('evolutionChart').getContext('2d');
     new Chart(ctxEvo, {
@@ -263,7 +271,7 @@
             }
         } catch (error) {
             console.error('Error:', error);
-            alert('Error: ' + error.message);
+            notify('error', 'Error: ' + error.message);
             btn.innerHTML = originalContent;
             btn.disabled = false;
             btn.style.opacity = "1";

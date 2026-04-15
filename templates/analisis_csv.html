@@ -156,6 +156,14 @@
 <script>
 let charts = {};
 
+function notify(type, message) {
+    if (window.appNotify) {
+        window.appNotify({ type, message });
+        return;
+    }
+    console.error(message);
+}
+
 const fileInput = document.getElementById('csv_file');
 const dropZone = document.getElementById('drop-zone');
 const fileNameDisplay = document.getElementById('file-name-display');
@@ -185,7 +193,7 @@ async function analyzeFile() {
     const separator = document.getElementById('separator').value;
     const btn = document.getElementById('btnAnalyze');
 
-    if (!file) { alert('Selecciona un archivo CSV primero.'); return; }
+    if (!file) { notify('warning', 'Selecciona un archivo CSV primero.'); return; }
 
     try {
         btn.disabled = true;
@@ -203,7 +211,7 @@ async function analyzeFile() {
         else { throw new Error(result.error || 'Error desconocido'); }
     } catch (error) {
         console.error(error);
-        alert('Error: ' + error.message);
+        notify('error', 'Error: ' + error.message);
         btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
         btn.disabled = false;
     }
