@@ -50,6 +50,14 @@
 
 <!-- PASO 2: RESULTADOS -->
 <div id="results-section" style="display: none;">
+<!-- Interpretacion (AI Insights) -->
+    <div class="card" style="margin-bottom: 24px;" id="insights-card">
+        <div class="card-title">
+            <i class="fa-solid fa-lightbulb" style="color:var(--c-warning);"></i> Interpretacion del Archivo
+        </div>
+        <div id="insights-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+
     <!-- KPI Cards -->
     <div class="card" style="margin-bottom: 24px;">
         <div class="card-title">
@@ -198,6 +206,7 @@ async function analyzeFile() {
     try {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analizando...';
+        showLoading('Analizando archivo...', 'Calculando estadisticas y generando graficos.');
 
         const formData = new FormData();
         formData.append('csv_file', file);
@@ -207,10 +216,11 @@ async function analyzeFile() {
         const response = await fetch('/analisis-csv', { method: 'POST', body: formData });
         const result = await response.json();
 
-        if (result.success) { displayResults(result); }
-        else { throw new Error(result.error || 'Error desconocido'); }
+        if (result.success) { hideLoading(); displayResults(result); }
+        else { hideLoading(); throw new Error(result.error || 'Error desconocido'); }
     } catch (error) {
         console.error(error);
+        hideLoading();
         notify('error', 'Error: ' + error.message);
         btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
         btn.disabled = false;
@@ -220,6 +230,19 @@ async function analyzeFile() {
 function displayResults(data) {
     document.getElementById('upload-card').style.display = 'none';
     document.getElementById('results-section').style.display = 'block';
+
+    // Render textual insights
+    const insightsList = document.getElementById('insights-list');
+    if (data.insights && data.insights.length > 0) {
+        insightsList.innerHTML = data.insights.map(text =>
+            '<div style="display:flex; gap:10px; align-items:flex-start; padding:10px 14px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light);">' +
+            '<i class="fa-solid fa-circle-info" style="color:var(--c-primary); margin-top:2px; flex-shrink:0;"></i>' +
+            '<span style="font-size:0.88rem; color:var(--c-text);">' + text + '</span></div>'
+        ).join('');
+        document.getElementById('insights-card').style.display = 'block';
+    } else {
+        document.getElementById('insights-card').style.display = 'none';
+    }
 
     const kpiContainer = document.getElementById('kpi-cards');
     kpiContainer.innerHTML = `

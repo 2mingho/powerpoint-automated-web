@@ -4,7 +4,8 @@ import uuid
 import zipfile
 import shutil
 import json
-from datetime import datetime
+import threading
+from datetime import datetime, timedelta
 import functools
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
 from flask_login import current_user, login_required
@@ -15,15 +16,16 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from babel.dates import format_datetime
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, event
 from dotenv import load_dotenv
+from flask_talisman import Talisman
 
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
 from blueprints.tasks import tasks_bp
 
 
-from extensions import db, login_manager
+from extensions import db, login_manager, csrf, limiter
 from models import User, Report, ActivityLog, ClassificationPreset, Task
 from services import calculation as report
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
@@ -46,13 +48,67 @@ if not app.config['SECRET_KEY']:
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB upload limit
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 
+# Session security
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
+# Only set Secure cookie when not in debug/local mode
+if os.environ.get('FLASK_ENV') == 'production':
+    app.config['SESSION_COOKIE_SECURE'] = True
+
+# ─────────────────────────────────────────────────────────────
+# Initialize extensions
+# ─────────────────────────────────────────────────────────────
 db.init_app(app)
 login_manager.init_app(app)
+csrf.init_app(app)
+limiter.init_app(app)
+
+# Security headers via Talisman (CSP, HSTS, X-Frame-Options)
+# Using 'unsafe-inline' for scripts/styles since templates use inline code extensively
+# NOTE: Do NOT use content_security_policy_nonce_in — it causes browsers to ignore 'unsafe-inline'
+Talisman(app,
+         force_https=os.environ.get('FLASK_ENV') == 'production',
+         content_security_policy={
+             'default-src': "'self'",
+             'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
+             'style-src':  ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
+             'font-src':   ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+             'img-src':    ["'self'", "data:"],
+             'connect-src': "'self'",
+         })
+
+# SQLite WAL mode for better concurrent access
+from sqlalchemy import Engine as _Engine
+
+@event.listens_for(_Engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    import sqlite3
+    if isinstance(dbapi_conn, sqlite3.Connection):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
 
 # Registrar blueprints
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
 app.register_blueprint(tasks_bp)
+
+# ─────────────────────────────────────────────────────────────
+# Force-logout check (session kick feature)
+# ─────────────────────────────────────────────────────────────
+from flask_login import logout_user
+
+@app.before_request
+def check_force_logout():
+    """If admin has flagged this user for forced logout, log them out immediately."""
+    if current_user.is_authenticated and getattr(current_user, 'force_logout', False):
+        current_user.force_logout = False
+        db.session.commit()
+        logout_user()
+        flash('Tu sesion ha sido terminada por un administrador.', 'warning')
+        return redirect(url_for('auth.login'))
 
 # ─────────────────────────────────────────────────────────────
 # Automatic Request Logging (after_request)
@@ -108,10 +164,25 @@ def ensure_reports_schema():
             try:
                 db.session.execute(text("ALTER TABLE reports ADD COLUMN template_name TEXT"))
                 db.session.commit()
-                # opcional: recargar inspector si quisieras verificar, no es necesario aquí
             except Exception as e:
-                # Si hay una condición de carrera o ya existe, lo ignoramos con un log suave
                 print(f"[ensure_reports_schema] Aviso al agregar columna template_name: {e}")
+
+        # Migrate users table for session control + area columns
+        if 'users' in tables:
+            user_cols = {c['name'] for c in insp.get_columns('users')}
+            new_user_cols = {
+                'session_token': 'VARCHAR(64)',
+                'force_logout': 'BOOLEAN DEFAULT 0',
+                'area_id': 'INTEGER REFERENCES areas(id)',
+            }
+            for col_name, col_type in new_user_cols.items():
+                if col_name not in user_cols:
+                    try:
+                        db.session.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                        db.session.commit()
+                        print(f"[migration] Added column users.{col_name}")
+                    except Exception as e:
+                        print(f"[migration] Aviso al agregar users.{col_name}: {e}")
 
 
 # Ejecutar guardado de esquema al iniciar
@@ -143,7 +214,8 @@ def template_path_from_name(template_name):
 
 
 def clean_scratch_folder():
-    """Clean only old files (>1 hour) to prevent race conditions (P6)"""
+    """Clean only old files (>1 hour) to prevent race conditions.
+    Runs in a background thread — never blocks user requests."""
     folder = app.config['UPLOAD_FOLDER']
     try:
         import time
@@ -163,6 +235,20 @@ def clean_scratch_folder():
                 continue
     except Exception as e:
         app.logger.error(f"Error al limpiar la carpeta scratch: {e}")
+
+
+def _schedule_background_cleanup():
+    """Start a background thread that cleans scratch/ every 30 minutes."""
+    def _run():
+        while True:
+            import time
+            time.sleep(1800)  # 30 minutes
+            with app.app_context():
+                clean_scratch_folder()
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+_schedule_background_cleanup()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -221,9 +307,6 @@ def menu():
 @app.route('/', methods=['GET', 'POST'])
 @tool_required('reports')
 def index():
-    # Only clean old files, not all files (P6)
-    clean_scratch_folder()
-
     available_templates = get_available_templates()
     default_template = DEFAULT_TEMPLATE_FILENAME if DEFAULT_TEMPLATE_FILENAME in available_templates else (available_templates[0] if available_templates else None)
 
@@ -711,6 +794,103 @@ def clasificacion_detect():
 
 
 # ─────────────────────────────────────────────────────────────
+# Full-file upload for chunked classification
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/clasificacion/upload', methods=['POST'])
+@tool_required('classification')
+def clasificacion_upload():
+    """
+    Receive the full file, read it properly (respecting encoding/sep overrides),
+    convert to UTF-8 TSV, store in a session temp file, and return chunk metadata.
+    This avoids using the browser's file.text() API which always decodes as UTF-8.
+    """
+    from services.file_loader import detect_format as _detect_fmt, read_full_as_tsv as _read_tsv
+
+    file = request.files.get('csv_file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No se recibio ningun archivo.'}), 400
+
+    try:
+        raw = file.read()
+
+        # Auto-detect format first
+        fmt = _detect_fmt(raw, file.filename)
+        if fmt.get('error'):
+            return jsonify({'success': False, 'error': fmt['error']}), 400
+
+        # Apply manual overrides if provided
+        manual_encoding = (request.form.get('encoding') or '').strip() or None
+        manual_sep      = (request.form.get('sep') or '').strip() or None
+
+        if manual_encoding:
+            fmt['encoding'] = manual_encoding
+        if manual_sep:
+            fmt['sep'] = manual_sep
+
+        # Read full file as UTF-8 TSV using the correct encoding/format
+        header, body = _read_tsv(raw, fmt)
+        if not header:
+            return jsonify({'success': False, 'error': 'No se pudo leer el archivo con el formato indicado.'}), 400
+
+        # Count data rows
+        data_lines = [l for l in body.split('\n') if l.strip()]
+        total_rows = len(data_lines)
+
+        # Store TSV in a session temp file for the chunk endpoint to use
+        session_id = uuid.uuid4().hex
+        session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"upload_{session_id}.tsv")
+        with open(session_file, 'w', encoding='utf-8') as f:
+            f.write(header)
+            f.write(body)
+
+        CHUNK_SIZE = 2000
+        total_chunks = max(1, -(-total_rows // CHUNK_SIZE))  # ceiling division
+
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'header': header,
+            'total_rows': total_rows,
+            'total_chunks': total_chunks,
+            'chunk_size': CHUNK_SIZE,
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error en clasificacion/upload: {e}")
+        return jsonify({'success': False, 'error': 'Error leyendo el archivo. Verifica el formato y la codificacion.'}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Serve TSV body for chunked classification
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/clasificacion/upload_body/<session_id>', methods=['GET'])
+@tool_required('classification')
+def clasificacion_upload_body(session_id):
+    """
+    Return the body (data rows, no header) of the stored UTF-8 TSV session file
+    so the frontend can split it into chunks without touching the raw binary file.
+    """
+    safe_sid = secure_filename(session_id)
+    if not safe_sid or safe_sid != session_id:
+        abort(400)
+    session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"upload_{safe_sid}.tsv")
+    if not os.path.exists(session_file):
+        abort(404)
+    try:
+        with open(session_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        # First line is the header; return only the body rows
+        body = ''.join(lines[1:])
+        from flask import Response
+        return Response(body, mimetype='text/plain; charset=utf-8')
+    except Exception as e:
+        app.logger.error(f"Error sirviendo upload_body: {e}")
+        abort(500)
+
+
+# ─────────────────────────────────────────────────────────────
 # Classification Presets CRUD
 # ─────────────────────────────────────────────────────────────
 
@@ -773,6 +953,30 @@ def presets_delete(preset_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': 'No se pudo eliminar el preset.'}), 500
+
+
+@app.route('/clasificacion/presets/<int:preset_id>', methods=['PUT'])
+@tool_required('classification')
+def presets_update(preset_id):
+    preset = ClassificationPreset.query.filter_by(id=preset_id, user_id=current_user.id).first()
+    if not preset:
+        return jsonify({'success': False, 'error': 'Preset no encontrado.'}), 404
+    try:
+        data = request.get_json(force=True)
+        new_name = (data.get('name') or '').strip()[:100]
+        new_rules = data.get('rules')
+        if new_name:
+            preset.name = new_name
+        if new_rules is not None:
+            preset.rules_json = json.dumps(new_rules, ensure_ascii=False)
+        db.session.commit()
+        log_activity('preset_update', f'Preset actualizado: {preset.name}')
+        return jsonify({'success': True, 'id': preset.id, 'name': preset.name})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error actualizando preset: {e}")
+        return jsonify({'success': False, 'error': 'No se pudo actualizar el preset.'}), 500
+
 # Chunked classification endpoints
 # ─────────────────────────────────────────────────────────────
 
@@ -997,6 +1201,18 @@ def union_merge():
             df_b = read_file(raw_b, file_b.filename, encoding=enc_b, sep=sep_b)
 
             merged = merge_advanced(df_a, df_b, mapping)
+
+            # Apply extra columns (if any)
+            extra_cols_str = request.form.get('extra_columns', '[]')
+            try:
+                extra_cols = json.loads(extra_cols_str)
+            except json.JSONDecodeError:
+                extra_cols = []
+            for ec in extra_cols:
+                col_name = ec.get('name', '').strip()
+                if col_name:
+                    merged[col_name] = ec.get('value', '')
+
             files_merged = 2
             detail = f'Union avanzada: {file_a.filename} + {file_b.filename} ({len(merged)} filas)'
 
@@ -1185,11 +1401,44 @@ def upload_csv():
     return redirect(url_for('index'))
 
 
+# ─────────────────────────────────────────────────────────────
+# Centralized Error Handlers (HTML for browser, JSON for AJAX)
+# ─────────────────────────────────────────────────────────────
+
+@app.errorhandler(400)
+def bad_request(e):
+    if _is_ajax():
+        return jsonify({"success": False, "error": "Solicitud invalida."}), 400
+    return render_template('error.html',
+                           title="Error 400 - Solicitud inválida",
+                           message="La solicitud no es válida. Verifica los datos e intenta de nuevo."), 400
+
+
+@app.errorhandler(403)
+def forbidden(e):
+    if _is_ajax():
+        return jsonify({"success": False, "error": "No tienes permiso para realizar esta accion."}), 403
+    return render_template('error.html',
+                           title="Error 403 - Acceso denegado",
+                           message="No tienes permiso para acceder a este recurso."), 403
+
+
 @app.errorhandler(404)
 def page_not_found(e):
+    if _is_ajax():
+        return jsonify({"success": False, "error": "Recurso no encontrado."}), 404
     return render_template('error.html',
                            title="Error 404 - Página no encontrada",
                            message="La página que estás buscando no existe."), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    if _is_ajax():
+        return jsonify({"success": False, "error": "Metodo no permitido."}), 405
+    return render_template('error.html',
+                           title="Error 405 - Método no permitido",
+                           message="El método HTTP utilizado no está permitido para este recurso."), 405
 
 
 @app.errorhandler(413)
@@ -1201,8 +1450,19 @@ def request_entity_too_large(e):
                            message="El archivo que subiste supera el limite de 200 MB."), 413
 
 
+@app.errorhandler(429)
+def rate_limit_exceeded(e):
+    if _is_ajax():
+        return jsonify({"success": False, "error": "Demasiadas solicitudes. Intenta mas tarde."}), 429
+    return render_template('error.html',
+                           title="Error 429 - Demasiadas solicitudes",
+                           message="Has realizado demasiadas solicitudes. Por favor espera unos minutos e intenta de nuevo."), 429
+
+
 @app.errorhandler(500)
 def internal_error(e):
+    if _is_ajax():
+        return jsonify({"success": False, "error": "Error interno del servidor."}), 500
     return render_template('error.html',
                            title="Error 500 - Problema del servidor",
                            message="Ocurrió un error inesperado. Por favor, intenta más tarde."), 500

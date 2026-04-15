@@ -10,6 +10,7 @@
 
 <div class="card" style="max-width: 700px;">
   <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-row">
       <div class="form-group">
         <label class="form-label" for="username">Nombre de usuario</label>
@@ -30,13 +31,29 @@
              {{ '' if user else 'required' }} />
     </div>
 
-    <div class="form-group">
-      <label class="form-label" for="role">Rol</label>
-      <select id="role" name="role" class="form-select">
-        <option value="DI" {{ 'selected' if user and user.role == 'DI' }}>DI</option>
-        <option value="MW" {{ 'selected' if user and user.role == 'MW' }}>MW</option>
-        <option value="admin" {{ 'selected' if user and user.role == 'admin' }}>Admin</option>
-      </select>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="role">Rol</label>
+        <select id="role" name="role" class="form-select">
+          <option value="admin" {{ 'selected' if user and user.role == 'admin' }}>Admin</option>
+          {% for role in roles %}
+          <option value="{{ role.code }}" {{ 'selected' if user and user.role == role.code }}>{{ role.display_name }} ({{ role.code }})</option>
+          {% endfor %}
+          {% if not roles %}
+          <option value="DI" {{ 'selected' if not user or user.role == 'DI' }}>DI</option>
+          <option value="MW" {{ 'selected' if user and user.role == 'MW' }}>MW</option>
+          {% endif %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="area_id">Area</label>
+        <select id="area_id" name="area_id" class="form-select">
+          <option value="">— Sin area asignada —</option>
+          {% for area in areas %}
+          <option value="{{ area.id }}" {{ 'selected' if user and user.area_id == area.id }}>{{ area.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
     <div class="form-group">

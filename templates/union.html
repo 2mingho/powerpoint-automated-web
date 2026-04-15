@@ -121,6 +121,20 @@
   <div class="card-title"><i class="fa-solid fa-arrows-left-right"></i> 3. Mapeo de Columnas</div>
   <p class="form-hint" style="margin-bottom: 16px;">Empareja cada columna del <strong>Archivo A</strong> con su equivalente en el <strong>Archivo B</strong>. Las columnas con nombres similares se auto-sugieren.</p>
   <div id="mapping-grid" style="display: flex; flex-direction: column; gap: 8px;"></div>
+
+  <!-- Extra Columns -->
+  <div style="margin-top: 20px; padding-top: 16px; border-top: 2px dashed var(--c-border-light);">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+      <h4 style="margin:0; font-size:0.92rem; color:var(--c-text-secondary);">
+        <i class="fa-solid fa-plus-circle" style="color:var(--c-primary);"></i> Columnas Adicionales
+      </h4>
+      <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="addExtraColumn()">
+        <i class="fa-solid fa-plus"></i> Agregar Columna
+      </button>
+    </div>
+    <p class="form-hint" style="margin-bottom: 12px; font-size:0.78rem;">Agrega columnas que no existen en los archivos originales. Se llenaran con el valor que definas.</p>
+    <div id="extra-columns-list"></div>
+  </div>
 </div>
 
 <!-- PASO: RESULTADOS -->
@@ -315,12 +329,15 @@ function buildMappingGrid() {
 async function detectFile(file) {
   const fd = new FormData();
   fd.append('file', file);
+  showLoading('Analizando archivo...', file.name);
   try {
     const resp = await fetch('/union/detect', { method: 'POST', body: fd });
     const data = await resp.json();
-    if (!data.success) { notify('error', 'Error: ' + data.error); return null; }
+    if (!data.success) { hideLoading(); notify('error', 'Error: ' + data.error); return null; }
+    hideLoading();
     return data;
   } catch (e) {
+    hideLoading();
     notify('error', 'No se pudo analizar el archivo: ' + file.name);
     return null;
   }
@@ -333,6 +350,7 @@ async function doMerge() {
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
   document.getElementById('progress-container').style.display = 'block';
   document.getElementById('status-text').innerText = 'Procesando union...';
+  showLoading('Uniendo archivos...', 'Esto puede tardar segun el tamano de los archivos.');
 
   try {
     const fd = new FormData();
@@ -352,6 +370,10 @@ async function doMerge() {
         if (sel.value) mapping[sel.value] = sel.dataset.colA;
       });
       fd.append('mapping', JSON.stringify(mapping));
+
+      // Extra columns
+      const extras = getExtraColumnsData();
+      if (extras.length > 0) fd.append('extra_columns', JSON.stringify(extras));
     } else {
       defaultFiles.forEach(item => fd.append('files', item.file));
       // Encoding/separator overrides not exposed in default mode UI (auto-detect used)
@@ -364,10 +386,12 @@ async function doMerge() {
     document.getElementById('progress-container').style.display = 'none';
 
     if (!result.success) throw new Error(result.error);
+    hideLoading();
     showResults(result);
 
   } catch (error) {
     document.getElementById('progress-container').style.display = 'none';
+    hideLoading();
     notify('error', 'Error: ' + error.message);
     btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
     btn.disabled = false;
@@ -412,6 +436,7 @@ function resetAll() {
   defaultFiles = [];
   advFileA = null;
   advFileB = null;
+  extraColumns = [];
   document.getElementById('file-list-default').innerHTML = '';
   document.getElementById('file-a-name').innerText = 'Seleccionar archivo A';
   document.getElementById('file-b-name').innerText = 'Seleccionar archivo B';
@@ -420,6 +445,7 @@ function resetAll() {
   document.getElementById('preview-a').innerHTML = '';
   document.getElementById('preview-b').innerHTML = '';
   document.getElementById('mapping-grid').innerHTML = '';
+  document.getElementById('extra-columns-list').innerHTML = '';
   document.getElementById('section-mapping').style.display = 'none';
   document.getElementById('section-results').style.display = 'none';
   document.getElementById('action-bar').style.display = 'block';
@@ -427,6 +453,43 @@ function resetAll() {
   document.getElementById('btnMerge').innerHTML = '<i class="fa-solid fa-bolt"></i> Unir Archivos';
   setMode(currentMode);
   updateStatus();
+}
+
+// ─── Extra Columns ───
+let extraColumns = [];
+let extraColCounter = 0;
+
+function addExtraColumn() {
+  const id = ++extraColCounter;
+  extraColumns.push({ id });
+  const container = document.getElementById('extra-columns-list');
+  const row = document.createElement('div');
+  row.id = 'extra-col-' + id;
+  row.className = 'animate-fade';
+  row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:8px;';
+  row.innerHTML =
+    '<input type="text" class="form-input" placeholder="Nombre de la columna" data-extra-name="' + id + '" style="flex:1; font-size:0.85rem;" />' +
+    '<input type="text" class="form-input" placeholder="Valor por defecto" data-extra-value="' + id + '" style="flex:1; font-size:0.85rem;" />' +
+    '<button class="btn btn-icon btn-outline" onclick="removeExtraColumn(' + id + ')" title="Quitar" style="padding:6px 10px;"><i class="fa-solid fa-xmark"></i></button>';
+  container.appendChild(row);
+}
+
+function removeExtraColumn(id) {
+  extraColumns = extraColumns.filter(c => c.id !== id);
+  const el = document.getElementById('extra-col-' + id);
+  if (el) el.remove();
+}
+
+function getExtraColumnsData() {
+  const result = [];
+  document.querySelectorAll('[data-extra-name]').forEach(nameInput => {
+    const id = nameInput.dataset.extraName;
+    const valInput = document.querySelector('[data-extra-value="' + id + '"]');
+    const name = nameInput.value.trim();
+    const value = valInput ? valInput.value : '';
+    if (name) result.push({ name, value });
+  });
+  return result;
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
