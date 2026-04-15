@@ -41,11 +41,20 @@ A multi-tool web application for media analysts and social listening teams. Uplo
 
 ### 1. Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (you can copy from `.env.example`):
 
 ```env
 SECRET_KEY=your_random_flask_secret_key
 GROQ_API_KEY=your_groq_api_key_here
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+ADMIN_EMAIL=admin@yourcompany.com
+ADMIN_PASSWORD=change_this_password
+ADMIN_USERNAME=admin
+ENABLE_PAGE_VIEW_LOGS=false
+PAGE_VIEW_LOG_SAMPLE_RATE=0
+ACTIVITY_LOG_RETENTION_DAYS=90
+ACTIVITY_LOG_MAX_ROWS=100000
+REPORT_METADATA_RETENTION_DAYS=180
 ```
 
 ### 2. Quick Setup (Windows)
@@ -65,7 +74,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open `http://localhost:5000` in your browser. Register a first user — the first registration auto-assigns the `admin` role.
+Open `http://localhost:5000` in your browser. On startup, the app auto-creates the default admin user from `ADMIN_*` vars if no admin exists.
 
 ---
 
@@ -151,6 +160,12 @@ Check environment, auth, logic, and AI modules:
 python -m pytest tests/ -v
 ```
 
+Run DB storage maintenance manually:
+
+```bash
+python -m flask --app app maintenance-prune
+```
+
 Temporary files in `scratch/` are automatically purged when they are older than 1 hour.
 
 ---
@@ -159,5 +174,6 @@ Temporary files in `scratch/` are automatically purged when they are older than 
 
 - **SECRET_KEY** must be set before starting the app — it will raise a `RuntimeError` at startup if missing.
 - **GROQ_API_KEY** is optional but AI report analysis will display "No disponible" without it.
+- **DATABASE_URL** is recommended for production (Neon/Postgres). Without it, the app falls back to local SQLite.
 - The report generator expects social listening CSV exports in **UTF-16 tab-delimited format** (standard Meltwater/similar export). Other tools accept any format.
 - The `scratch/` folder must be writable by the process user.

@@ -13,6 +13,8 @@
 venv/
 
 # Local database sidecar/backup files
+users.db
+instance/users.db
 instance/*.db-shm
 instance/*.db-wal
 instance/*.db.bak*
