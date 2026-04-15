@@ -17,7 +17,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const recPreview = document.getElementById('recurrencePreview');
   const deleteSeriesWrap = document.getElementById('deleteSeriesWrap');
   const deleteSeriesCb = document.getElementById('taskDeleteSeries');
-  const toastContainer = document.getElementById('taskToastContainer');
 
   const filterStatus = document.getElementById('tasksFilterStatus');
   const filterAssignee = document.getElementById('tasksFilterAssignee');
@@ -98,37 +97,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function showToast(message, type, action) {
     if (typeof window.appNotify === 'function') {
-      window.appNotify({ type: type || 'info', message: message });
-      return;
-    }
-
-    if (!toastContainer) {
-      if (type === 'error') console.error(message);
-      return;
-    }
-
-    const toast = document.createElement('div');
-    toast.className = `task-toast ${type || 'success'}`;
-
-    const text = document.createElement('span');
-    text.textContent = message;
-    toast.appendChild(text);
-
-    if (action && action.label && typeof action.onClick === 'function') {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = action.label;
-      btn.addEventListener('click', function () {
-        action.onClick();
-        toast.remove();
+      window.appNotify({
+        type: type || 'info',
+        message: message,
+        action: action || null
       });
-      toast.appendChild(btn);
+      return;
     }
 
-    toastContainer.appendChild(toast);
-    setTimeout(function () {
-      toast.remove();
-    }, action ? 6000 : 3200);
+    if (type === 'error') {
+      console.error(message);
+    }
   }
 
   function notify(type, message) {
@@ -140,7 +119,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof window.appConfirm === 'function') {
       return window.appConfirm(opts);
     }
-    return Promise.resolve(window.confirm(opts.message || 'Deseas continuar?'));
+    console.error('appConfirm no esta disponible para confirmar la accion.');
+    return Promise.resolve(false);
   }
 
   function showFormMessage(message, type) {
@@ -1083,8 +1063,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     eventDrop: function (info) {
       const taskId = info.event.id;
-      const previousDate = info.oldEvent.startStr;
-      const nextDate = formatLocalDate(info.event.start) || info.event.startStr;
+      const previousDate = formatLocalDate(info.oldEvent.start) || normalizeIsoDate(info.oldEvent.startStr);
+      const nextDate = formatLocalDate(info.event.start) || normalizeIsoDate(info.event.startStr);
 
       updateTask(taskId, { due_date: nextDate }, info.revert, { silent: true })
         .then(function () {
