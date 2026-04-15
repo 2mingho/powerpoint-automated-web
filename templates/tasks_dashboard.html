@@ -97,9 +97,65 @@
     </button>
   </div>
 
+  <div class="td-bulkbar" id="tdBulkBar">
+    <label class="td-bulk-select-all">
+      <input type="checkbox" id="selectVisibleTasks">
+      Seleccionar visibles
+    </label>
+    <span class="td-bulk-count" id="selectedTasksCount">0 seleccionadas</span>
+    <div class="td-bulk-actions">
+      <button class="btn btn-secondary btn-sm" id="btnBulkEdit" disabled>
+        <i class="fa-solid fa-pen-to-square"></i> Editar seleccionadas
+      </button>
+      <button class="btn btn-danger btn-sm" id="btnBulkDelete" disabled>
+        <i class="fa-solid fa-trash"></i> Eliminar seleccionadas
+      </button>
+    </div>
+  </div>
+
   <!-- Task cards grid -->
   <div class="td-grid" id="tdGrid">
     <div class="td-loading"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tareas...</div>
+  </div>
+</div>
+
+<div class="task-modal-overlay" id="bulkModalOverlay" style="display:none;">
+  <div class="task-modal" role="dialog" aria-labelledby="bulkModalTitle">
+    <div class="task-modal-header">
+      <h2 id="bulkModalTitle">Edición masiva de tareas</h2>
+      <button class="task-modal-close" id="bulkModalClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="task-modal-body">
+      <p class="tasks-subtitle">Solo se aplicarán los campos que completes.</p>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Estado</label>
+        <select class="form-select" id="bulkStatus">
+          <option value="">No cambiar</option>
+          <option value="Pendiente">Pendiente</option>
+          <option value="En Progreso">En Progreso</option>
+          <option value="Completado">Completado</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Asignar a</label>
+        <select class="form-select" id="bulkAssignee">
+          <option value="">No cambiar</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Fecha de Entrega</label>
+        <input type="date" class="form-input" id="bulkDueDate">
+      </div>
+    </div>
+    <div class="task-modal-footer">
+      <button class="btn btn-secondary" id="bulkModalCancel">Cancelar</button>
+      <button class="btn btn-primary" id="bulkModalApply">
+        <i class="fa-solid fa-check"></i> Aplicar cambios
+      </button>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -117,13 +173,98 @@ document.addEventListener('DOMContentLoaded', function() {
   const selPreset = document.getElementById('barChartPreset');
   const barTitle = document.getElementById('barChartTitle');
 
+   const selectVisible = document.getElementById('selectVisibleTasks');
+   const selectedCount = document.getElementById('selectedTasksCount');
+   const btnBulkEdit = document.getElementById('btnBulkEdit');
+   const btnBulkDelete = document.getElementById('btnBulkDelete');
+
+   const bulkModal = document.getElementById('bulkModalOverlay');
+   const bulkModalClose = document.getElementById('bulkModalClose');
+   const bulkModalCancel = document.getElementById('bulkModalCancel');
+   const bulkModalApply = document.getElementById('bulkModalApply');
+   const bulkStatus = document.getElementById('bulkStatus');
+   const bulkAssignee = document.getElementById('bulkAssignee');
+   const bulkDueDate = document.getElementById('bulkDueDate');
+
   let chartStatus = null;
   let chartDistribution = null;
+  let allUsers = [];
+  let currentTasks = [];
+  let selectedTaskIds = new Set();
+
+  function parseJsonResponse(response) {
+    return response.json().catch(() => ({}));
+  }
+
+  function refreshSelectionUI() {
+    const visibleTaskIds = currentTasks.map(t => Number(t.id));
+    const selectedVisible = visibleTaskIds.filter(id => selectedTaskIds.has(id)).length;
+
+    selectedCount.textContent = `${selectedTaskIds.size} seleccionada(s)`;
+    btnBulkEdit.disabled = selectedTaskIds.size === 0;
+    btnBulkDelete.disabled = selectedTaskIds.size === 0;
+
+    if (visibleTaskIds.length === 0) {
+      selectVisible.checked = false;
+      selectVisible.indeterminate = false;
+      return;
+    }
+
+    if (selectedVisible === 0) {
+      selectVisible.checked = false;
+      selectVisible.indeterminate = false;
+      return;
+    }
+
+    if (selectedVisible === visibleTaskIds.length) {
+      selectVisible.checked = true;
+      selectVisible.indeterminate = false;
+      return;
+    }
+
+    selectVisible.checked = false;
+    selectVisible.indeterminate = true;
+  }
+
+  function bindCardSelectionHandlers() {
+    document.querySelectorAll('.td-task-check').forEach(cb => {
+      cb.addEventListener('change', function() {
+        const taskId = Number(this.dataset.taskId || 0);
+        if (!taskId) return;
+        if (this.checked) selectedTaskIds.add(taskId);
+        else selectedTaskIds.delete(taskId);
+        refreshSelectionUI();
+      });
+    });
+  }
+
+  function openBulkModal() {
+    bulkStatus.value = '';
+    bulkAssignee.value = '';
+    bulkDueDate.value = '';
+    bulkModal.style.display = 'flex';
+  }
+
+  function closeBulkModal() {
+    bulkModal.style.display = 'none';
+  }
+
+  function populateBulkAssignee(users) {
+    bulkAssignee.innerHTML = '<option value="">No cambiar</option>';
+    users.forEach(u => {
+      const o = document.createElement('option');
+      o.value = u.id;
+      o.textContent = u.label || u.username;
+      bulkAssignee.appendChild(o);
+    });
+  }
 
   // ─── Load filter options ───
   fetch('/api/admin/tasks/filters')
-    .then(r => r.json())
+    .then(parseJsonResponse)
     .then(data => {
+      if (!data || !data.statuses) return;
+
       data.statuses.forEach(s => {
         const o = document.createElement('option');
         o.value = s; o.textContent = s;
@@ -134,20 +275,26 @@ document.addEventListener('DOMContentLoaded', function() {
         o.value = c; o.textContent = c;
         selClient.appendChild(o);
       });
+      allUsers = Array.isArray(data.users) ? data.users : [];
       data.users.forEach(u => {
+        const userLabel = u.label || u.username;
         const o1 = document.createElement('option');
-        o1.value = u.id; o1.textContent = u.username;
+        o1.value = u.id; o1.textContent = userLabel;
         selAssignee.appendChild(o1);
 
         const o2 = document.createElement('option');
-        o2.value = u.id; o2.textContent = u.username;
+        o2.value = u.id; o2.textContent = userLabel;
         selCreator.appendChild(o2);
       });
+      populateBulkAssignee(allUsers);
       data.areas.forEach(a => {
         const o = document.createElement('option');
         o.value = a; o.textContent = a;
         selArea.appendChild(o);
       });
+    })
+    .catch(() => {
+      // keep defaults if filters fail to load
     });
 
   // ─── Analytics Rendering ───
@@ -235,9 +382,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (selArea.value)     params.set('area', selArea.value);
 
     fetch('/api/admin/tasks?' + params.toString())
-      .then(r => r.json())
+      .then(parseJsonResponse)
       .then(data => {
-        if (!data.success) return;
+        if (!data.success) {
+          currentTasks = [];
+          selectedTaskIds.clear();
+          refreshSelectionUI();
+          return;
+        }
+
+        currentTasks = Array.isArray(data.tasks) ? data.tasks : [];
+        const visibleIds = new Set(currentTasks.map(t => Number(t.id)));
+        selectedTaskIds = new Set([...selectedTaskIds].filter(id => visibleIds.has(id)));
 
         // Update counts
         document.getElementById('statTotal').textContent = data.stats.total;
@@ -249,12 +405,14 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCharts(data.stats, data.tasks);
 
         // Render cards
-        if (data.tasks.length === 0) {
+        if (currentTasks.length === 0) {
           grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-inbox"></i><p>No se encontraron tareas con estos filtros.</p></div>';
+          refreshSelectionUI();
           return;
         }
 
-        grid.innerHTML = data.tasks.map(t => {
+        grid.innerHTML = currentTasks.map(t => {
+          const taskId = Number(t.id);
           const statusClass = t.status === 'Pendiente'
             ? 'st-pendiente'
             : t.status === 'En Progreso'
@@ -267,9 +425,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
           return `
             <div class="td-card">
+              <div class="td-card-select-row">
+                <label class="td-card-select">
+                  <input type="checkbox" class="td-task-check" data-task-id="${taskId}" ${selectedTaskIds.has(taskId) ? 'checked' : ''}>
+                  <span>Seleccionar</span>
+                </label>
+                <span class="td-card-status ${statusClass}">${escapeHtml(t.status)}</span>
+              </div>
               <div class="td-card-top">
                 <h3 class="td-card-title">${escapeHtml(t.title)}</h3>
-                <span class="td-card-status ${statusClass}">${escapeHtml(t.status)}</span>
               </div>
               ${t.client ? `<span class="td-card-client">${escapeHtml(t.client)}</span>` : ''}
               ${t.description ? `<p class="td-card-desc">${escapeHtml(t.description)}</p>` : ''}
@@ -281,9 +445,15 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
           `;
         }).join('');
+
+        bindCardSelectionHandlers();
+        refreshSelectionUI();
       })
       .catch(() => {
+        currentTasks = [];
+        selectedTaskIds.clear();
         grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-exclamation-triangle"></i><p>Error al cargar tareas.</p></div>';
+        refreshSelectionUI();
       });
   }
 
@@ -307,10 +477,111 @@ document.addEventListener('DOMContentLoaded', function() {
     selAssignee.value = '';
     selCreator.value = '';
     selArea.value = '';
+    selectedTaskIds.clear();
     loadTasks();
   });
 
+  selectVisible.addEventListener('change', function() {
+    if (this.checked) {
+      currentTasks.forEach(t => selectedTaskIds.add(Number(t.id)));
+    } else {
+      selectedTaskIds.clear();
+    }
+
+    document.querySelectorAll('.td-task-check').forEach(cb => {
+      cb.checked = selectedTaskIds.has(Number(cb.dataset.taskId || 0));
+    });
+    refreshSelectionUI();
+  });
+
+  btnBulkEdit.addEventListener('click', function() {
+    if (selectedTaskIds.size === 0) return;
+    openBulkModal();
+  });
+
+  btnBulkDelete.addEventListener('click', function() {
+    if (selectedTaskIds.size === 0) return;
+
+    const count = selectedTaskIds.size;
+    const confirmed = window.confirm(`Se eliminarán ${count} tarea(s) seleccionada(s). Esta acción no se puede deshacer. ¿Deseas continuar?`);
+    if (!confirmed) return;
+
+    this.disabled = true;
+    fetch('/api/admin/tasks/bulk-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_ids: [...selectedTaskIds] })
+    })
+      .then(parseJsonResponse)
+      .then(data => {
+        if (!data.success) {
+          alert(data.error || 'No se pudieron eliminar las tareas seleccionadas.');
+          return;
+        }
+
+        selectedTaskIds.clear();
+        loadTasks();
+      })
+      .catch(() => {
+        alert('Error de conexión al eliminar tareas.');
+      })
+      .finally(() => {
+        btnBulkDelete.disabled = false;
+        refreshSelectionUI();
+      });
+  });
+
+  bulkModalClose.addEventListener('click', closeBulkModal);
+  bulkModalCancel.addEventListener('click', closeBulkModal);
+  bulkModal.addEventListener('click', function(e) {
+    if (e.target === bulkModal) closeBulkModal();
+  });
+
+  bulkModalApply.addEventListener('click', function() {
+    if (selectedTaskIds.size === 0) {
+      closeBulkModal();
+      return;
+    }
+
+    const payload = { task_ids: [...selectedTaskIds] };
+
+    if (bulkStatus.value) payload.status = bulkStatus.value;
+    if (bulkAssignee.value) payload.assignee_id = Number(bulkAssignee.value);
+    if (bulkDueDate.value) payload.due_date = bulkDueDate.value;
+
+    if (!payload.status && !payload.assignee_id && !payload.due_date) {
+      alert('Selecciona al menos un campo para aplicar cambios.');
+      return;
+    }
+
+    bulkModalApply.disabled = true;
+    fetch('/api/admin/tasks/bulk-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(parseJsonResponse)
+      .then(data => {
+        if (!data.success) {
+          alert(data.error || 'No se pudieron aplicar los cambios masivos.');
+          return;
+        }
+
+        closeBulkModal();
+        selectedTaskIds.clear();
+        loadTasks();
+      })
+      .catch(() => {
+        alert('Error de conexión al actualizar tareas.');
+      })
+      .finally(() => {
+        bulkModalApply.disabled = false;
+        refreshSelectionUI();
+      });
+  });
+
   // Initial load
+  refreshSelectionUI();
   loadTasks();
 });
 </script>

@@ -1,10 +1,9 @@
-/* ═══════════════════════════════════════════════════════
-   Tasks — FullCalendar + CRUD + Client Autocomplete
-   ═══════════════════════════════════════════════════════ */
+/* Tasks - FullCalendar + CRUD + UX improvements */
 
 document.addEventListener('DOMContentLoaded', function () {
-  // ─── DOM refs ───
   const calEl = document.getElementById('tasksCalendar');
+  if (!calEl) return;
+
   const overlay = document.getElementById('taskModalOverlay');
   const btnNew = document.getElementById('btnNewTask');
   const btnClose = document.getElementById('taskModalClose');
@@ -15,8 +14,17 @@ document.addEventListener('DOMContentLoaded', function () {
   const statusGroup = document.getElementById('statusGroup');
   const recurrentCb = document.getElementById('taskRecurrent');
   const recFields = document.getElementById('recurrenceFields');
+  const recPreview = document.getElementById('recurrencePreview');
+  const deleteSeriesWrap = document.getElementById('deleteSeriesWrap');
+  const deleteSeriesCb = document.getElementById('taskDeleteSeries');
+  const toastContainer = document.getElementById('taskToastContainer');
 
-  // Form fields
+  const filterStatus = document.getElementById('tasksFilterStatus');
+  const filterAssignee = document.getElementById('tasksFilterAssignee');
+  const filterClient = document.getElementById('tasksFilterClient');
+  const filterArea = document.getElementById('tasksFilterArea');
+  const btnClearFilters = document.getElementById('btnClearTaskFilters');
+
   const fId = document.getElementById('taskId');
   const fTitle = document.getElementById('taskTitle');
   const fClient = document.getElementById('taskClient');
@@ -25,6 +33,16 @@ document.addEventListener('DOMContentLoaded', function () {
   const fDueDate = document.getElementById('taskDueDate');
   const fRecType = document.getElementById('taskRecurrenceType');
   const fRecEnd = document.getElementById('taskRecurrenceEnd');
+
+  const formMessage = document.getElementById('taskFormMessage');
+  const fieldErrors = {
+    title: document.getElementById('taskTitleError'),
+    assignee: document.getElementById('taskAssigneeError'),
+    dueDate: document.getElementById('taskDueDateError'),
+    recEnd: document.getElementById('taskRecurrenceEndError')
+  };
+
+  const acList = document.getElementById('clientAutocomplete');
 
   const COPY_STORAGE_KEY = 'tasksClipboard_v1';
   const LONG_PRESS_DELAY = 480;
@@ -36,41 +54,141 @@ document.addEventListener('DOMContentLoaded', function () {
       selector: '.fc-dayGridMonth-button',
       icon: 'fa-calendar-days',
       compactLabel: 'Mes',
-      ariaLabel: 'Vista mes',
+      ariaLabel: 'Vista mes'
     },
     {
       selector: '.fc-dayGridWeek-button',
       icon: 'fa-calendar-week',
       compactLabel: 'Sem',
-      ariaLabel: 'Vista semana',
+      ariaLabel: 'Vista semana'
     },
     {
       selector: '.fc-listWeek-button',
       icon: 'fa-list-ul',
       compactLabel: 'Lista',
-      ariaLabel: 'Vista lista',
-    },
+      ariaLabel: 'Vista lista'
+    }
   ];
 
   let currentStatus = 'Pendiente';
   let calendar;
+  let clientCache = [];
+  let filterClientTimer = null;
   let copiedTask = null;
   let suppressEventClick = false;
   let suppressDateClick = false;
 
-  // Long-press state
   let longPressTimer = null;
   let longPressStart = null;
   let longPressPayload = null;
   let longPressHandled = false;
 
-  // ─── Context menu ───
+  const statusColorMap = {
+    Pendiente: { bg: 'var(--c-warning-bg)', border: 'var(--c-warning)', text: 'var(--c-warning)' },
+    'En Progreso': { bg: '#dbeafe', border: '#2563eb', text: '#2563eb' },
+    Completado: { bg: 'var(--c-success-bg)', border: 'var(--c-success)', text: 'var(--c-success)' }
+  };
+
   const contextMenu = document.createElement('div');
   contextMenu.className = 'task-context-menu';
   contextMenu.id = 'taskContextMenu';
   contextMenu.innerHTML = '<div class="task-context-menu-items"></div>';
   document.body.appendChild(contextMenu);
   const contextMenuItemsEl = contextMenu.querySelector('.task-context-menu-items');
+
+  function showToast(message, type, action) {
+    if (typeof window.appNotify === 'function') {
+      window.appNotify({ type: type || 'info', message: message });
+      return;
+    }
+
+    if (!toastContainer) {
+      if (type === 'error') console.error(message);
+      return;
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `task-toast ${type || 'success'}`;
+
+    const text = document.createElement('span');
+    text.textContent = message;
+    toast.appendChild(text);
+
+    if (action && action.label && typeof action.onClick === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = action.label;
+      btn.addEventListener('click', function () {
+        action.onClick();
+        toast.remove();
+      });
+      toast.appendChild(btn);
+    }
+
+    toastContainer.appendChild(toast);
+    setTimeout(function () {
+      toast.remove();
+    }, action ? 6000 : 3200);
+  }
+
+  function notify(type, message) {
+    showToast(message, type);
+  }
+
+  function confirmAction(options) {
+    const opts = options || {};
+    if (typeof window.appConfirm === 'function') {
+      return window.appConfirm(opts);
+    }
+    return Promise.resolve(window.confirm(opts.message || 'Deseas continuar?'));
+  }
+
+  function showFormMessage(message, type) {
+    formMessage.className = `task-form-message ${type || 'error'}`;
+    formMessage.textContent = message || '';
+  }
+
+  function clearFormMessage() {
+    formMessage.className = 'task-form-message';
+    formMessage.textContent = '';
+  }
+
+  function clearFieldErrors() {
+    [fTitle, fAssignee, fDueDate, fRecEnd].forEach(function (field) {
+      field.classList.remove('field-invalid');
+    });
+    Object.values(fieldErrors).forEach(function (errorEl) {
+      errorEl.textContent = '';
+    });
+    recPreview.classList.remove('error');
+  }
+
+  function setFieldError(field, errorEl, message) {
+    field.classList.add('field-invalid');
+    errorEl.textContent = message;
+  }
+
+  function requestJson(url, options) {
+    return fetch(url, options || {}).then(async function (response) {
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok && !data.error) {
+        data.error = 'No se pudo completar la solicitud.';
+      }
+      return data;
+    });
+  }
+
+  function toDateValue(value) {
+    const dateObj = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(dateObj.getTime())) return null;
+    return dateObj;
+  }
+
+  function formatDate(value) {
+    const d = toDateValue(value);
+    if (!d) return value;
+    return d.toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
 
   function formatLocalDate(dateObj) {
     if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return '';
@@ -87,27 +205,118 @@ document.addEventListener('DOMContentLoaded', function () {
     return value;
   }
 
-  function notify(type, message, duration) {
-    if (typeof window.appNotify === 'function') {
-      window.appNotify({ type, message, duration });
-      return;
+  function estimateRecurrenceCount(startStr, recurrenceType, endStr) {
+    const start = toDateValue(startStr);
+    const end = toDateValue(endStr);
+    if (!start || !end) return null;
+    if (end < start) return 0;
+
+    let count = 0;
+    let current = new Date(start.getTime());
+    let guard = 0;
+
+    while (current <= end && guard < 370) {
+      count += 1;
+      if (recurrenceType === 'Diaria') {
+        current.setDate(current.getDate() + 1);
+      } else if (recurrenceType === 'Mensual') {
+        const prevDay = current.getDate();
+        current.setMonth(current.getMonth() + 1, 1);
+        const daysInMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
+        current.setDate(Math.min(prevDay, daysInMonth));
+      } else {
+        current.setDate(current.getDate() + 7);
+      }
+      guard += 1;
     }
-    console.error(message);
+
+    return count;
   }
 
-  function confirmAction(options) {
-    if (typeof window.appConfirm === 'function') {
-      return window.appConfirm(options || {});
+  function updateRecurrencePreview() {
+    recPreview.textContent = '';
+    recPreview.classList.remove('error');
+
+    if (!recurrentCb.checked) return;
+    if (!fDueDate.value || !fRecEnd.value) {
+      recPreview.textContent = 'Completa fecha de entrega y fecha final para previsualizar instancias.';
+      return;
     }
-    console.error((options && options.message) || 'Accion de confirmacion no disponible.');
-    return Promise.resolve(false);
+
+    const count = estimateRecurrenceCount(fDueDate.value, fRecType.value, fRecEnd.value);
+    if (count === 0) {
+      recPreview.classList.add('error');
+      recPreview.textContent = 'La fecha final debe ser igual o posterior a la fecha de entrega.';
+      return;
+    }
+
+    if (count > 365) {
+      recPreview.classList.add('error');
+      recPreview.textContent = 'Esta recurrencia superaria el maximo permitido de 365 tareas.';
+      return;
+    }
+
+    recPreview.textContent = `Se crearan ${count} instancia(s).`;
+  }
+
+  function validatePayload(payload) {
+    clearFormMessage();
+    clearFieldErrors();
+
+    let firstInvalid = null;
+
+    if (!payload.title) {
+      setFieldError(fTitle, fieldErrors.title, 'El titulo es obligatorio.');
+      firstInvalid = firstInvalid || fTitle;
+    }
+
+    if (!payload.assignee_id || Number.isNaN(payload.assignee_id)) {
+      setFieldError(fAssignee, fieldErrors.assignee, 'Debes asignar la tarea a una persona.');
+      firstInvalid = firstInvalid || fAssignee;
+    }
+
+    if (!payload.due_date) {
+      setFieldError(fDueDate, fieldErrors.dueDate, 'La fecha de entrega es obligatoria.');
+      firstInvalid = firstInvalid || fDueDate;
+    }
+
+    if (payload.is_recurrent) {
+      if (!payload.recurrence_end) {
+        setFieldError(fRecEnd, fieldErrors.recEnd, 'La fecha final es obligatoria para recurrencia.');
+        firstInvalid = firstInvalid || fRecEnd;
+      } else if (payload.recurrence_end < payload.due_date) {
+        setFieldError(fRecEnd, fieldErrors.recEnd, 'La fecha final no puede ser menor que la fecha de entrega.');
+        firstInvalid = firstInvalid || fRecEnd;
+      }
+    }
+
+    if (firstInvalid) {
+      firstInvalid.focus();
+      showFormMessage('Corrige los campos marcados para continuar.', 'error');
+      return false;
+    }
+
+    return true;
+  }
+
+  function getCalendarFilters() {
+    return {
+      status: filterStatus.value,
+      assignee_id: filterAssignee.value,
+      client: filterClient.value.trim(),
+      area: filterArea ? filterArea.value : ''
+    };
+  }
+
+  function refreshCalendar() {
+    if (calendar) calendar.refetchEvents();
   }
 
   function applyMobileViewButtons() {
     const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
     const iconOnly = window.innerWidth <= ICON_ONLY_BREAKPOINT;
 
-    VIEW_BUTTON_CONFIG.forEach(cfg => {
+    VIEW_BUTTON_CONFIG.forEach(function (cfg) {
       const btn = calEl.querySelector(cfg.selector);
       if (!btn) return;
 
@@ -132,6 +341,14 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  function loadClients() {
+    requestJson('/api/tasks/clients').then(function (data) {
+      if (Array.isArray(data)) {
+        clientCache = data;
+      }
+    });
+  }
+
   function loadCopiedTask() {
     try {
       const raw = localStorage.getItem(COPY_STORAGE_KEY);
@@ -150,9 +367,41 @@ document.addEventListener('DOMContentLoaded', function () {
       client: (taskData.client || '').trim(),
       description: (taskData.description || '').trim(),
       assignee_id: parseInt(taskData.assignee_id, 10),
-      status: taskData.status || 'Pendiente',
+      status: taskData.status || 'Pendiente'
     };
     localStorage.setItem(COPY_STORAGE_KEY, JSON.stringify(copiedTask));
+  }
+
+  function renderAutocomplete() {
+    const value = fClient.value.trim().toLowerCase();
+    acList.innerHTML = '';
+
+    if (!value) {
+      acList.classList.remove('visible');
+      return;
+    }
+
+    const matches = clientCache
+      .filter(function (name) { return name.toLowerCase().includes(value); })
+      .slice(0, 8);
+
+    if (!matches.length) {
+      acList.classList.remove('visible');
+      return;
+    }
+
+    matches.forEach(function (match) {
+      const item = document.createElement('div');
+      item.className = 'autocomplete-item';
+      item.textContent = match;
+      item.addEventListener('click', function () {
+        fClient.value = match;
+        acList.classList.remove('visible');
+      });
+      acList.appendChild(item);
+    });
+
+    acList.classList.add('visible');
   }
 
   function hideContextMenu() {
@@ -164,7 +413,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function openContextMenu(clientX, clientY, items) {
     contextMenuItemsEl.innerHTML = '';
 
-    items.forEach(item => {
+    items.forEach(function (item) {
       if (item.type === 'separator') {
         const sep = document.createElement('div');
         sep.className = 'task-context-menu-separator';
@@ -218,7 +467,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function suppressCalendarClicks() {
     suppressEventClick = true;
     suppressDateClick = true;
-    setTimeout(() => {
+    setTimeout(function () {
       suppressEventClick = false;
       suppressDateClick = false;
     }, 350);
@@ -240,31 +489,32 @@ document.addEventListener('DOMContentLoaded', function () {
       id: parseInt(eventApi.id, 10),
       ...eventApi.extendedProps,
       title: eventApi.title,
-      due_date: formatLocalDate(eventApi.start),
+      due_date: formatLocalDate(eventApi.start)
     };
   }
 
   function updateTask(taskId, payload, revertFn, options) {
     const opts = options || {};
-    return fetch(`/api/tasks/${taskId}`, {
+    return requestJson(`/api/tasks/${taskId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     })
-      .then(async r => ({ ok: r.ok, data: await r.json() }))
-      .then(({ ok, data }) => {
-        if (!ok || !data.success) {
-          if (revertFn) revertFn();
+      .then(function (data) {
+        if (!data.success) {
+          if (typeof revertFn === 'function') revertFn();
           throw new Error(data.error || 'No se pudo actualizar la tarea.');
         }
-        calendar.refetchEvents();
+
+        refreshCalendar();
+
         if (opts.successMessage) {
           notify('success', opts.successMessage);
         }
         return data;
       })
-      .catch(err => {
-        if (revertFn) revertFn();
+      .catch(function (err) {
+        if (typeof revertFn === 'function') revertFn();
         if (!opts.silent) {
           notify('error', err.message || 'Error de conexion.');
         }
@@ -272,50 +522,61 @@ document.addEventListener('DOMContentLoaded', function () {
       });
   }
 
-  function deleteTaskById(taskId) {
+  function deleteTaskById(taskId, options) {
+    const opts = options || {};
+    const deleteSeries = !!opts.deleteSeries;
+    const title = opts.title || 'Eliminar tarea';
+    const message = opts.message || (deleteSeries
+      ? 'Se eliminara toda la serie recurrente. Esta accion no se puede deshacer. ¿Deseas continuar?'
+      : 'Se eliminara solo esta tarea. Esta accion no se puede deshacer. ¿Deseas continuar?');
+    const confirmText = opts.confirmText || 'Eliminar';
+
     confirmAction({
-      title: 'Eliminar tarea',
-      message: 'Esta acción no se puede deshacer. ¿Deseas continuar?',
-      confirmText: 'Eliminar',
-      danger: true,
-    }).then(confirmed => {
+      title: title,
+      message: message,
+      confirmText: confirmText,
+      danger: true
+    }).then(function (confirmed) {
       if (!confirmed) return;
 
-      fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
-        .then(r => r.json())
-        .then(data => {
-          if (data.success) {
-            closeModal();
-            calendar.refetchEvents();
-            notify('success', 'Tarea eliminada correctamente.');
+      requestJson(`/api/tasks/${taskId}?series=${deleteSeries ? 'true' : 'false'}`, { method: 'DELETE' })
+        .then(function (data) {
+          if (!data.success) {
+            showFormMessage(data.error || 'No se pudo eliminar la tarea.', 'error');
             return;
           }
-          notify('error', data.error || 'Error al eliminar.');
+
+          closeModal();
+          refreshCalendar();
+          notify('success', `Tarea eliminada (${data.deleted || 1} registro(s)).`);
         })
-        .catch(() => notify('error', 'Error de conexion.'));
+        .catch(function () {
+          showFormMessage('Error de conexion al eliminar.', 'error');
+        });
     });
   }
 
   function deleteTasksForDate(dateStr) {
     confirmAction({
-      title: 'Borrar tareas del día',
-      message: `Se eliminarán todas las tareas del ${dateStr}. Esta acción no se puede deshacer.`,
+      title: 'Borrar tareas del dia',
+      message: `Se eliminaran todas las tareas del ${dateStr}. Esta accion no se puede deshacer.`,
       confirmText: 'Borrar todo',
-      danger: true,
-    }).then(confirmed => {
+      danger: true
+    }).then(function (confirmed) {
       if (!confirmed) return;
 
-      fetch(`/api/tasks/day/${encodeURIComponent(dateStr)}`, { method: 'DELETE' })
-        .then(r => r.json())
-        .then(data => {
+      requestJson(`/api/tasks/day/${encodeURIComponent(dateStr)}`, { method: 'DELETE' })
+        .then(function (data) {
           if (!data.success) {
             notify('error', data.error || 'No se pudieron eliminar las tareas del dia.');
             return;
           }
-          calendar.refetchEvents();
+          refreshCalendar();
           notify('success', `Se eliminaron ${data.deleted || 0} tarea(s) del dia.`);
         })
-        .catch(() => notify('error', 'Error de conexion.'));
+        .catch(function () {
+          notify('error', 'Error de conexion.');
+        });
     });
   }
 
@@ -335,44 +596,39 @@ document.addEventListener('DOMContentLoaded', function () {
       status: copiedTask.status || 'Pendiente',
       is_recurrent: false,
       recurrence_type: '',
-      recurrence_end: '',
+      recurrence_end: ''
     };
 
-    fetch('/api/tasks', {
+    requestJson('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     })
-      .then(r => r.json())
-      .then(data => {
+      .then(function (data) {
         if (!data.success) {
           notify('error', data.error || 'No se pudo pegar la tarea.');
-          return;
+          return null;
         }
 
         const createdTask = Array.isArray(data.tasks) ? data.tasks[0] : null;
         if (createdTask && copiedTask.status && copiedTask.status !== 'Pendiente') {
-          return updateTask(
-            createdTask.id,
-            { status: copiedTask.status },
-            null,
-            { silent: true }
-          ).catch(() => {
-            notify('warning', 'Tarea pegada, pero no se pudo conservar el estado.');
-            return null;
-          });
+          return updateTask(createdTask.id, { status: copiedTask.status }, null, { silent: true })
+            .catch(function () {
+              notify('warning', 'Tarea pegada, pero no se pudo conservar el estado.');
+              return null;
+            });
         }
 
-        calendar.refetchEvents();
-        loadClients();
         notify('success', 'Tarea pegada correctamente.');
         return null;
       })
-      .then(() => {
-        calendar.refetchEvents();
+      .then(function () {
+        refreshCalendar();
         loadClients();
       })
-      .catch(() => notify('error', 'Error de conexion.'));
+      .catch(function () {
+        notify('error', 'Error de conexion.');
+      });
   }
 
   function openTaskContextMenu(x, y, taskData) {
@@ -382,34 +638,33 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         label: 'Editar',
         icon: 'fa-pen',
-        action: () => openModal(true, taskData),
+        action: function () { openModal(true, taskData); }
       },
       {
         label: 'Marcar como completado',
         icon: 'fa-circle-check',
         disabled: isCompleted,
-        action: () => updateTask(
-          taskData.id,
-          { status: 'Completado' },
-          null,
-          { successMessage: 'Tarea marcada como completada.' }
-        ),
+        action: function () {
+          updateTask(taskData.id, { status: 'Completado' }, null, {
+            successMessage: 'Tarea marcada como completada.'
+          });
+        }
       },
       {
         label: 'Copiar',
         icon: 'fa-copy',
-        action: () => {
+        action: function () {
           saveCopiedTask(taskData);
           notify('success', 'Tarea copiada.');
-        },
+        }
       },
       { type: 'separator' },
       {
         label: 'Eliminar',
         icon: 'fa-trash',
         danger: true,
-        action: () => deleteTaskById(taskData.id),
-      },
+        action: function () { deleteTaskById(taskData.id); }
+      }
     ]);
   }
 
@@ -418,24 +673,25 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         label: 'Agregar tarea',
         icon: 'fa-plus',
-        action: () => {
+        action: function () {
           openModal(false);
           fDueDate.value = dateStr;
-        },
+          updateRecurrencePreview();
+        }
       },
       {
         label: 'Pegar tarea copiada',
         icon: 'fa-paste',
         disabled: !copiedTask,
-        action: () => createTaskFromClipboard(dateStr),
+        action: function () { createTaskFromClipboard(dateStr); }
       },
       { type: 'separator' },
       {
         label: 'Borrar tareas del dia',
         icon: 'fa-trash',
         danger: true,
-        action: () => deleteTasksForDate(dateStr),
-      },
+        action: function () { deleteTasksForDate(dateStr); }
+      }
     ]);
   }
 
@@ -457,18 +713,18 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!taskData) return;
       longPressPayload = {
         type: 'task',
-        taskData,
+        taskData: taskData,
         x: touch.clientX,
-        y: touch.clientY,
+        y: touch.clientY
       };
     } else {
       const dateStr = getDateFromTarget(e.target);
       if (!dateStr) return;
       longPressPayload = {
         type: 'day',
-        dateStr,
+        dateStr: dateStr,
         x: touch.clientX,
-        y: touch.clientY,
+        y: touch.clientY
       };
     }
 
@@ -476,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function () {
     longPressStart = { x: touch.clientX, y: touch.clientY };
 
     if (longPressTimer) clearTimeout(longPressTimer);
-    longPressTimer = setTimeout(() => {
+    longPressTimer = setTimeout(function () {
       if (!longPressPayload) return;
       longPressHandled = true;
       suppressCalendarClicks();
@@ -546,77 +802,27 @@ document.addEventListener('DOMContentLoaded', function () {
     window.addEventListener('resize', hideContextMenu);
   }
 
-  // ─── STATUS CHIPS ───
-  document.querySelectorAll('.status-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.status-chip').forEach(c => c.classList.remove('selected'));
-      chip.classList.add('selected');
-      currentStatus = chip.dataset.status;
-    });
-  });
-
-  // ─── RECURRENCE TOGGLE ───
-  recurrentCb.addEventListener('change', () => {
-    recFields.classList.toggle('visible', recurrentCb.checked);
-  });
-
-  // ─── CLIENT AUTOCOMPLETE ───
-  const acList = document.getElementById('clientAutocomplete');
-  let clientCache = [];
-
-  function loadClients() {
-    fetch('/api/tasks/clients')
-      .then(r => r.json())
-      .then(data => { clientCache = data; });
-  }
-  loadClients();
-
-  fClient.addEventListener('input', function () {
-    const val = this.value.trim().toLowerCase();
-    acList.innerHTML = '';
-    if (!val) {
-      acList.classList.remove('visible');
-      return;
-    }
-
-    const matches = clientCache.filter(c => c.toLowerCase().includes(val));
-    if (matches.length === 0) {
-      acList.classList.remove('visible');
-      return;
-    }
-
-    matches.forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'autocomplete-item';
-      div.textContent = m;
-      div.addEventListener('click', () => {
-        fClient.value = m;
-        acList.classList.remove('visible');
-      });
-      acList.appendChild(div);
-    });
-    acList.classList.add('visible');
-  });
-
-  fClient.addEventListener('blur', () => {
-    setTimeout(() => acList.classList.remove('visible'), 200);
-  });
-
-  // ─── MODAL OPEN / CLOSE ───
   function openModal(editMode, taskData) {
     fId.value = '';
     fTitle.value = '';
     fClient.value = '';
     fDesc.value = '';
     fDueDate.value = '';
-    recurrentCb.checked = false;
-    recFields.classList.remove('visible');
     fRecType.value = 'Semanal';
     fRecEnd.value = '';
+    recurrentCb.checked = false;
+    recFields.classList.remove('visible');
+    deleteSeriesCb.checked = false;
+    deleteSeriesWrap.style.display = 'none';
     currentStatus = 'Pendiente';
 
-    document.querySelectorAll('.status-chip').forEach(c => c.classList.remove('selected'));
-    document.querySelector('.status-chip[data-status="Pendiente"]').classList.add('selected');
+    clearFormMessage();
+    clearFieldErrors();
+    updateRecurrencePreview();
+
+    document.querySelectorAll('.status-chip').forEach(function (chip) {
+      chip.classList.toggle('selected', chip.dataset.status === 'Pendiente');
+    });
 
     if (editMode && taskData) {
       modalTitle.textContent = 'Editar Tarea';
@@ -628,17 +834,20 @@ document.addEventListener('DOMContentLoaded', function () {
       fDueDate.value = normalizeIsoDate(taskData.due_date);
       currentStatus = taskData.status || 'Pendiente';
 
-      document.querySelectorAll('.status-chip').forEach(c => {
-        c.classList.toggle('selected', c.dataset.status === currentStatus);
+      document.querySelectorAll('.status-chip').forEach(function (chip) {
+        chip.classList.toggle('selected', chip.dataset.status === currentStatus);
       });
 
       statusGroup.style.display = '';
       btnDelete.style.display = '';
 
-      // Hide recurrence options in edit mode
       recurrentCb.checked = false;
       recurrentCb.parentElement.style.display = 'none';
       recFields.classList.remove('visible');
+
+      if (taskData.is_recurrent && !taskData.parent_task_id) {
+        deleteSeriesWrap.style.display = '';
+      }
     } else {
       modalTitle.textContent = 'Nueva Tarea';
       statusGroup.style.display = 'none';
@@ -655,20 +864,49 @@ document.addEventListener('DOMContentLoaded', function () {
     overlay.classList.remove('open');
   }
 
-  btnNew.addEventListener('click', () => openModal(false));
+  document.querySelectorAll('.status-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      document.querySelectorAll('.status-chip').forEach(function (item) {
+        item.classList.remove('selected');
+      });
+      chip.classList.add('selected');
+      currentStatus = chip.dataset.status;
+    });
+  });
+
+  recurrentCb.addEventListener('change', function () {
+    recFields.classList.toggle('visible', recurrentCb.checked);
+    if (!recurrentCb.checked) {
+      fRecEnd.value = '';
+      fieldErrors.recEnd.textContent = '';
+      fRecEnd.classList.remove('field-invalid');
+    }
+    updateRecurrencePreview();
+  });
+
+  fDueDate.addEventListener('change', updateRecurrencePreview);
+  fRecType.addEventListener('change', updateRecurrencePreview);
+  fRecEnd.addEventListener('change', updateRecurrencePreview);
+
+  fClient.addEventListener('input', renderAutocomplete);
+  fClient.addEventListener('blur', function () {
+    setTimeout(function () {
+      acList.classList.remove('visible');
+    }, 200);
+  });
+
+  btnNew.addEventListener('click', function () { openModal(false); });
   btnClose.addEventListener('click', closeModal);
   btnCancel.addEventListener('click', closeModal);
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) closeModal();
+  overlay.addEventListener('click', function (event) {
+    if (event.target === overlay) closeModal();
   });
 
-  // Close on Escape
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
-    if (e.key === 'Escape') hideContextMenu();
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+    if (event.key === 'Escape') hideContextMenu();
   });
 
-  // ─── SAVE (CREATE / UPDATE) ───
   btnSave.addEventListener('click', function () {
     const id = fId.value;
     const payload = {
@@ -680,17 +918,10 @@ document.addEventListener('DOMContentLoaded', function () {
       status: currentStatus,
       is_recurrent: recurrentCb.checked,
       recurrence_type: recurrentCb.checked ? fRecType.value : '',
-      recurrence_end: recurrentCb.checked ? fRecEnd.value : '',
+      recurrence_end: recurrentCb.checked ? fRecEnd.value : ''
     };
 
-    if (!payload.title) {
-      fTitle.focus();
-      return;
-    }
-    if (!payload.due_date) {
-      fDueDate.focus();
-      return;
-    }
+    if (!validatePayload(payload)) return;
 
     const url = id ? `/api/tasks/${id}` : '/api/tasks';
     const method = id ? 'PUT' : 'POST';
@@ -698,42 +929,61 @@ document.addEventListener('DOMContentLoaded', function () {
     btnSave.disabled = true;
     btnSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
 
-    fetch(url, {
-      method,
+    requestJson(url, {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          closeModal();
-          calendar.refetchEvents();
-          loadClients();
-          notify('success', id ? 'Tarea actualizada.' : 'Tarea creada.');
+      .then(function (data) {
+        if (!data.success) {
+          showFormMessage(data.error || 'No se pudo guardar la tarea.', 'error');
           return;
         }
-        notify('error', data.error || 'Error al guardar la tarea.');
+
+        closeModal();
+        refreshCalendar();
+        loadClients();
+
+        if (id) {
+          notify('success', 'Tarea actualizada correctamente.');
+        } else {
+          const createdCount = data.count || 1;
+          notify('success', `Tarea creada (${createdCount} instancia(s)).`);
+        }
       })
-      .catch(() => notify('error', 'Error de conexion.'))
-      .finally(() => {
+      .catch(function () {
+        showFormMessage('Error de conexion. Intenta nuevamente.', 'error');
+      })
+      .finally(function () {
         btnSave.disabled = false;
         btnSave.innerHTML = '<i class="fa-solid fa-check"></i> Guardar';
       });
   });
 
-  // ─── DELETE ───
   btnDelete.addEventListener('click', function () {
     const id = fId.value;
     if (!id) return;
-    deleteTaskById(id);
+
+    const deleteSeries = deleteSeriesWrap.style.display !== 'none' && deleteSeriesCb.checked;
+    deleteTaskById(id, { deleteSeries: deleteSeries });
   });
 
-  // ─── FULLCALENDAR INIT ───
-  const statusColorMap = {
-    Pendiente: { bg: 'var(--c-warning-bg)', border: 'var(--c-warning)', text: 'var(--c-warning)' },
-    'En Progreso': { bg: '#dbeafe', border: '#2563eb', text: '#2563eb' },
-    Completado: { bg: 'var(--c-success-bg)', border: 'var(--c-success)', text: 'var(--c-success)' },
-  };
+  [filterStatus, filterAssignee, filterArea].filter(Boolean).forEach(function (el) {
+    el.addEventListener('change', refreshCalendar);
+  });
+
+  filterClient.addEventListener('input', function () {
+    clearTimeout(filterClientTimer);
+    filterClientTimer = setTimeout(refreshCalendar, 300);
+  });
+
+  btnClearFilters.addEventListener('click', function () {
+    filterStatus.value = '';
+    filterAssignee.value = '';
+    filterClient.value = '';
+    if (filterArea) filterArea.value = '';
+    refreshCalendar();
+  });
 
   calendar = new FullCalendar.Calendar(calEl, {
     initialView: 'dayGridMonth',
@@ -741,65 +991,87 @@ document.addEventListener('DOMContentLoaded', function () {
     headerToolbar: {
       left: 'prev,next today',
       center: 'title',
-      right: 'dayGridMonth,dayGridWeek,listWeek',
+      right: 'dayGridMonth,dayGridWeek,listWeek'
     },
     buttonText: {
       today: 'Hoy',
       month: 'Mes',
       week: 'Semana',
-      list: 'Lista',
+      list: 'Lista'
     },
     height: 'auto',
     editable: true,
     selectable: true,
     dayMaxEvents: 4,
-    moreLinkText: 'más',
+    moreLinkText: 'mas',
 
-    // Fetch events from API
     events: function (info, successCallback, failureCallback) {
       const params = new URLSearchParams({
         start: info.startStr,
-        end: info.endStr,
+        end: info.endStr
       });
 
+      const filters = getCalendarFilters();
+      if (filters.status) params.set('status', filters.status);
+      if (filters.assignee_id) params.set('assignee_id', filters.assignee_id);
+      if (filters.client) params.set('client', filters.client);
+      if (filters.area) params.set('area', filters.area);
+
       fetch('/api/tasks?' + params.toString())
-        .then(r => r.json())
-        .then(tasks => {
-          const events = tasks.map(t => {
-            const colors = statusColorMap[t.status] || statusColorMap.Pendiente;
-            const slug = (t.status || 'Pendiente').toLowerCase().replace(/\s+/g, '-');
+        .then(function (response) {
+          if (!response.ok) throw new Error('Error al cargar tareas');
+          return response.json();
+        })
+        .then(function (tasks) {
+          const events = tasks.map(function (task) {
+            const colors = statusColorMap[task.status] || statusColorMap.Pendiente;
+            const slug = (task.status || 'Pendiente').toLowerCase().replace(/\s+/g, '-');
             return {
-              id: String(t.id),
-              title: t.title,
-              start: t.due_date,
+              id: String(task.id),
+              title: task.title,
+              start: task.due_date,
               allDay: true,
               backgroundColor: colors.bg,
               borderColor: colors.border,
               textColor: colors.text,
               classNames: ['fc-event-task', `status-${slug}`],
-              extendedProps: t,
+              extendedProps: task
             };
           });
           successCallback(events);
         })
-        .catch(failureCallback);
+        .catch(function (error) {
+          failureCallback(error);
+          showToast('No se pudieron cargar las tareas del calendario.', 'error');
+        });
     },
 
     eventDidMount: function (info) {
+      const task = info.event.extendedProps;
+      const lines = [
+        task.title,
+        `Estado: ${task.status || 'Pendiente'}`,
+        task.client ? `Cliente: ${task.client}` : '',
+        task.assignee_name ? `Asignado: ${task.assignee_name}` : '',
+        task.due_date ? `Entrega: ${formatDate(task.due_date)}` : ''
+      ].filter(Boolean);
+
+      info.el.setAttribute('title', lines.join('\n'));
+      info.el.setAttribute('aria-label', lines.join('. '));
       info.el.dataset.taskId = String(info.event.id);
     },
 
-    // Click on a date → create task for that day
     dateClick: function (info) {
       if (suppressDateClick) {
         suppressDateClick = false;
         return;
       }
+
       openModal(false);
       fDueDate.value = info.dateStr;
+      updateRecurrencePreview();
     },
 
-    // Click on an event → edit
     eventClick: function (info) {
       info.jsEvent.preventDefault();
       if (suppressEventClick) {
@@ -809,41 +1081,54 @@ document.addEventListener('DOMContentLoaded', function () {
       openModal(true, info.event.extendedProps);
     },
 
-    // Drag-and-drop → update due_date
     eventDrop: function (info) {
       const taskId = info.event.id;
-      const newDate = formatLocalDate(info.event.start);
+      const previousDate = info.oldEvent.startStr;
+      const nextDate = formatLocalDate(info.event.start) || info.event.startStr;
 
-      if (!newDate) {
-        info.revert();
-        return;
-      }
-
-      updateTask(taskId, { due_date: newDate }, info.revert)
-        .catch(() => null);
+      updateTask(taskId, { due_date: nextDate }, info.revert, { silent: true })
+        .then(function () {
+          showToast(`Tarea movida al ${formatDate(nextDate)}.`, 'success', {
+            label: 'Deshacer',
+            onClick: function () {
+              updateTask(taskId, { due_date: previousDate }, null, { silent: true })
+                .then(function () {
+                  info.event.setStart(previousDate);
+                  showToast('Movimiento revertido.', 'success');
+                })
+                .catch(function () {
+                  refreshCalendar();
+                  showToast('Error de conexion al deshacer.', 'error');
+                });
+            }
+          });
+        })
+        .catch(function () {
+          info.revert();
+          showToast('Error de conexion al mover la tarea.', 'error');
+        });
     },
 
     datesSet: function () {
       applyMobileViewButtons();
     },
 
-    // Responsive views
     windowResize: function () {
       if (window.innerWidth < MOBILE_BREAKPOINT) {
         calendar.changeView('listWeek');
       }
       applyMobileViewButtons();
-    },
+    }
   });
 
   calendar.render();
   wireContextMenuListeners();
   loadCopiedTask();
-  applyMobileViewButtons();
 
-  // Handle responsive on initial load
   if (window.innerWidth < MOBILE_BREAKPOINT) {
     calendar.changeView('listWeek');
   }
+
   applyMobileViewButtons();
+  loadClients();
 });

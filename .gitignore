@@ -12,6 +12,11 @@
 .env
 venv/
 
+# Local database sidecar/backup files
+instance/*.db-shm
+instance/*.db-wal
+instance/*.db.bak*
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
@@ -399,3 +404,10 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 .env
+
+# SQLite runtime files (avoid merge conflicts)
+instance/users.db
+instance/*.db-shm
+instance/*.db-wal
+instance/*.db-journal
+instance/*.db.bak*

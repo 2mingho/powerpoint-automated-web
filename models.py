@@ -56,7 +56,6 @@ class User(UserMixin, db.Model):
         'classification': 'Clasificacion de Data',
         'file_merge': 'Union de Archivos',
         'csv_analysis': 'Analisis Rapido CSV',
-        'tasks': 'Gestion de Tareas',
     }
 
     @property
