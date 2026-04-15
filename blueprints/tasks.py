@@ -337,10 +337,13 @@ def api_tasks_update(task_id):
     if 'status' in data and data['status'] in Task.VALID_STATUSES:
         task.status = data['status']
     if 'due_date' in data:
+        due_date_raw = (str(data.get('due_date') or '')).strip()
+        if 'T' in due_date_raw:
+            due_date_raw = due_date_raw.split('T', 1)[0]
         try:
-            task.due_date = date.fromisoformat(data['due_date'])
-        except (ValueError, TypeError):
-            pass
+            task.due_date = date.fromisoformat(due_date_raw)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Fecha de entrega inválida.'}), 400
     if 'assignee_id' in data:
         try:
             assignee = User.query.get(int(data['assignee_id']))
@@ -394,6 +397,33 @@ def api_tasks_delete(task_id):
     log_activity('task_delete', f'Tarea eliminada: {title} ({count} instancia(s))')
 
     return jsonify({'success': True, 'deleted': count})
+
+
+@tasks_bp.route('/api/tasks/day/<day_str>', methods=['DELETE'])
+@task_access_required
+def api_tasks_delete_day(day_str):
+    """Delete all tasks for a specific day within the user's scope."""
+    try:
+        target_day = date.fromisoformat(day_str)
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Fecha inválida.'}), 400
+
+    query = Task.query.filter(Task.due_date == target_day)
+    if not current_user.is_admin:
+        query = query.filter(Task.area == current_user.role)
+
+    tasks = query.all()
+    deleted_count = len(tasks)
+
+    for task in tasks:
+        db.session.delete(task)
+
+    db.session.commit()
+
+    from blueprints.admin import log_activity
+    log_activity('task_delete_day', f'Tareas eliminadas del día {target_day.isoformat()}: {deleted_count}')
+
+    return jsonify({'success': True, 'deleted': deleted_count, 'date': target_day.isoformat()})
 
 
 # ─────────────────────────────────────────────────────────────

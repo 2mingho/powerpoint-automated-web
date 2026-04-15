@@ -83,6 +83,41 @@
   box-shadow: none;
 }
 
+/* Fallback for FullCalendar toolbar icons */
+.fc .fc-button .fc-icon {
+  font-family: "Font Awesome 6 Free" !important;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.fc .fc-icon-chevron-left::before {
+  content: "\f053";
+}
+
+.fc .fc-icon-chevron-right::before {
+  content: "\f054";
+}
+
+.fc .fc-icon-chevrons-left::before {
+  content: "\f100";
+}
+
+.fc .fc-icon-chevrons-right::before {
+  content: "\f101";
+}
+
+.fc .fc-icon-plus-square::before {
+  content: "+";
+}
+
+.fc .fc-icon-minus-square::before {
+  content: "-";
+}
+
+.fc .fc-icon-x::before {
+  content: "\f00d";
+}
+
 .fc .fc-button:hover {
   background: var(--c-primary-light);
   border-color: var(--c-primary);
@@ -165,6 +200,94 @@
   color: var(--c-success);
   border-left: 3px solid var(--c-success);
   opacity: 0.75;
+}
+
+/* ─── Context Menu ─── */
+.task-context-menu {
+  position: fixed;
+  z-index: 2500;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 16px));
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  display: none;
+  overflow: hidden;
+}
+
+.task-context-menu.open {
+  display: block;
+}
+
+.task-context-menu-items {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+
+.task-context-menu-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--c-text);
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-align: left;
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.task-context-menu-item i {
+  width: 14px;
+  text-align: center;
+  color: var(--c-text-secondary);
+}
+
+.task-context-menu-item:hover {
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+}
+
+.task-context-menu-item:hover i {
+  color: var(--c-primary);
+}
+
+.task-context-menu-item.danger {
+  color: var(--c-danger);
+}
+
+.task-context-menu-item.danger i {
+  color: var(--c-danger);
+}
+
+.task-context-menu-item.danger:hover {
+  background: var(--c-danger-bg);
+}
+
+.task-context-menu-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-context-menu-item.disabled:hover {
+  background: transparent;
+  color: var(--c-text);
+}
+
+.task-context-menu-item.disabled:hover i {
+  color: var(--c-text-secondary);
+}
+
+.task-context-menu-separator {
+  height: 1px;
+  background: var(--c-border-light);
+  margin: 4px 2px;
 }
 
 /* ─── MODAL ─── */
@@ -1013,24 +1136,81 @@
   }
 
   .fc .fc-toolbar {
-    flex-direction: column;
-    gap: var(--sp-sm);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 0;
+    margin-bottom: var(--sp-sm);
   }
 
   .fc .fc-toolbar-title {
-    font-size: 1.05rem;
-    order: -1;
+    font-size: 0.95rem;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
   }
 
   .fc .fc-toolbar-chunk {
     display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .fc .fc-toolbar-chunk:nth-child(1) {
+    justify-content: flex-start;
+  }
+
+  .fc .fc-toolbar-chunk:nth-child(2) {
     justify-content: center;
   }
 
+  .fc .fc-toolbar-chunk:nth-child(3) {
+    justify-content: flex-end;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .fc .fc-toolbar-chunk:nth-child(3)::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fc .fc-button-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
   .fc .fc-button {
-    padding: 8px 12px;
-    font-size: 0.78rem;
     min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.74rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .fc .fc-button.fc-view-with-icon {
+    gap: 6px;
+  }
+
+  .fc .fc-button.fc-view-with-icon i {
+    font-size: 0.8rem;
+  }
+
+  .fc .fc-button.fc-view-icon-only {
+    width: 36px;
+    padding: 0;
+  }
+
+  .fc .fc-button.fc-view-icon-only .fc-view-btn-label {
+    display: none;
   }
 
   .fc .fc-col-header-cell {
@@ -1383,7 +1563,7 @@
 }
 
 /* ─── Extra small screens ─── */
-@media (max-width: 380px) {
+@media (max-width: 390px) {
   .tasks-header h1 {
     font-size: 1.4rem;
   }
@@ -1396,9 +1576,21 @@
     font-size: 1.3rem;
   }
 
+  .fc .fc-toolbar {
+    column-gap: 6px;
+  }
+
+  .fc .fc-toolbar-title {
+    font-size: 0.86rem;
+  }
+
   .fc .fc-button {
-    padding: 6px 8px;
+    min-height: 34px;
+    padding: 0 8px;
     font-size: 0.72rem;
   }
-}
 
+  .fc .fc-button.fc-view-icon-only {
+    width: 34px;
+  }
+}

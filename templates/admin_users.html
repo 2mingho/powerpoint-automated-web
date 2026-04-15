@@ -104,7 +104,8 @@
               </button>
             </form>
             <form method="POST" action="{{ url_for('admin.user_delete', user_id=user.id) }}" style="display:inline;"
-                  onsubmit="return confirm('Desactivar a {{ user.username }}?');">
+                  class="js-confirm-submit" data-confirm-title="Desactivar usuario"
+                  data-confirm-message="Desactivar a {{ user.username }}?" data-confirm-button="Desactivar">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-icon btn-danger" title="Eliminar">
                 <i class="fa-solid fa-trash"></i>
@@ -127,4 +128,30 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+  document.querySelectorAll('.js-confirm-submit').forEach(form => {
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      const title = form.dataset.confirmTitle || 'Confirmar accion';
+      const message = form.dataset.confirmMessage || 'Deseas continuar?';
+      const confirmText = form.dataset.confirmButton || 'Confirmar';
+
+      if (!window.appConfirm) {
+        form.submit();
+        return;
+      }
+
+      const ok = await window.appConfirm({
+        title,
+        message,
+        confirmText,
+        danger: true,
+      });
+
+      if (ok) form.submit();
+    });
+  });
+</script>
 {% endblock %}

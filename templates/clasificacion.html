@@ -202,6 +202,14 @@
 
     let detectedFmt = null;
 
+    function notify(type, message) {
+        if (window.appNotify) {
+            window.appNotify({ type, message });
+            return;
+        }
+        console.error(message);
+    }
+
     async function onFileSelected(file) {
         if (!file) return;
         fileNameDisplay.innerText = file.name;
@@ -214,12 +222,12 @@
         try {
             const resp = await fetch('/clasificacion/detect', { method: 'POST', body: fd });
             const data = await resp.json();
-            if (!data.success) { alert('Error al analizar el archivo: ' + data.error); return; }
+            if (!data.success) { hideLoading(); notify('error', 'Error al analizar el archivo: ' + data.error); return; }
             detectedFmt = data;
             populateMappingCard(data);
             document.getElementById('status-text').innerText = 'Columnas detectadas';
             hideLoading();
-        } catch(e) { hideLoading(); alert('No se pudo analizar el archivo.'); }
+        } catch(e) { hideLoading(); notify('error', 'No se pudo analizar el archivo.'); }
     }
 
     function populateMappingCard(data) {
@@ -328,13 +336,13 @@
         try {
             const resp = await fetch('/clasificacion/presets/' + id);
             const data = await resp.json();
-            if (!data.success) { alert('Error al cargar preset: ' + data.error); return; }
+            if (!data.success) { notify('error', 'Error al cargar preset: ' + data.error); return; }
             categories = data.rules.map(cat => ({
                 id: Date.now() + Math.random(), name: cat.category,
                 tematicas: cat.tematicas.map(t => ({ id: Date.now() + Math.random(), name: t.name, keywords: Array.isArray(t.keywords) ? t.keywords.join(', ') : (t.keywords || '') }))
             }));
             renderRules();
-        } catch(e) { alert('No se pudo cargar el preset.'); }
+        } catch(e) { notify('error', 'No se pudo cargar el preset.'); }
     }
 
     function getCurrentRulesPayload() {
@@ -342,15 +350,22 @@
     }
 
     async function savePreset() {
-        const name = prompt('Nombre del preset:');
+        const name = window.appPrompt
+            ? await window.appPrompt({
+                title: 'Guardar preset',
+                message: 'Escribe un nombre para este preset de clasificacion.',
+                placeholder: 'Ej. Reglas economia abril',
+                confirmText: 'Guardar',
+              })
+            : null;
         if (!name || !name.trim()) return;
         const rules = getCurrentRulesPayload();
         try {
             const resp = await fetch('/clasificacion/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), rules }) });
             const data = await resp.json();
-            if (data.success) { await loadPresetList(); alert('Preset "' + data.name + '" guardado.'); }
-            else { alert('Error: ' + data.error); }
-        } catch(e) { alert('No se pudo guardar el preset.'); }
+            if (data.success) { await loadPresetList(); notify('success', 'Preset "' + data.name + '" guardado.'); }
+            else { notify('error', 'Error: ' + data.error); }
+        } catch(e) { notify('error', 'No se pudo guardar el preset.'); }
     }
 
     async function overwritePreset() {
@@ -439,9 +454,9 @@
         const manualEncoding = document.getElementById('sel_encoding')?.value || '';
         const manualSep      = document.getElementById('sel_separator')?.value || '';
 
-        if (!file) { alert("Por favor, selecciona un archivo primero."); return; }
-        if (categories.length === 0) { alert("Define al menos una categoria y tematica."); return; }
-        if (!detectedFmt) { alert("Espera a que se detecte el formato del archivo."); return; }
+        if (!file) { notify('warning', 'Por favor, selecciona un archivo primero.'); return; }
+        if (categories.length === 0) { notify('warning', 'Define al menos una categoria y tematica.'); return; }
+        if (!detectedFmt) { notify('warning', 'Espera a que se detecte el formato del archivo.'); return; }
 
         try {
             btn.disabled = true;
@@ -496,14 +511,14 @@
         } catch (error) {
             console.error(error);
             document.getElementById('progress-container').style.display = 'none';
-            alert("Error: " + error.message);
+            notify('error', 'Error: ' + error.message);
             btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
             btn.disabled = false;
         }
     }
 
     function showResults(result) {
-        if (!result || !result.stats) { alert("Error: El servidor no devolvio las estadisticas."); resetForm(); return; }
+        if (!result || !result.stats) { notify('error', 'Error: El servidor no devolvio las estadisticas.'); resetForm(); return; }
         document.getElementById('settings-card').style.display = 'none';
         document.getElementById('action-bar-container').style.display = 'none';
         document.getElementById('mapping-card').style.display = 'none';

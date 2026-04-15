@@ -404,3 +404,10 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 .env
+
+# SQLite runtime files (avoid merge conflicts)
+instance/users.db
+instance/*.db-shm
+instance/*.db-wal
+instance/*.db-journal
+instance/*.db.bak*

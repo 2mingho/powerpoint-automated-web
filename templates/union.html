@@ -182,6 +182,14 @@ let defaultFiles = [];       // [{file, info}]
 let advFileA = null;         // {file, info, raw}
 let advFileB = null;
 
+function notify(type, message) {
+  if (window.appNotify) {
+    window.appNotify({ type, message });
+    return;
+  }
+  console.error(message);
+}
+
 // ─── Mode Toggle ───
 function setMode(mode) {
   currentMode = mode;
@@ -325,12 +333,12 @@ async function detectFile(file) {
   try {
     const resp = await fetch('/union/detect', { method: 'POST', body: fd });
     const data = await resp.json();
-    if (!data.success) { hideLoading(); alert('Error: ' + data.error); return null; }
+    if (!data.success) { hideLoading(); notify('error', 'Error: ' + data.error); return null; }
     hideLoading();
     return data;
   } catch (e) {
     hideLoading();
-    alert('No se pudo analizar el archivo: ' + file.name);
+    notify('error', 'No se pudo analizar el archivo: ' + file.name);
     return null;
   }
 }
@@ -384,7 +392,7 @@ async function doMerge() {
   } catch (error) {
     document.getElementById('progress-container').style.display = 'none';
     hideLoading();
-    alert('Error: ' + error.message);
+    notify('error', 'Error: ' + error.message);
     btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
     btn.disabled = false;
   }
