@@ -31,6 +31,17 @@ def seed_admin(app):
             print(f"[ok] Admin exists: {existing_admin.username} ({existing_admin.email})")
             return
 
+        existing_by_email = User.query.filter_by(email=admin_email).first()
+        if existing_by_email:
+            if existing_by_email.role != 'admin':
+                existing_by_email.role = 'admin'
+                existing_by_email.is_active = True
+                db.session.commit()
+                print(f"[ADMIN] Existing user promoted to admin: {existing_by_email.username} ({existing_by_email.email})")
+            else:
+                print(f"[ok] Admin already mapped to email: {existing_by_email.username} ({existing_by_email.email})")
+            return
+
         admin_user = User(
             username=admin_username,
             email=admin_email,

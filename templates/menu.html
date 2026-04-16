@@ -61,6 +61,7 @@
   </a>
   {% endif %}
 
+  {% if has_tool_access('tasks') %}
   <a href="{{ url_for('tasks.tasks_page') }}" class="tool-card">
     <div class="tool-card-icon" style="background: #ede9fe; color: #7c3aed;">
       <i class="fa-solid fa-calendar-check"></i>
@@ -71,5 +72,6 @@
       Abrir <i class="fa-solid fa-arrow-right"></i>
     </div>
   </a>
+  {% endif %}
 </div>
 {% endblock %}

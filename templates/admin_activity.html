@@ -43,7 +43,7 @@
       <button type="submit" class="btn btn-primary btn-sm">
         <i class="fa-solid fa-filter"></i> Filtrar
       </button>
-      <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline btn-sm" title="Limpiar filtros">
+      <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline btn-sm" title="Limpiar filtros" aria-label="Limpiar filtros de actividad">
         <i class="fa-solid fa-xmark"></i>
       </a>
     </div>
@@ -103,13 +103,13 @@
   <!-- Pagination -->
   <div class="pagination" style="padding: 12px;">
     {% if logs.has_prev %}
-    <a href="{{ url_for('admin.activity_log', page=logs.prev_num, user_id=user_filter, action=action_filter) }}" class="btn btn-outline btn-sm">
+    <a href="{{ url_for('admin.activity_log', page=logs.prev_num, user_id=user_filter, action=action_filter, date_from=date_from, date_to=date_to) }}" class="btn btn-outline btn-sm">
       <i class="fa-solid fa-chevron-left"></i> Anterior
     </a>
     {% endif %}
     <span class="page-info">Pagina {{ logs.page }} de {{ logs.pages }} ({{ logs.total }} registros)</span>
     {% if logs.has_next %}
-    <a href="{{ url_for('admin.activity_log', page=logs.next_num, user_id=user_filter, action=action_filter) }}" class="btn btn-outline btn-sm">
+    <a href="{{ url_for('admin.activity_log', page=logs.next_num, user_id=user_filter, action=action_filter, date_from=date_from, date_to=date_to) }}" class="btn btn-outline btn-sm">
       Siguiente <i class="fa-solid fa-chevron-right"></i>
     </a>
     {% endif %}

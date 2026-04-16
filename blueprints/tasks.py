@@ -4,7 +4,7 @@ import io
 import re
 import unicodedata
 from datetime import datetime, timedelta, date
-from flask import Blueprint, render_template, request, jsonify, Response
+from flask import Blueprint, render_template, request, jsonify, Response, abort
 from flask_login import login_required, current_user
 from extensions import db
 from models import User, Task, Area
@@ -48,6 +48,8 @@ def task_access_required(f):
     @functools.wraps(f)
     @login_required
     def decorated(*args, **kwargs):
+        if not current_user.is_admin and not current_user.has_tool_access('tasks'):
+            abort(403)
         return f(*args, **kwargs)
     return decorated
 
@@ -954,9 +956,7 @@ def api_tasks_delete_day(day_str):
     except ValueError:
         return jsonify({'success': False, 'error': 'Fecha inválida.'}), 400
 
-    query = Task.query.filter(Task.due_date == target_day)
-    if not current_user.is_admin:
-        query = query.filter(Task.area == current_user.role)
+    query = _apply_unit_scope(Task.query).filter(Task.due_date == target_day)
 
     tasks = query.all()
     deleted_count = len(tasks)
