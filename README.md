@@ -39,25 +39,7 @@ A multi-tool web application for media analysts and social listening teams. Uplo
 
 ## Getting Started
 
-### 1. Environment Variables
-
-Create a `.env` file in the project root (you can copy from `.env.example`):
-
-```env
-SECRET_KEY=your_random_flask_secret_key
-GROQ_API_KEY=your_groq_api_key_here
-DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
-ADMIN_EMAIL=admin@yourcompany.com
-ADMIN_PASSWORD=change_this_password
-ADMIN_USERNAME=admin
-ENABLE_PAGE_VIEW_LOGS=false
-PAGE_VIEW_LOG_SAMPLE_RATE=0
-ACTIVITY_LOG_RETENTION_DAYS=90
-ACTIVITY_LOG_MAX_ROWS=100000
-REPORT_METADATA_RETENTION_DAYS=180
-```
-
-### 2. Quick Setup (Windows)
+### 1. Quick Setup (Windows)
 
 ```bat
 setup_env.bat
@@ -65,7 +47,7 @@ setup_env.bat
 
 This scripts creates a virtual environment, installs all dependencies, and launches the app.
 
-### 3. Manual Setup (Any OS)
+### 2. Manual Setup (Any OS)
 
 ```bash
 python -m venv venv
