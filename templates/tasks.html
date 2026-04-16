@@ -81,6 +81,22 @@
       </div>
 
       <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Director o Gerencia</label>
+        <input type="text" class="form-input" id="taskDirectorate" placeholder="Dirección o gerencia" maxlength="255">
+      </div>
+
+      <div class="form-row" style="margin-bottom:0">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Solicitado por</label>
+          <input type="text" class="form-input" id="taskRequestedBy" placeholder="Persona solicitante" maxlength="255">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Tipo de Presupuesto</label>
+          <input type="text" class="form-input" id="taskBudgetType" placeholder="Tipo de presupuesto" maxlength="255">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
         <label class="form-label">Descripción</label>
         <textarea class="form-textarea" id="taskDesc" rows="3" placeholder="Descripción"></textarea>
       </div>
@@ -101,6 +117,18 @@
           <label class="form-label">Fecha de Entrega *</label>
           <input type="date" class="form-input" id="taskDueDate">
           <div class="field-error" id="taskDueDateError"></div>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:0">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Fecha de inicio</label>
+          <input type="date" class="form-input" id="taskStartDate">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Fecha de finalización</label>
+          <input type="date" class="form-input" id="taskEndDate">
+          <div class="field-error" id="taskEndDateError"></div>
         </div>
       </div>
 
@@ -130,11 +158,7 @@
             <option value="Mensual">Mensual</option>
           </select>
         </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label class="form-label">Hasta</label>
-          <input type="date" class="form-input" id="taskRecurrenceEnd">
-          <div class="field-error" id="taskRecurrenceEndError"></div>
-        </div>
+        <div class="recurrence-preview">La recurrencia usa la fecha de finalización para crear solo días laborables.</div>
         <div class="recurrence-preview" id="recurrencePreview"></div>
       </div>
     </div>

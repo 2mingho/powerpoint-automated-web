@@ -13,6 +13,15 @@
       <h1>Dashboard de Tareas</h1>
       <p>Vista general de todas las tareas del equipo</p>
     </div>
+    <div class="td-hero-actions">
+      <button class="btn btn-secondary btn-sm" id="btnExportTasksCsv">
+        <i class="fa-solid fa-file-arrow-down"></i> Exportar CSV
+      </button>
+      <button class="btn btn-primary btn-sm" id="btnImportTasksCsv">
+        <i class="fa-solid fa-file-arrow-up"></i> Importar CSV
+      </button>
+      <input type="file" id="inputImportTasksCsv" accept=".csv,text/csv" style="display:none;">
+    </div>
   </div>
 
   <!-- Analytics Section -->
@@ -113,6 +122,57 @@
     </div>
   </div>
 
+  <div class="td-import-report" id="tdCsvImportReport" style="display:none;">
+    <div class="td-import-report-head">
+      <div>
+        <h3 id="tdCsvImportTitle">Previsualización CSV</h3>
+        <p id="tdCsvImportSummary"></p>
+      </div>
+      <div class="td-import-report-actions">
+        <button class="btn btn-secondary btn-sm" id="btnCopyStartToDue" style="display:none;">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Completar entrega desde inicio
+        </button>
+        <button class="btn btn-secondary btn-sm" id="btnCsvPreviewPrev" style="display:none;">
+          <i class="fa-solid fa-chevron-left"></i> Anterior
+        </button>
+        <span class="td-preview-page" id="tdCsvPreviewPage" style="display:none;"></span>
+        <button class="btn btn-secondary btn-sm" id="btnCsvPreviewNext" style="display:none;">
+          Siguiente <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button class="btn btn-primary btn-sm" id="btnCommitCsvImport" style="display:none;">
+          <i class="fa-solid fa-check"></i> Importar filas válidas
+        </button>
+        <button class="btn btn-secondary btn-sm" id="btnDownloadCsvImportErrors" style="display:none;">
+          <i class="fa-solid fa-file-csv"></i> Descargar errores
+        </button>
+      </div>
+    </div>
+    <div class="td-preview-table-wrap" id="tdCsvPreviewWrap" style="display:none;">
+      <table class="td-preview-table" id="tdCsvPreviewTable">
+        <thead>
+          <tr>
+            <th>Fila</th>
+            <th>Estado</th>
+            <th class="is-key">Título</th>
+            <th class="is-key">Fecha Inicio</th>
+            <th class="is-key">Fecha Final</th>
+            <th class="is-key">Fecha Entrega</th>
+            <th class="is-key">Cliente</th>
+            <th class="is-key">Solicitado por</th>
+            <th>Asignar a</th>
+            <th>Director o Gerencia</th>
+            <th>Tipo de Presupuesto</th>
+            <th>Recurrencia</th>
+            <th>Descripción</th>
+            <th>Detalles</th>
+          </tr>
+        </thead>
+        <tbody id="tdCsvPreviewBody"></tbody>
+      </table>
+    </div>
+    <div class="td-import-report-errors" id="tdCsvImportErrors"></div>
+  </div>
+
   <!-- Task cards grid -->
   <div class="td-grid" id="tdGrid">
     <div class="td-loading"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tareas...</div>
@@ -186,11 +246,32 @@ document.addEventListener('DOMContentLoaded', function() {
    const bulkAssignee = document.getElementById('bulkAssignee');
    const bulkDueDate = document.getElementById('bulkDueDate');
 
+   const btnExportCsv = document.getElementById('btnExportTasksCsv');
+   const btnImportCsv = document.getElementById('btnImportTasksCsv');
+   const inputImportCsv = document.getElementById('inputImportTasksCsv');
+   const importReport = document.getElementById('tdCsvImportReport');
+   const importTitle = document.getElementById('tdCsvImportTitle');
+   const importSummary = document.getElementById('tdCsvImportSummary');
+    const previewWrap = document.getElementById('tdCsvPreviewWrap');
+    const previewBody = document.getElementById('tdCsvPreviewBody');
+    const previewPageEl = document.getElementById('tdCsvPreviewPage');
+    const btnCopyStartToDue = document.getElementById('btnCopyStartToDue');
+    const btnPreviewPrev = document.getElementById('btnCsvPreviewPrev');
+    const btnPreviewNext = document.getElementById('btnCsvPreviewNext');
+    const btnCommitCsvImport = document.getElementById('btnCommitCsvImport');
+   const importErrors = document.getElementById('tdCsvImportErrors');
+   const btnDownloadImportErrors = document.getElementById('btnDownloadCsvImportErrors');
+
   let chartStatus = null;
   let chartDistribution = null;
   let allUsers = [];
   let currentTasks = [];
   let selectedTaskIds = new Set();
+  let latestImportErrors = [];
+  let csvPreviewRows = [];
+  let csvPreviewPage = 1;
+
+  const CSV_PREVIEW_PAGE_SIZE = 10;
 
   function notify(type, message) {
     if (typeof window.appNotify === 'function') {
@@ -213,6 +294,263 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function parseJsonResponse(response) {
     return response.json().catch(() => ({}));
+  }
+
+  function buildTaskFilterParams() {
+    const params = new URLSearchParams();
+    if (selStatus.value) params.set('status', selStatus.value);
+    if (selClient.value) params.set('client', selClient.value);
+    if (selAssignee.value) params.set('assignee_id', selAssignee.value);
+    if (selCreator.value) params.set('creator_id', selCreator.value);
+    if (selArea.value) params.set('area', selArea.value);
+    return params;
+  }
+
+  function escapeCsvCell(value) {
+    const text = String(value == null ? '' : value);
+    if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  }
+
+  function escapeAttr(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function downloadImportErrorsCsv(errors) {
+    if (!Array.isArray(errors) || errors.length === 0) return;
+
+    const rows = [
+      ['Fila', 'Columna', 'Valor', 'Codigo', 'Mensaje'],
+      ...errors.map(e => [e.row || '', e.column || '', e.value || '', e.code || '', e.message || ''])
+    ];
+
+    const csvContent = rows.map(r => r.map(escapeCsvCell).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `errores_importacion_tareas_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function formatIssueText(issue) {
+    const severity = issue.severity === 'warning' ? 'Advertencia' : 'Error';
+    return `${severity} · ${issue.column || 'General'}: ${issue.message || ''}`;
+  }
+
+  function issueBadgeClass(status) {
+    if (status === 'ok') return 'ok';
+    if (status === 'warning') return 'warning';
+    return 'error';
+  }
+
+  function fieldLabelForPreview(field) {
+    const labels = {
+      title: 'Titulo',
+      start_date: 'Fecha De inicio',
+      end_date: 'Fecha De finalizacion',
+      due_date: 'Fecha De entrega',
+      client: 'Cliente',
+      requested_by: 'Solicitado por',
+      assignee: 'Asignar a',
+      directorate: 'Director o Gerencia',
+      budget_type: 'Tipo de Presupuesto',
+      recurrence: 'Recurrencia',
+      description: 'Descripcion'
+    };
+    return labels[field] || field;
+  }
+
+  function markRowEditedForRevalidation(row, field) {
+    if (!row) return;
+    const targetColumn = fieldLabelForPreview(field);
+    const currentIssues = Array.isArray(row.issues) ? row.issues : [];
+    const remainingIssues = currentIssues.filter(issue => {
+      if (!issue) return false;
+      if (issue.code === 'pending_validation') return false;
+      if ((issue.column || '') === targetColumn) return false;
+      return true;
+    });
+
+    remainingIssues.push({
+      severity: 'warning',
+      column: targetColumn,
+      code: 'pending_validation',
+      message: 'Fila editada. Se validará al importar.'
+    });
+
+    row.issues = remainingIssues;
+    const hasError = remainingIssues.some(issue => issue && issue.severity === 'error');
+    row.status = hasError ? 'error' : 'warning';
+  }
+
+  function renderCsvPreview() {
+    const totalRows = csvPreviewRows.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / CSV_PREVIEW_PAGE_SIZE));
+    if (csvPreviewPage > totalPages) csvPreviewPage = totalPages;
+    if (csvPreviewPage < 1) csvPreviewPage = 1;
+
+    previewWrap.style.display = totalRows ? 'block' : 'none';
+    btnCopyStartToDue.style.display = totalRows ? 'inline-flex' : 'none';
+    btnPreviewPrev.style.display = totalRows ? 'inline-flex' : 'none';
+    btnPreviewNext.style.display = totalRows ? 'inline-flex' : 'none';
+    previewPageEl.style.display = totalRows ? 'inline-flex' : 'none';
+    btnCommitCsvImport.style.display = totalRows ? 'inline-flex' : 'none';
+
+    if (!totalRows) {
+      previewBody.innerHTML = '';
+      previewPageEl.textContent = '';
+      btnPreviewPrev.disabled = true;
+      btnPreviewNext.disabled = true;
+      return;
+    }
+
+    const start = (csvPreviewPage - 1) * CSV_PREVIEW_PAGE_SIZE;
+    const pageRows = csvPreviewRows.slice(start, start + CSV_PREVIEW_PAGE_SIZE);
+
+    previewBody.innerHTML = pageRows.map((row, localIndex) => {
+      const globalIndex = start + localIndex;
+      const issues = Array.isArray(row.issues) ? row.issues : [];
+      const issueList = issues.length
+        ? `<ul class="td-preview-issues">${issues.map(issue => `<li>${escapeHtml(formatIssueText(issue))}</li>`).join('')}</ul>`
+        : '<span class="td-preview-clean">Sin incidencias</span>';
+
+      const fields = row.fields || {};
+      const statusLabel = row.status === 'ok' ? 'OK' : (row.status === 'warning' ? 'Advertencia' : 'Error');
+
+      return `
+        <tr>
+          <td>${escapeHtml(String(row.row_number || ''))}</td>
+          <td><span class="td-preview-status ${issueBadgeClass(row.status)}">${statusLabel}</span></td>
+          <td class="is-key"><input class="td-preview-input" data-row-index="${globalIndex}" data-field="title" value="${escapeAttr(fields.title)}"></td>
+          <td class="is-key"><input class="td-preview-input" data-row-index="${globalIndex}" data-field="start_date" value="${escapeAttr(fields.start_date)}"></td>
+          <td class="is-key"><input class="td-preview-input" data-row-index="${globalIndex}" data-field="end_date" value="${escapeAttr(fields.end_date)}"></td>
+          <td class="is-key"><input class="td-preview-input" data-row-index="${globalIndex}" data-field="due_date" value="${escapeAttr(fields.due_date)}"></td>
+          <td class="is-key"><input class="td-preview-input" data-row-index="${globalIndex}" data-field="client" value="${escapeAttr(fields.client)}"></td>
+          <td class="is-key"><input class="td-preview-input" data-row-index="${globalIndex}" data-field="requested_by" value="${escapeAttr(fields.requested_by)}"></td>
+          <td><input class="td-preview-input" data-row-index="${globalIndex}" data-field="assignee" value="${escapeAttr(fields.assignee)}"></td>
+          <td><input class="td-preview-input" data-row-index="${globalIndex}" data-field="directorate" value="${escapeAttr(fields.directorate)}"></td>
+          <td><input class="td-preview-input" data-row-index="${globalIndex}" data-field="budget_type" value="${escapeAttr(fields.budget_type)}"></td>
+          <td><input class="td-preview-input" data-row-index="${globalIndex}" data-field="recurrence" value="${escapeAttr(fields.recurrence)}"></td>
+          <td><textarea class="td-preview-input td-preview-textarea" data-row-index="${globalIndex}" data-field="description">${escapeHtml(fields.description)}</textarea></td>
+          <td>${issueList}</td>
+        </tr>
+      `;
+    }).join('');
+
+    previewPageEl.textContent = `Página ${csvPreviewPage} de ${totalPages}`;
+    btnPreviewPrev.disabled = csvPreviewPage <= 1;
+    btnPreviewNext.disabled = csvPreviewPage >= totalPages;
+  }
+
+  function updatePreviewSummary(meta) {
+    const total = Number(meta.total_rows || 0);
+    const okRows = Number(meta.ok_rows || 0);
+    const warningRows = Number(meta.warning_rows || 0);
+    const errorRows = Number(meta.error_rows || 0);
+    importSummary.textContent = `Filas: ${total} | OK: ${okRows} | Con advertencias: ${warningRows} | Con errores: ${errorRows}`;
+  }
+
+  function renderImportErrors(errors) {
+    latestImportErrors = Array.isArray(errors) ? errors : [];
+    if (!latestImportErrors.length) {
+      importErrors.innerHTML = '<p class="td-empty-errors">No se detectaron errores.</p>';
+      btnDownloadImportErrors.style.display = 'none';
+      return;
+    }
+
+    const topErrors = latestImportErrors.slice(0, 25);
+    importErrors.innerHTML = topErrors.map(err => `
+      <div class="td-import-error-item">
+        <strong>Fila ${escapeHtml(err.row || '')}</strong>
+        <span>${escapeHtml(err.column || 'General')}: ${escapeHtml(err.message || 'Error desconocido')}</span>
+        ${err.value ? `<small>Valor: ${escapeHtml(err.value)}</small>` : ''}
+      </div>
+    `).join('');
+
+    if (latestImportErrors.length > topErrors.length) {
+      importErrors.innerHTML += `<p class="td-import-more">Mostrando ${topErrors.length} de ${latestImportErrors.length} errores.</p>`;
+    }
+
+    btnDownloadImportErrors.style.display = 'inline-flex';
+  }
+
+  function showCsvStructureErrors(details) {
+    const missing = (details.missing_headers || []).join(', ');
+    const unexpected = (details.unexpected_headers || []).join(', ');
+    const duplicate = (details.duplicate_headers || []).join(', ');
+    const detailParts = [];
+    if (missing) detailParts.push(`Faltan: ${missing}`);
+    if (unexpected) detailParts.push(`No esperadas: ${unexpected}`);
+    if (duplicate) detailParts.push(`Duplicadas: ${duplicate}`);
+
+    importReport.style.display = 'block';
+    importTitle.textContent = 'Previsualización CSV';
+    importSummary.textContent = 'El archivo no cumple la estructura requerida.';
+    previewWrap.style.display = 'none';
+    btnCopyStartToDue.style.display = 'none';
+    btnPreviewPrev.style.display = 'none';
+    btnPreviewNext.style.display = 'none';
+    previewPageEl.style.display = 'none';
+    btnCommitCsvImport.style.display = 'none';
+    btnDownloadImportErrors.style.display = 'none';
+    importErrors.innerHTML = detailParts.length
+      ? `<div class="td-import-error-item"><span>${escapeHtml(detailParts.join(' | '))}</span></div>`
+      : '<div class="td-import-error-item"><span>Estructura de cabeceras inválida.</span></div>';
+  }
+
+  function loadCsvPreview(file) {
+    const formData = new FormData();
+    formData.append('csv_file', file);
+
+    btnImportCsv.disabled = true;
+    btnImportCsv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analizando...';
+
+    fetch('/api/admin/tasks/import-csv/preview', {
+      method: 'POST',
+      body: formData
+    })
+      .then(parseJsonResponse)
+      .then(data => {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo analizar el CSV.');
+          if (data.details) {
+            showCsvStructureErrors(data.details);
+          }
+          return;
+        }
+
+        csvPreviewRows = Array.isArray(data.rows) ? data.rows : [];
+        csvPreviewPage = 1;
+        importReport.style.display = 'block';
+        importTitle.textContent = 'Previsualización CSV';
+        updatePreviewSummary(data);
+        renderCsvPreview();
+        renderImportErrors(data.errors || []);
+
+        const errorRows = Number(data.error_rows || 0);
+        if (errorRows > 0) {
+          notify('warning', `Previsualización lista: ${errorRows} fila(s) requieren corrección.`);
+        } else {
+          notify('success', 'Previsualización lista. Puedes importar las filas válidas.');
+        }
+      })
+      .catch(() => {
+        notify('error', 'Error de conexion al previsualizar CSV.');
+      })
+      .finally(() => {
+        btnImportCsv.disabled = false;
+        btnImportCsv.innerHTML = '<i class="fa-solid fa-file-arrow-up"></i> Importar CSV';
+      });
   }
 
   function refreshSelectionUI() {
@@ -393,12 +731,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ─── Load tasks ───
   function loadTasks() {
-    const params = new URLSearchParams();
-    if (selStatus.value)   params.set('status', selStatus.value);
-    if (selClient.value)   params.set('client', selClient.value);
-    if (selAssignee.value) params.set('assignee_id', selAssignee.value);
-    if (selCreator.value)  params.set('creator_id', selCreator.value);
-    if (selArea.value)     params.set('area', selArea.value);
+    const params = buildTaskFilterParams();
 
     fetch('/api/admin/tasks?' + params.toString())
       .then(parseJsonResponse)
@@ -455,11 +788,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 <h3 class="td-card-title">${escapeHtml(t.title)}</h3>
               </div>
               ${t.client ? `<span class="td-card-client">${escapeHtml(t.client)}</span>` : ''}
+              ${t.directorate ? `<span class="td-card-client">${escapeHtml(t.directorate)}</span>` : ''}
               ${t.description ? `<p class="td-card-desc">${escapeHtml(t.description)}</p>` : ''}
               <div class="td-card-meta">
                 <span class="td-meta-item"><i class="fa-solid fa-calendar"></i> ${dueDate}</span>
                 <span class="td-meta-item"><i class="fa-solid fa-user"></i> ${escapeHtml(t.assignee_name)}</span>
                 <span class="td-meta-item"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t.area)}</span>
+                ${t.requested_by ? `<span class="td-meta-item"><i class="fa-solid fa-hand"></i> ${escapeHtml(t.requested_by)}</span>` : ''}
+                ${t.budget_type ? `<span class="td-meta-item"><i class="fa-solid fa-wallet"></i> ${escapeHtml(t.budget_type)}</span>` : ''}
               </div>
             </div>
           `;
@@ -498,6 +834,148 @@ document.addEventListener('DOMContentLoaded', function() {
     selArea.value = '';
     selectedTaskIds.clear();
     loadTasks();
+  });
+
+  btnExportCsv.addEventListener('click', function() {
+    const params = buildTaskFilterParams();
+    const url = '/api/admin/tasks/export-csv' + (params.toString() ? `?${params.toString()}` : '');
+    window.location.href = url;
+  });
+
+  btnImportCsv.addEventListener('click', function() {
+    inputImportCsv.value = '';
+    inputImportCsv.click();
+  });
+
+  inputImportCsv.addEventListener('change', function() {
+    const file = this.files && this.files[0];
+    if (!file) return;
+
+    loadCsvPreview(file);
+  });
+
+  previewBody.addEventListener('input', function(event) {
+    const input = event.target.closest('.td-preview-input');
+    if (!input) return;
+
+    const rowIndex = Number(input.dataset.rowIndex || -1);
+    const field = input.dataset.field || '';
+    if (rowIndex < 0 || !field || !csvPreviewRows[rowIndex]) return;
+
+    if (!csvPreviewRows[rowIndex].fields) {
+      csvPreviewRows[rowIndex].fields = {};
+    }
+    csvPreviewRows[rowIndex].fields[field] = input.value;
+    markRowEditedForRevalidation(csvPreviewRows[rowIndex], field);
+
+    const rowEl = input.closest('tr');
+    if (!rowEl) return;
+    const statusBadge = rowEl.querySelector('.td-preview-status');
+    if (statusBadge) {
+      const nextStatus = csvPreviewRows[rowIndex].status || 'warning';
+      statusBadge.textContent = nextStatus === 'error' ? 'Error' : 'Advertencia';
+      statusBadge.className = `td-preview-status ${issueBadgeClass(nextStatus)}`;
+    }
+
+    const issuesCell = rowEl.lastElementChild;
+    if (issuesCell) {
+      const rowIssues = csvPreviewRows[rowIndex].issues || [];
+      issuesCell.innerHTML = `<ul class="td-preview-issues">${rowIssues.map(issue => `<li>${escapeHtml(formatIssueText(issue))}</li>`).join('')}</ul>`;
+    }
+  });
+
+  btnCopyStartToDue.addEventListener('click', function() {
+    if (!csvPreviewRows.length) {
+      notify('warning', 'No hay filas en previsualización para aplicar esta acción.');
+      return;
+    }
+
+    let changed = 0;
+    csvPreviewRows.forEach(row => {
+      const fields = row && row.fields ? row.fields : {};
+      const startDate = String(fields.start_date || '').trim();
+      const dueDate = String(fields.due_date || '').trim();
+      if (!dueDate && startDate) {
+        fields.due_date = fields.start_date;
+        markRowEditedForRevalidation(row, 'due_date');
+        changed += 1;
+      }
+    });
+
+    renderCsvPreview();
+
+    if (!changed) {
+      notify('info', 'No hubo filas con fecha de entrega vacía y fecha de inicio disponible.');
+      return;
+    }
+
+    notify('success', `Se completó Fecha De entrega desde Fecha De inicio en ${changed} fila(s).`);
+  });
+
+  btnPreviewPrev.addEventListener('click', function() {
+    if (csvPreviewPage <= 1) return;
+    csvPreviewPage -= 1;
+    renderCsvPreview();
+  });
+
+  btnPreviewNext.addEventListener('click', function() {
+    const totalPages = Math.max(1, Math.ceil(csvPreviewRows.length / CSV_PREVIEW_PAGE_SIZE));
+    if (csvPreviewPage >= totalPages) return;
+    csvPreviewPage += 1;
+    renderCsvPreview();
+  });
+
+  btnCommitCsvImport.addEventListener('click', function() {
+    if (!csvPreviewRows.length) {
+      notify('warning', 'No hay filas en previsualización para importar.');
+      return;
+    }
+
+    btnCommitCsvImport.disabled = true;
+    btnCommitCsvImport.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Importando...';
+
+    fetch('/api/admin/tasks/import-csv/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: csvPreviewRows })
+    })
+      .then(parseJsonResponse)
+      .then(data => {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo completar la importación.');
+          if (data.details) {
+            showCsvStructureErrors(data.details);
+          }
+          return;
+        }
+
+        importTitle.textContent = 'Resultado de importación CSV';
+        importSummary.textContent = `Filas procesadas: ${data.total_rows || 0} | Importadas: ${data.imported_rows || 0} | Fallidas: ${data.failed_rows || 0} | Tareas creadas: ${data.created_tasks || 0}`;
+        renderImportErrors(data.errors || []);
+        loadTasks();
+
+        const remainingRows = Array.isArray(data.remaining_rows) ? data.remaining_rows : [];
+        csvPreviewRows = remainingRows;
+        csvPreviewPage = 1;
+        renderCsvPreview();
+
+        if (data.failed_rows > 0) {
+          notify('warning', `Importación parcial: ${data.imported_rows} fila(s) importada(s), ${data.failed_rows} pendiente(s) de corrección.`);
+        } else {
+          notify('success', `Importación completada: ${data.imported_rows} fila(s) importada(s).`);
+        }
+      })
+      .catch(() => {
+        notify('error', 'Error de conexión al importar CSV.');
+      })
+      .finally(() => {
+        btnCommitCsvImport.disabled = false;
+        btnCommitCsvImport.innerHTML = '<i class="fa-solid fa-check"></i> Importar filas válidas';
+      });
+  });
+
+  btnDownloadImportErrors.addEventListener('click', function() {
+    downloadImportErrorsCsv(latestImportErrors);
   });
 
   selectVisible.addEventListener('change', function() {

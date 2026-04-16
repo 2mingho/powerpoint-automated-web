@@ -277,6 +277,24 @@ def ensure_reports_schema():
                     except Exception as e:
                         print(f"[migration] Aviso al agregar users.{col_name}: {e}")
 
+        if 'tasks' in tables:
+            task_cols = {c['name'] for c in insp.get_columns('tasks')}
+            new_task_cols = {
+                'start_date': 'DATE',
+                'end_date': 'DATE',
+                'directorate': 'VARCHAR(255)',
+                'requested_by': 'VARCHAR(255)',
+                'budget_type': 'VARCHAR(255)',
+            }
+            for col_name, col_type in new_task_cols.items():
+                if col_name not in task_cols:
+                    try:
+                        db.session.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
+                        db.session.commit()
+                        print(f"[migration] Added column tasks.{col_name}")
+                    except Exception as e:
+                        print(f"[migration] Aviso al agregar tasks.{col_name}: {e}")
+
         ensure_default_admin()
 
 

@@ -155,6 +155,11 @@ class Task(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     client = db.Column(db.String(100), nullable=True)
+    start_date = db.Column(db.Date, nullable=True)
+    end_date = db.Column(db.Date, nullable=True)
+    directorate = db.Column(db.String(255), nullable=True)
+    requested_by = db.Column(db.String(255), nullable=True)
+    budget_type = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     due_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(30), nullable=False, default='Pendiente')
@@ -177,6 +182,11 @@ class Task(db.Model):
             'title': self.title,
             'description': self.description or '',
             'client': self.client or '',
+            'start_date': self.start_date.isoformat() if self.start_date else '',
+            'end_date': self.end_date.isoformat() if self.end_date else '',
+            'directorate': self.directorate or '',
+            'requested_by': self.requested_by or '',
+            'budget_type': self.budget_type or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
             'due_date': self.due_date.isoformat() if self.due_date else '',
             'status': self.status,
