@@ -13,6 +13,15 @@
       <h1>Dashboard de Tareas</h1>
       <p>Vista general de todas las tareas del equipo</p>
     </div>
+    <div class="td-hero-actions">
+      <button class="btn btn-secondary btn-sm" id="btnExportTasksCsv">
+        <i class="fa-solid fa-file-arrow-down"></i> Exportar CSV
+      </button>
+      <button class="btn btn-primary btn-sm" id="btnImportTasksCsv">
+        <i class="fa-solid fa-file-arrow-up"></i> Importar CSV
+      </button>
+      <input type="file" id="inputImportTasksCsv" accept=".csv,text/csv" style="display:none;">
+    </div>
   </div>
 
   <!-- Analytics Section -->
@@ -113,6 +122,19 @@
     </div>
   </div>
 
+  <div class="td-import-report" id="tdCsvImportReport" style="display:none;">
+    <div class="td-import-report-head">
+      <div>
+        <h3>Resultado de importación CSV</h3>
+        <p id="tdCsvImportSummary"></p>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="btnDownloadCsvImportErrors" style="display:none;">
+        <i class="fa-solid fa-file-csv"></i> Descargar errores
+      </button>
+    </div>
+    <div class="td-import-report-errors" id="tdCsvImportErrors"></div>
+  </div>
+
   <!-- Task cards grid -->
   <div class="td-grid" id="tdGrid">
     <div class="td-loading"><i class="fa-solid fa-spinner fa-spin"></i> Cargando tareas...</div>
@@ -186,11 +208,20 @@ document.addEventListener('DOMContentLoaded', function() {
    const bulkAssignee = document.getElementById('bulkAssignee');
    const bulkDueDate = document.getElementById('bulkDueDate');
 
+   const btnExportCsv = document.getElementById('btnExportTasksCsv');
+   const btnImportCsv = document.getElementById('btnImportTasksCsv');
+   const inputImportCsv = document.getElementById('inputImportTasksCsv');
+   const importReport = document.getElementById('tdCsvImportReport');
+   const importSummary = document.getElementById('tdCsvImportSummary');
+   const importErrors = document.getElementById('tdCsvImportErrors');
+   const btnDownloadImportErrors = document.getElementById('btnDownloadCsvImportErrors');
+
   let chartStatus = null;
   let chartDistribution = null;
   let allUsers = [];
   let currentTasks = [];
   let selectedTaskIds = new Set();
+  let latestImportErrors = [];
 
   function notify(type, message) {
     if (typeof window.appNotify === 'function') {
@@ -213,6 +244,76 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function parseJsonResponse(response) {
     return response.json().catch(() => ({}));
+  }
+
+  function buildTaskFilterParams() {
+    const params = new URLSearchParams();
+    if (selStatus.value) params.set('status', selStatus.value);
+    if (selClient.value) params.set('client', selClient.value);
+    if (selAssignee.value) params.set('assignee_id', selAssignee.value);
+    if (selCreator.value) params.set('creator_id', selCreator.value);
+    if (selArea.value) params.set('area', selArea.value);
+    return params;
+  }
+
+  function escapeCsvCell(value) {
+    const text = String(value == null ? '' : value);
+    if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  }
+
+  function downloadImportErrorsCsv(errors) {
+    if (!Array.isArray(errors) || errors.length === 0) return;
+
+    const rows = [
+      ['Fila', 'Columna', 'Valor', 'Codigo', 'Mensaje'],
+      ...errors.map(e => [e.row || '', e.column || '', e.value || '', e.code || '', e.message || ''])
+    ];
+
+    const csvContent = rows.map(r => r.map(escapeCsvCell).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `errores_importacion_tareas_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function renderImportReport(data) {
+    const total = Number(data.total_rows || 0);
+    const imported = Number(data.imported_rows || 0);
+    const failed = Number(data.failed_rows || 0);
+    const created = Number(data.created_tasks || 0);
+    latestImportErrors = Array.isArray(data.errors) ? data.errors : [];
+
+    importSummary.textContent = `Filas procesadas: ${total} | Importadas: ${imported} | Fallidas: ${failed} | Tareas creadas: ${created}`;
+    importReport.style.display = 'block';
+
+    if (!latestImportErrors.length) {
+      importErrors.innerHTML = '<p class="td-empty-errors">No se detectaron errores en la importación.</p>';
+      btnDownloadImportErrors.style.display = 'none';
+      return;
+    }
+
+    const topErrors = latestImportErrors.slice(0, 25);
+    importErrors.innerHTML = topErrors.map(err => `
+      <div class="td-import-error-item">
+        <strong>Fila ${escapeHtml(err.row || '')}</strong>
+        <span>${escapeHtml(err.column || 'General')}: ${escapeHtml(err.message || 'Error desconocido')}</span>
+        ${err.value ? `<small>Valor: ${escapeHtml(err.value)}</small>` : ''}
+      </div>
+    `).join('');
+
+    if (latestImportErrors.length > topErrors.length) {
+      importErrors.innerHTML += `<p class="td-import-more">Mostrando ${topErrors.length} de ${latestImportErrors.length} errores.</p>`;
+    }
+
+    btnDownloadImportErrors.style.display = 'inline-flex';
   }
 
   function refreshSelectionUI() {
@@ -393,12 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ─── Load tasks ───
   function loadTasks() {
-    const params = new URLSearchParams();
-    if (selStatus.value)   params.set('status', selStatus.value);
-    if (selClient.value)   params.set('client', selClient.value);
-    if (selAssignee.value) params.set('assignee_id', selAssignee.value);
-    if (selCreator.value)  params.set('creator_id', selCreator.value);
-    if (selArea.value)     params.set('area', selArea.value);
+    const params = buildTaskFilterParams();
 
     fetch('/api/admin/tasks?' + params.toString())
       .then(parseJsonResponse)
@@ -455,11 +551,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 <h3 class="td-card-title">${escapeHtml(t.title)}</h3>
               </div>
               ${t.client ? `<span class="td-card-client">${escapeHtml(t.client)}</span>` : ''}
+              ${t.directorate ? `<span class="td-card-client">${escapeHtml(t.directorate)}</span>` : ''}
               ${t.description ? `<p class="td-card-desc">${escapeHtml(t.description)}</p>` : ''}
               <div class="td-card-meta">
                 <span class="td-meta-item"><i class="fa-solid fa-calendar"></i> ${dueDate}</span>
                 <span class="td-meta-item"><i class="fa-solid fa-user"></i> ${escapeHtml(t.assignee_name)}</span>
                 <span class="td-meta-item"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(t.area)}</span>
+                ${t.requested_by ? `<span class="td-meta-item"><i class="fa-solid fa-hand"></i> ${escapeHtml(t.requested_by)}</span>` : ''}
+                ${t.budget_type ? `<span class="td-meta-item"><i class="fa-solid fa-wallet"></i> ${escapeHtml(t.budget_type)}</span>` : ''}
               </div>
             </div>
           `;
@@ -498,6 +597,75 @@ document.addEventListener('DOMContentLoaded', function() {
     selArea.value = '';
     selectedTaskIds.clear();
     loadTasks();
+  });
+
+  btnExportCsv.addEventListener('click', function() {
+    const params = buildTaskFilterParams();
+    const url = '/api/admin/tasks/export-csv' + (params.toString() ? `?${params.toString()}` : '');
+    window.location.href = url;
+  });
+
+  btnImportCsv.addEventListener('click', function() {
+    inputImportCsv.value = '';
+    inputImportCsv.click();
+  });
+
+  inputImportCsv.addEventListener('change', function() {
+    const file = this.files && this.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('csv_file', file);
+
+    btnImportCsv.disabled = true;
+    btnImportCsv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Importando...';
+
+    fetch('/api/admin/tasks/import-csv', {
+      method: 'POST',
+      body: formData
+    })
+      .then(parseJsonResponse)
+      .then(data => {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo importar el CSV.');
+          btnDownloadImportErrors.style.display = 'none';
+          if (data.details) {
+            const missing = (data.details.missing_headers || []).join(', ');
+            const unexpected = (data.details.unexpected_headers || []).join(', ');
+            const duplicate = (data.details.duplicate_headers || []).join(', ');
+            const detailParts = [];
+            if (missing) detailParts.push(`Faltan: ${missing}`);
+            if (unexpected) detailParts.push(`No esperadas: ${unexpected}`);
+            if (duplicate) detailParts.push(`Duplicadas: ${duplicate}`);
+            if (detailParts.length) {
+              importReport.style.display = 'block';
+              importSummary.textContent = 'El archivo no cumple la estructura requerida.';
+              importErrors.innerHTML = `<div class="td-import-error-item"><span>${escapeHtml(detailParts.join(' | '))}</span></div>`;
+            }
+          }
+          return;
+        }
+
+        renderImportReport(data);
+        loadTasks();
+
+        if (data.failed_rows > 0) {
+          notify('warning', `Importacion completada con errores: ${data.imported_rows} fila(s) importada(s), ${data.failed_rows} fallida(s).`);
+        } else {
+          notify('success', `Importacion completada: ${data.imported_rows} fila(s) importada(s).`);
+        }
+      })
+      .catch(() => {
+        notify('error', 'Error de conexion al importar CSV.');
+      })
+      .finally(() => {
+        btnImportCsv.disabled = false;
+        btnImportCsv.innerHTML = '<i class="fa-solid fa-file-arrow-up"></i> Importar CSV';
+      });
+  });
+
+  btnDownloadImportErrors.addEventListener('click', function() {
+    downloadImportErrorsCsv(latestImportErrors);
   });
 
   selectVisible.addEventListener('change', function() {

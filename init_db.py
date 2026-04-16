@@ -81,6 +81,25 @@ def ensure_schema(app):
                         db.session.rollback()
                         print(f"[migration] Warning adding users.{col_name}: {e}")
 
+        if 'tasks' in tables:
+            task_cols = {c['name'] for c in insp.get_columns('tasks')}
+            new_task_cols = {
+                'start_date': 'DATE',
+                'end_date': 'DATE',
+                'directorate': 'VARCHAR(255)',
+                'requested_by': 'VARCHAR(255)',
+                'budget_type': 'VARCHAR(255)',
+            }
+            for col_name, col_type in new_task_cols.items():
+                if col_name not in task_cols:
+                    try:
+                        db.session.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
+                        db.session.commit()
+                        print(f"[migration] Added tasks.{col_name}")
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"[migration] Warning adding tasks.{col_name}: {e}")
+
         seed_admin(app)
         print(f"[ok] Schema ensured on: {db.engine.url.render_as_string(hide_password=True)}")
 

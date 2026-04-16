@@ -27,18 +27,22 @@ document.addEventListener('DOMContentLoaded', function () {
   const fId = document.getElementById('taskId');
   const fTitle = document.getElementById('taskTitle');
   const fClient = document.getElementById('taskClient');
+  const fDirectorate = document.getElementById('taskDirectorate');
+  const fRequestedBy = document.getElementById('taskRequestedBy');
+  const fBudgetType = document.getElementById('taskBudgetType');
   const fDesc = document.getElementById('taskDesc');
   const fAssignee = document.getElementById('taskAssignee');
   const fDueDate = document.getElementById('taskDueDate');
+  const fStartDate = document.getElementById('taskStartDate');
+  const fEndDate = document.getElementById('taskEndDate');
   const fRecType = document.getElementById('taskRecurrenceType');
-  const fRecEnd = document.getElementById('taskRecurrenceEnd');
 
   const formMessage = document.getElementById('taskFormMessage');
   const fieldErrors = {
     title: document.getElementById('taskTitleError'),
     assignee: document.getElementById('taskAssigneeError'),
     dueDate: document.getElementById('taskDueDateError'),
-    recEnd: document.getElementById('taskRecurrenceEndError')
+    endDate: document.getElementById('taskEndDateError')
   };
 
   const acList = document.getElementById('clientAutocomplete');
@@ -134,7 +138,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function clearFieldErrors() {
-    [fTitle, fAssignee, fDueDate, fRecEnd].forEach(function (field) {
+    [fTitle, fAssignee, fDueDate, fEndDate].forEach(function (field) {
       field.classList.remove('field-invalid');
     });
     Object.values(fieldErrors).forEach(function (errorEl) {
@@ -196,7 +200,10 @@ document.addEventListener('DOMContentLoaded', function () {
     let guard = 0;
 
     while (current <= end && guard < 370) {
-      count += 1;
+      const day = current.getDay();
+      if (day !== 0 && day !== 6) {
+        count += 1;
+      }
       if (recurrenceType === 'Diaria') {
         current.setDate(current.getDate() + 1);
       } else if (recurrenceType === 'Mensual') {
@@ -218,15 +225,15 @@ document.addEventListener('DOMContentLoaded', function () {
     recPreview.classList.remove('error');
 
     if (!recurrentCb.checked) return;
-    if (!fDueDate.value || !fRecEnd.value) {
-      recPreview.textContent = 'Completa fecha de entrega y fecha final para previsualizar instancias.';
+    if (!fDueDate.value || !fEndDate.value) {
+      recPreview.textContent = 'Completa fecha de entrega y fecha de finalizacion para previsualizar instancias.';
       return;
     }
 
-    const count = estimateRecurrenceCount(fDueDate.value, fRecType.value, fRecEnd.value);
+    const count = estimateRecurrenceCount(fDueDate.value, fRecType.value, fEndDate.value);
     if (count === 0) {
       recPreview.classList.add('error');
-      recPreview.textContent = 'La fecha final debe ser igual o posterior a la fecha de entrega.';
+      recPreview.textContent = 'No se generan dias laborables con ese rango y frecuencia.';
       return;
     }
 
@@ -260,13 +267,24 @@ document.addEventListener('DOMContentLoaded', function () {
       firstInvalid = firstInvalid || fDueDate;
     }
 
+    if (payload.start_date && payload.end_date && payload.end_date < payload.start_date) {
+      setFieldError(fEndDate, fieldErrors.endDate, 'La fecha final no puede ser menor que la fecha de inicio.');
+      firstInvalid = firstInvalid || fEndDate;
+    }
+
     if (payload.is_recurrent) {
-      if (!payload.recurrence_end) {
-        setFieldError(fRecEnd, fieldErrors.recEnd, 'La fecha final es obligatoria para recurrencia.');
-        firstInvalid = firstInvalid || fRecEnd;
-      } else if (payload.recurrence_end < payload.due_date) {
-        setFieldError(fRecEnd, fieldErrors.recEnd, 'La fecha final no puede ser menor que la fecha de entrega.');
-        firstInvalid = firstInvalid || fRecEnd;
+      const dueDateObj = toDateValue(payload.due_date);
+      if (dueDateObj && (dueDateObj.getDay() === 0 || dueDateObj.getDay() === 6)) {
+        setFieldError(fDueDate, fieldErrors.dueDate, 'Las tareas recurrentes no pueden iniciar en sabado o domingo.');
+        firstInvalid = firstInvalid || fDueDate;
+      }
+
+      if (!payload.end_date) {
+        setFieldError(fEndDate, fieldErrors.endDate, 'La fecha final es obligatoria para recurrencia.');
+        firstInvalid = firstInvalid || fEndDate;
+      } else if (payload.end_date < payload.due_date) {
+        setFieldError(fEndDate, fieldErrors.endDate, 'La fecha final no puede ser menor que la fecha de entrega.');
+        firstInvalid = firstInvalid || fEndDate;
       }
     }
 
@@ -345,7 +363,12 @@ document.addEventListener('DOMContentLoaded', function () {
     copiedTask = {
       title: (taskData.title || '').trim(),
       client: (taskData.client || '').trim(),
+      directorate: (taskData.directorate || '').trim(),
+      requested_by: (taskData.requested_by || '').trim(),
+      budget_type: (taskData.budget_type || '').trim(),
       description: (taskData.description || '').trim(),
+      start_date: normalizeIsoDate(taskData.start_date),
+      end_date: normalizeIsoDate(taskData.end_date),
       assignee_id: parseInt(taskData.assignee_id, 10),
       status: taskData.status || 'Pendiente'
     };
@@ -570,7 +593,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const payload = {
       title: copiedTask.title,
       client: copiedTask.client || '',
+      directorate: copiedTask.directorate || '',
+      requested_by: copiedTask.requested_by || '',
+      budget_type: copiedTask.budget_type || '',
       description: copiedTask.description || '',
+      start_date: copiedTask.start_date || '',
+      end_date: copiedTask.end_date || '',
       assignee_id: parseInt(copiedTask.assignee_id, 10),
       due_date: dateStr,
       status: copiedTask.status || 'Pendiente',
@@ -786,10 +814,14 @@ document.addEventListener('DOMContentLoaded', function () {
     fId.value = '';
     fTitle.value = '';
     fClient.value = '';
+    fDirectorate.value = '';
+    fRequestedBy.value = '';
+    fBudgetType.value = '';
     fDesc.value = '';
     fDueDate.value = '';
+    fStartDate.value = '';
+    fEndDate.value = '';
     fRecType.value = 'Semanal';
-    fRecEnd.value = '';
     recurrentCb.checked = false;
     recFields.classList.remove('visible');
     deleteSeriesCb.checked = false;
@@ -809,9 +841,14 @@ document.addEventListener('DOMContentLoaded', function () {
       fId.value = taskData.id;
       fTitle.value = taskData.title || '';
       fClient.value = taskData.client || '';
+      fDirectorate.value = taskData.directorate || '';
+      fRequestedBy.value = taskData.requested_by || '';
+      fBudgetType.value = taskData.budget_type || '';
       fDesc.value = taskData.description || '';
       fAssignee.value = taskData.assignee_id;
       fDueDate.value = normalizeIsoDate(taskData.due_date);
+      fStartDate.value = normalizeIsoDate(taskData.start_date);
+      fEndDate.value = normalizeIsoDate(taskData.end_date);
       currentStatus = taskData.status || 'Pendiente';
 
       document.querySelectorAll('.status-chip').forEach(function (chip) {
@@ -856,17 +893,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
   recurrentCb.addEventListener('change', function () {
     recFields.classList.toggle('visible', recurrentCb.checked);
-    if (!recurrentCb.checked) {
-      fRecEnd.value = '';
-      fieldErrors.recEnd.textContent = '';
-      fRecEnd.classList.remove('field-invalid');
+    if (!recurrentCb.checked && fieldErrors.endDate) {
+      fieldErrors.endDate.textContent = '';
+      fEndDate.classList.remove('field-invalid');
     }
     updateRecurrencePreview();
   });
 
   fDueDate.addEventListener('change', updateRecurrencePreview);
   fRecType.addEventListener('change', updateRecurrencePreview);
-  fRecEnd.addEventListener('change', updateRecurrencePreview);
+  fEndDate.addEventListener('change', updateRecurrencePreview);
 
   fClient.addEventListener('input', renderAutocomplete);
   fClient.addEventListener('blur', function () {
@@ -892,13 +928,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const payload = {
       title: fTitle.value.trim(),
       client: fClient.value.trim(),
+      directorate: fDirectorate.value.trim(),
+      requested_by: fRequestedBy.value.trim(),
+      budget_type: fBudgetType.value.trim(),
       description: fDesc.value.trim(),
       assignee_id: parseInt(fAssignee.value, 10),
       due_date: normalizeIsoDate(fDueDate.value),
+      start_date: normalizeIsoDate(fStartDate.value),
+      end_date: normalizeIsoDate(fEndDate.value),
       status: currentStatus,
       is_recurrent: recurrentCb.checked,
       recurrence_type: recurrentCb.checked ? fRecType.value : '',
-      recurrence_end: recurrentCb.checked ? fRecEnd.value : ''
+      recurrence_end: recurrentCb.checked ? normalizeIsoDate(fEndDate.value) : ''
     };
 
     if (!validatePayload(payload)) return;
@@ -1032,6 +1073,8 @@ document.addEventListener('DOMContentLoaded', function () {
         task.title,
         `Estado: ${task.status || 'Pendiente'}`,
         task.client ? `Cliente: ${task.client}` : '',
+        task.directorate ? `Director/Gerencia: ${task.directorate}` : '',
+        task.requested_by ? `Solicitado por: ${task.requested_by}` : '',
         task.assignee_name ? `Asignado: ${task.assignee_name}` : '',
         task.due_date ? `Entrega: ${formatDate(task.due_date)}` : ''
       ].filter(Boolean);
