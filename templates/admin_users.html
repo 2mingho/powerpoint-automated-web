@@ -30,7 +30,7 @@
     <button type="submit" class="btn btn-primary btn-sm">
       <i class="fa-solid fa-filter"></i> Filtrar
     </button>
-    <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline btn-sm" title="Limpiar filtros">
+    <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline btn-sm" title="Limpiar filtros" aria-label="Limpiar filtros de usuarios">
       <i class="fa-solid fa-xmark"></i>
     </a>
   </form>
@@ -76,39 +76,39 @@
           </td>
           <td style="white-space: nowrap;">{{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '—' }}</td>
           <td style="white-space: nowrap;">
-            <a href="{{ url_for('admin.user_edit', user_id=user.id) }}" class="btn btn-outline btn-icon" title="Editar">
+            <a href="{{ url_for('admin.user_edit', user_id=user.id) }}" class="btn btn-outline btn-icon" title="Editar" aria-label="Editar usuario {{ user.username }}">
               <i class="fa-solid fa-pen-to-square"></i>
             </a>
-            <a href="{{ url_for('admin.user_activity', user_id=user.id) }}" class="btn btn-outline btn-icon" title="Ver actividad">
+            <a href="{{ url_for('admin.user_activity', user_id=user.id) }}" class="btn btn-outline btn-icon" title="Ver actividad" aria-label="Ver actividad de {{ user.username }}">
               <i class="fa-solid fa-clock-rotate-left"></i>
             </a>
             {% if user.id != current_user.id %}
             <form method="POST" action="{{ url_for('admin.user_kick', user_id=user.id) }}" style="display:inline;" onsubmit="return confirm('¿Terminar la sesion de {{ user.username }}?');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-icon btn-outline" title="Expulsar sesion" style="color:var(--c-warning); border-color:var(--c-warning);">
+              <button type="submit" class="btn btn-icon btn-outline" title="Expulsar sesion" aria-label="Expulsar sesión activa de {{ user.username }}" style="color:var(--c-warning); border-color:var(--c-warning);">
                 <i class="fa-solid fa-bolt"></i>
               </button>
             </form>
             {% if current_user.email == 'admin@dataintel.com' %}
             <form method="POST" action="{{ url_for('admin.user_impersonate', user_id=user.id) }}" style="display:inline;" onsubmit="return confirm('¿Iniciar sesion como {{ user.username }}?');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-icon btn-outline" title="Login como este usuario">
+              <button type="submit" class="btn btn-icon btn-outline" title="Login como este usuario" aria-label="Iniciar sesión como {{ user.username }}">
                 <i class="fa-solid fa-user-secret"></i>
               </button>
             </form>
             {% endif %}
             <form method="POST" action="{{ url_for('admin.user_toggle', user_id=user.id) }}" style="display:inline;">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-icon {{ 'btn-outline' if user.is_active else 'btn-success' }}" title="{{ 'Desactivar' if user.is_active else 'Activar' }}">
+              <button type="submit" class="btn btn-icon {{ 'btn-outline' if user.is_active else 'btn-success' }}" title="{{ 'Desactivar' if user.is_active else 'Activar' }}" aria-label="{{ 'Desactivar' if user.is_active else 'Activar' }} usuario {{ user.username }}">
                 <i class="fa-solid {{ 'fa-lock' if user.is_active else 'fa-lock-open' }}"></i>
               </button>
             </form>
             <form method="POST" action="{{ url_for('admin.user_delete', user_id=user.id) }}" style="display:inline;"
                   class="js-confirm-submit" data-confirm-title="Desactivar usuario"
-                  data-confirm-message="Desactivar a {{ user.username }}?" data-confirm-button="Desactivar">
+                  data-confirm-message="¿Desactivar a {{ user.username }}? Esta acción no elimina su cuenta de forma permanente." data-confirm-button="Desactivar usuario">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-icon btn-danger" title="Eliminar">
-                <i class="fa-solid fa-trash"></i>
+              <button type="submit" class="btn btn-icon btn-danger" title="Desactivar (no elimina definitivamente)" aria-label="Desactivar cuenta de {{ user.username }} sin eliminarla definitivamente">
+                <i class="fa-solid fa-user-slash"></i>
               </button>
             </form>
             {% endif %}

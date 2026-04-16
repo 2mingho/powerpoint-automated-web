@@ -9,7 +9,7 @@ import random
 from datetime import datetime, timedelta
 import functools
 import click
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, abort, after_this_request, flash, session
 from flask_login import current_user, login_required
 from services.classifier import classify_mentions
 from services.file_loader import detect_format, read_full_as_tsv
@@ -29,7 +29,7 @@ from blueprints.tasks import tasks_bp
 
 
 from extensions import db, login_manager, csrf, limiter
-from models import User, Report, ActivityLog, ClassificationPreset, Task
+from models import User, Report, ActivityLog, ClassificationPreset, Task, TempArtifact
 from services import calculation as report
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 from pptx_builder import engine as ppt_engine
@@ -96,6 +96,7 @@ if not app.config['SECRET_KEY']:
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB upload limit
 app.config['SQLALCHEMY_DATABASE_URI'] = _resolve_database_uri()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['ALLOW_SELF_REGISTRATION'] = _env_bool('ALLOW_SELF_REGISTRATION', False)
 
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -158,6 +159,24 @@ from flask_login import logout_user
 @app.before_request
 def check_force_logout():
     """If admin has flagged this user for forced logout, log them out immediately."""
+    session_user_id = session.get('_user_id')
+    if session_user_id:
+        try:
+            session_user = db.session.get(User, int(session_user_id))
+        except (TypeError, ValueError):
+            session_user = None
+        if session_user and not session_user.is_active:
+            logout_user()
+            session.pop('_user_id', None)
+            session.pop('_fresh', None)
+            flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
+            return redirect(url_for('auth.login'))
+
+    if current_user.is_authenticated and not current_user.is_active:
+        logout_user()
+        flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
+        return redirect(url_for('auth.login'))
+
     if current_user.is_authenticated and getattr(current_user, 'force_logout', False):
         current_user.force_logout = False
         db.session.commit()
@@ -220,12 +239,23 @@ def ensure_default_admin():
     admin_password = os.environ.get('ADMIN_PASSWORD', 'Admin2024!')
     admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
 
+    if _is_production_mode() and admin_password == 'Admin2024!':
+        raise RuntimeError(
+            "Startup blocked: ADMIN_PASSWORD is using insecure default value in production. "
+            "Set a strong ADMIN_PASSWORD environment variable."
+        )
+
     existing_admin = User.query.filter_by(role='admin').first()
     if existing_admin:
         return existing_admin
 
-    if _is_production_mode() and admin_password == 'Admin2024!':
-        app.logger.warning("Using default ADMIN_PASSWORD in production. Set ADMIN_PASSWORD in environment.")
+    existing_by_email = User.query.filter_by(email=admin_email).first()
+    if existing_by_email:
+        if existing_by_email.role != 'admin':
+            existing_by_email.role = 'admin'
+            existing_by_email.is_active = True
+            db.session.commit()
+        return existing_by_email
 
     admin_user = User(
         username=admin_username,
@@ -354,6 +384,49 @@ def prune_report_metadata(retention_days=REPORT_METADATA_RETENTION_DAYS):
     )
     db.session.commit()
     return {'deleted_rows': deleted}
+
+
+def _scratch_root_abs():
+    return os.path.abspath(app.config['UPLOAD_FOLDER'])
+
+
+def _scratch_path(filename):
+    return os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+
+def _register_temp_artifact(kind, file_id, storage_name, user_id=None):
+    """Create/update ownership metadata for temporary downloadable files."""
+    safe_file_id = secure_filename(file_id)
+    if not safe_file_id:
+        raise ValueError('file_id invalido')
+
+    owner_id = user_id or current_user.id
+    artifact = TempArtifact.query.filter_by(kind=kind, file_id=safe_file_id).first()
+    if artifact is None:
+        artifact = TempArtifact(
+            kind=kind,
+            file_id=safe_file_id,
+            storage_name=storage_name,
+            user_id=owner_id,
+        )
+        db.session.add(artifact)
+    else:
+        artifact.storage_name = storage_name
+        artifact.user_id = owner_id
+
+    db.session.commit()
+    return artifact
+
+
+def _get_owned_artifact_or_403(kind, file_id):
+    """Load artifact metadata and enforce owner-or-admin access."""
+    safe_file_id = secure_filename(file_id)
+    artifact = TempArtifact.query.filter_by(kind=kind, file_id=safe_file_id).first()
+    if artifact is None:
+        abort(404)
+    if not current_user.is_admin and artifact.user_id != current_user.id:
+        abort(403)
+    return artifact
 
 
 def prune_database_storage():
@@ -856,6 +929,13 @@ def download_file(filename):
         app.logger.warning(f"Path traversal attempt: {filename}")
         abort(403)
     
+    report_row = Report.query.filter_by(filename=safe_filename).first()
+    if report_row is None:
+        abort(404)
+
+    if not current_user.is_admin and report_row.user_id != current_user.id:
+        abort(403)
+
     if not os.path.exists(full_path):
         abort(404)
 
@@ -947,6 +1027,7 @@ def clasificacion():
             output_filename = f"Clasificado_{file.filename}"
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{unique_id}.csv")
             df_classified.to_csv(output_path, sep='\t', encoding='utf-16', index=False)
+            _register_temp_artifact('classified', unique_id, f"classified_{unique_id}.csv")
 
             log_activity('classify_data', f'Clasificación: {file.filename} ({len(df_classified)} filas, {len(stats)} categorías)')
             
@@ -1293,6 +1374,7 @@ def clasificacion_finalize():
         output_filename = f"Clasificado_{safe_orig}"
         output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{safe_sid}.csv")
         os.replace(session_file, output_path)
+        _register_temp_artifact('classified', safe_sid, f"classified_{safe_sid}.csv")
 
         log_activity('classify_data',
                      f'Clasificacion (chunked): {safe_orig} ({len(df_full)} filas, {len(stats)} categorias)')
@@ -1318,7 +1400,8 @@ def download_classified(file_id, original_name):
     # Path sanitization (S7)
     safe_id = secure_filename(file_id)
     safe_name = secure_filename(original_name)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"classified_{safe_id}.csv")
+    artifact = _get_owned_artifact_or_403('classified', safe_id)
+    file_path = _scratch_path(artifact.storage_name)
     
     # Verify path is within UPLOAD_FOLDER
     if not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
@@ -1454,6 +1537,7 @@ def union_merge():
         unique_id = uuid.uuid4().hex[:10]
         output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"merged_{unique_id}.csv")
         save_merged(merged, output_path)
+        _register_temp_artifact('union', unique_id, f"merged_{unique_id}.csv")
 
         log_activity('file_merge', detail)
 
@@ -1477,7 +1561,8 @@ def union_merge():
 def union_download(file_id):
     """Download a merged file."""
     safe_id = secure_filename(file_id)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"merged_{safe_id}.csv")
+    artifact = _get_owned_artifact_or_403('union', safe_id)
+    file_path = _scratch_path(artifact.storage_name)
 
     if not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
         abort(403)
@@ -1516,6 +1601,7 @@ def analisis_csv():
                 summary_filename = f"summary_{unique_id}.csv"
                 summary_path = os.path.join(app.config['UPLOAD_FOLDER'], summary_filename)
                 generate_summary_csv(result, summary_path)
+                _register_temp_artifact('csv_summary', unique_id, summary_filename)
                 
                 # Add download URL to result
                 result['download_url'] = url_for('download_csv_summary', file_id=unique_id)
@@ -1547,7 +1633,8 @@ def analisis_csv():
 def download_csv_summary(file_id):
     # Path sanitization
     safe_id = secure_filename(file_id)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"summary_{safe_id}.csv")
+    artifact = _get_owned_artifact_or_403('csv_summary', safe_id)
+    file_path = _scratch_path(artifact.storage_name)
     
     # Verify path is within UPLOAD_FOLDER
     if not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
@@ -1571,6 +1658,7 @@ def download_csv_summary(file_id):
 
 @app.route('/upload_csv', methods=['POST'])
 @login_required
+@tool_required('reports')
 def upload_csv():
     if 'csv_file' not in request.files:
         flash('No se seleccionó ningún archivo')
@@ -1584,9 +1672,19 @@ def upload_csv():
 
     if file:
         try:
-            upload_folder = 'scratch'
+            upload_folder = app.config['UPLOAD_FOLDER']
             os.makedirs(upload_folder, exist_ok=True)
-            file_path = os.path.join(upload_folder, file.filename)
+
+            safe_name = secure_filename(file.filename)
+            if not safe_name:
+                flash('Nombre de archivo inválido')
+                return redirect(url_for('index'))
+
+            file_path = os.path.join(upload_folder, safe_name)
+            if not os.path.abspath(file_path).startswith(_scratch_root_abs()):
+                app.logger.warning(f"Path traversal attempt in upload_csv: {file.filename}")
+                abort(403)
+
             file.save(file_path)
             
             # Capturamos el título del formulario HTML también
@@ -1674,6 +1772,7 @@ def internal_error(e):
 
 @app.route('/generate_pptx', methods=['POST'])
 @login_required
+@tool_required('reports')
 def generate_pptx_route():
     try:
         # 1. Recibir el JSON con los datos editados

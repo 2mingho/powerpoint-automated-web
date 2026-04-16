@@ -72,12 +72,7 @@ def dashboard():
     total_roles = Role.query.count()
     total_areas = Area.query.count()
 
-    # Exclude default admin's activity from dashboard
-    default_admin = User.query.filter_by(email=DEFAULT_ADMIN_EMAIL).first()
-    log_query = ActivityLog.query
-    if default_admin:
-        log_query = log_query.filter(ActivityLog.user_id != default_admin.id)
-    recent_logs = (log_query
+    recent_logs = (ActivityLog.query
                    .order_by(ActivityLog.timestamp.desc())
                    .limit(10)
                    .all())
@@ -316,11 +311,6 @@ def activity_log():
 
     query = ActivityLog.query
 
-    # Always exclude default admin's activity
-    default_admin = User.query.filter_by(email=DEFAULT_ADMIN_EMAIL).first()
-    if default_admin:
-        query = query.filter(ActivityLog.user_id != default_admin.id)
-
     if user_filter:
         try:
             query = query.filter_by(user_id=int(user_filter))
@@ -348,8 +338,7 @@ def activity_log():
             .order_by(ActivityLog.timestamp.desc())
             .paginate(page=page, per_page=per_page, error_out=False))
 
-    # Exclude default admin from the user filter dropdown
-    users = User.query.filter(User.email != DEFAULT_ADMIN_EMAIL).order_by(User.username).all()
+    users = User.query.order_by(User.username).all()
     return render_template('admin_activity.html',
                            logs=logs,
                            users=users,
@@ -364,11 +353,6 @@ def activity_log():
 def user_activity(user_id):
     user = User.query.get_or_404(user_id)
 
-    # Block viewing default admin's activity
-    if is_default_admin(user):
-        flash('No se puede ver la actividad del administrador predeterminado.', 'error')
-        return redirect(url_for('admin.activity_log'))
-    
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
     page = request.args.get('page', 1, type=int)

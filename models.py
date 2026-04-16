@@ -56,6 +56,7 @@ class User(UserMixin, db.Model):
         'classification': 'Clasificacion de Data',
         'file_merge': 'Union de Archivos',
         'csv_analysis': 'Analisis Rapido CSV',
+        'tasks': 'Gestion de Tareas',
     }
 
     @property
@@ -142,6 +143,27 @@ class ClassificationPreset(db.Model):
 
     def __repr__(self):
         return f"<ClassificationPreset {self.name} (user={self.user_id})>"
+
+
+class TempArtifact(db.Model):
+    """Ownership metadata for temporary downloadable artifacts."""
+    __tablename__ = 'temp_artifacts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(50), nullable=False, index=True)
+    file_id = db.Column(db.String(120), nullable=False, index=True)
+    storage_name = db.Column(db.String(255), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', backref='temp_artifacts')
+
+    __table_args__ = (
+        db.UniqueConstraint('kind', 'file_id', name='uq_temp_artifacts_kind_file_id'),
+    )
+
+    def __repr__(self):
+        return f"<TempArtifact {self.kind}:{self.file_id} user={self.user_id}>"
 
 
 class Task(db.Model):

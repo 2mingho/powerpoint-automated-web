@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
 import re
@@ -11,6 +11,10 @@ auth = Blueprint('auth', __name__)
 @auth.route('/register', methods=['GET', 'POST'])
 @limiter.limit("10 per hour")
 def register():
+    if not current_app.config.get('ALLOW_SELF_REGISTRATION', False):
+        flash('El registro público está deshabilitado. Contacta al administrador.', category='warning')
+        return redirect(url_for('auth.login')), 403
+
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip()
