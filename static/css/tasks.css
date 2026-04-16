@@ -740,6 +740,132 @@
   color: var(--c-text-secondary);
 }
 
+.td-import-report-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.td-preview-page {
+  font-size: 0.78rem;
+  color: var(--c-text-secondary);
+  font-weight: 700;
+  padding: 0 2px;
+}
+
+.td-preview-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-md);
+}
+
+.td-preview-table {
+  width: 100%;
+  min-width: 1600px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.td-preview-table th,
+.td-preview-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--c-border-light);
+  vertical-align: top;
+  font-size: 0.78rem;
+}
+
+.td-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--c-bg);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 0.7rem;
+  color: var(--c-text-secondary);
+  white-space: nowrap;
+}
+
+.td-preview-table th.is-key {
+  color: var(--c-primary);
+}
+
+.td-preview-table tr:last-child td {
+  border-bottom: none;
+}
+
+.td-preview-table td.is-key {
+  background: var(--c-primary-light);
+}
+
+.td-preview-input {
+  width: 100%;
+  min-width: 110px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  font-size: 0.78rem;
+  color: var(--c-text);
+  background: var(--c-white);
+}
+
+.td-preview-input:focus {
+  border-color: var(--c-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--c-primary-light);
+}
+
+.td-preview-textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.td-preview-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.td-preview-status.ok {
+  background: var(--c-success-bg);
+  color: var(--c-success);
+}
+
+.td-preview-status.warning {
+  background: var(--c-warning-bg);
+  color: var(--c-warning);
+}
+
+.td-preview-status.error {
+  background: var(--c-danger-bg);
+  color: var(--c-danger);
+}
+
+.td-preview-issues {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 3px;
+}
+
+.td-preview-issues li {
+  color: var(--c-text-secondary);
+  font-size: 0.74rem;
+}
+
+.td-preview-clean {
+  color: var(--c-success);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
 .td-import-report-errors {
   display: grid;
   gap: 8px;
@@ -1508,6 +1634,20 @@
   .td-import-report-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .td-import-report-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .td-import-report-actions .btn {
+    min-height: 34px;
+    padding: 6px 10px;
+  }
+
+  .td-preview-table {
+    min-width: 1350px;
   }
 
   .td-bulk-count {

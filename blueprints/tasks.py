@@ -1,6 +1,7 @@
 import functools
 import csv
 import io
+import re
 import unicodedata
 from datetime import datetime, timedelta, date
 from flask import Blueprint, render_template, request, jsonify, Response
@@ -24,6 +25,22 @@ TASK_CSV_COLUMNS = [
     'Tipo de Presupuesto',
     'Recurrencia',
 ]
+
+TASK_CSV_FIELD_DEFS = [
+    ('start_date', 'Fecha De inicio'),
+    ('end_date', 'Fecha De finalizacion'),
+    ('due_date', 'Fecha De entrega'),
+    ('directorate', 'Director o Gerencia'),
+    ('client', 'Cliente'),
+    ('title', 'Titulo'),
+    ('requested_by', 'Solicitado por'),
+    ('assignee', 'Asignar a'),
+    ('description', 'Descripcion'),
+    ('budget_type', 'Tipo de Presupuesto'),
+    ('recurrence', 'Recurrencia'),
+]
+
+TASK_CSV_KEY_TO_LABEL = {key: label for key, label in TASK_CSV_FIELD_DEFS}
 
 
 def task_access_required(f):
@@ -161,16 +178,6 @@ def _parse_iso_or_mmddyyyy_date(raw_value):
         return None
 
 
-def _parse_mmddyyyy_date(raw_value):
-    value = (str(raw_value or '')).strip()
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, '%m/%d/%Y').date()
-    except ValueError:
-        return None
-
-
 def _normalize_recurrence_value(raw_value):
     value = _normalize_whitespace(raw_value).lower()
     if not value or value in {'no', 'ninguna', 'n/a', 'na'}:
@@ -191,6 +198,400 @@ def _decode_csv_bytes(raw_bytes):
         except UnicodeDecodeError:
             continue
     return None
+
+
+def _normalize_lookup(value):
+    normalized = _normalize_whitespace(value).lower()
+    normalized = ''.join(
+        ch for ch in unicodedata.normalize('NFKD', normalized)
+        if not unicodedata.combining(ch)
+    )
+    return normalized
+
+
+def _parse_csv_flexible_date(raw_value):
+    value = (str(raw_value or '')).strip()
+    if not value:
+        return None, None
+
+    iso_match = re.fullmatch(r'(\d{4})-(\d{1,2})-(\d{1,2})', value)
+    if iso_match:
+        year, month, day = (int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3)))
+        try:
+            return date(year, month, day), None
+        except ValueError:
+            return None, None
+
+    slash_match = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{2,4})', value)
+    if slash_match:
+        month = int(slash_match.group(1))
+        day = int(slash_match.group(2))
+        year = int(slash_match.group(3))
+        if year < 100:
+            year += 2000
+        try:
+            return date(year, month, day), None
+        except ValueError:
+            return None, None
+
+    month_name_match = re.fullmatch(r'(\d{1,2})\s*[-/]\s*([A-Za-z]{3,9})(?:\s*[-/]\s*(\d{2,4}))?', value)
+    if month_name_match:
+        month_map = {
+            'jan': 1, 'january': 1,
+            'feb': 2, 'february': 2,
+            'mar': 3, 'march': 3,
+            'apr': 4, 'april': 4,
+            'may': 5,
+            'jun': 6, 'june': 6,
+            'jul': 7, 'july': 7,
+            'aug': 8, 'august': 8,
+            'sep': 9, 'sept': 9, 'september': 9,
+            'oct': 10, 'october': 10,
+            'nov': 11, 'november': 11,
+            'dec': 12, 'december': 12,
+        }
+
+        day = int(month_name_match.group(1))
+        month_token = _normalize_lookup(month_name_match.group(2))
+        month = month_map.get(month_token)
+        if not month:
+            return None, None
+
+        year_token = (month_name_match.group(3) or '').strip()
+        warning_code = None
+        if year_token:
+            try:
+                year = int(year_token)
+            except ValueError:
+                return None, None
+            if year < 100:
+                year += 2000
+        else:
+            year = date.today().year
+            warning_code = 'year_inferred_current'
+
+        try:
+            return date(year, month, day), warning_code
+        except ValueError:
+            return None, None
+
+    return None, None
+
+
+def _resolve_assignee_user(raw_value, users):
+    lookup = _normalize_lookup(raw_value)
+    if not lookup:
+        return None, {'status': 'empty', 'candidates': []}
+
+    for user in users:
+        if _normalize_lookup(user.email) == lookup:
+            return user, {'status': 'exact_email', 'candidates': []}
+
+    for user in users:
+        if _normalize_lookup(user.username) == lookup:
+            return user, {'status': 'exact_username', 'candidates': []}
+
+    partial_matches = []
+    for user in users:
+        user_name = _normalize_lookup(user.username)
+        user_email = _normalize_lookup(user.email)
+        tokens = user_name.split()
+        if (
+            lookup in user_name
+            or lookup in user_email
+            or any(token.startswith(lookup) for token in tokens)
+        ):
+            partial_matches.append(user)
+
+    unique_matches = {u.id: u for u in partial_matches}
+    if len(unique_matches) == 1:
+        user = next(iter(unique_matches.values()))
+        return user, {'status': 'partial_unique', 'candidates': [user.username]}
+
+    if len(unique_matches) > 1:
+        labels = [u.username for u in list(unique_matches.values())[:5]]
+        return None, {'status': 'ambiguous', 'candidates': labels}
+
+    return None, {'status': 'not_found', 'candidates': []}
+
+
+def _extract_task_csv_rows(decoded_text):
+    sample = decoded_text[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
+        delimiter = dialect.delimiter
+    except csv.Error:
+        delimiter = ','
+
+    reader = csv.DictReader(io.StringIO(decoded_text), delimiter=delimiter)
+    fieldnames = reader.fieldnames or []
+    if not fieldnames:
+        return None, {
+            'error': 'No se detectaron cabeceras en el CSV.',
+            'details': {
+                'missing_headers': TASK_CSV_COLUMNS,
+                'unexpected_headers': [],
+                'duplicate_headers': [],
+                'expected_headers': TASK_CSV_COLUMNS,
+            }
+        }
+
+    expected_by_norm = {_normalize_csv_header(c): c for c in TASK_CSV_COLUMNS}
+    received_by_norm = {}
+    duplicate_headers = []
+
+    for header in fieldnames:
+        normalized = _normalize_csv_header(header)
+        if normalized in received_by_norm:
+            duplicate_headers.append(_normalize_whitespace(header))
+            continue
+        received_by_norm[normalized] = header
+
+    missing_headers = [label for norm, label in expected_by_norm.items() if norm not in received_by_norm]
+    unexpected_headers = [
+        _normalize_whitespace(header)
+        for header in fieldnames
+        if _normalize_csv_header(header) not in expected_by_norm
+    ]
+
+    if duplicate_headers or missing_headers or unexpected_headers:
+        return None, {
+            'error': 'La estructura del CSV no coincide con el formato requerido.',
+            'details': {
+                'missing_headers': missing_headers,
+                'unexpected_headers': unexpected_headers,
+                'duplicate_headers': duplicate_headers,
+                'expected_headers': TASK_CSV_COLUMNS,
+            }
+        }
+
+    header_map = {
+        key: received_by_norm[_normalize_csv_header(label)]
+        for key, label in TASK_CSV_FIELD_DEFS
+    }
+
+    rows = []
+    for row_number, raw_row in enumerate(reader, start=2):
+        if raw_row is None:
+            continue
+
+        raw_values = [str(v or '') for v in raw_row.values()]
+        if not any(v.strip() for v in raw_values):
+            continue
+
+        fields = {}
+        for key, _label in TASK_CSV_FIELD_DEFS:
+            raw_value = raw_row.get(header_map[key], '')
+            fields[key] = str(raw_value or '')
+
+        rows.append({
+            'row_number': row_number,
+            'fields': fields,
+        })
+
+    return rows, None
+
+
+def _validate_task_csv_row(row_fields, users):
+    fields = {
+        key: str((row_fields or {}).get(key, '') or '')
+        for key, _label in TASK_CSV_FIELD_DEFS
+    }
+
+    clean_fields = {key: value.strip() for key, value in fields.items()}
+    issues = []
+
+    def add_issue(severity, key, code, message, value=None):
+        issues.append({
+            'severity': severity,
+            'column': TASK_CSV_KEY_TO_LABEL.get(key, key),
+            'code': code,
+            'message': message,
+            'value': value if value is not None else fields.get(key, ''),
+        })
+
+    if not clean_fields['title']:
+        add_issue('error', 'title', 'required', 'El título es obligatorio.')
+
+    if not clean_fields['client']:
+        add_issue('warning', 'client', 'recommended', 'Se recomienda indicar el cliente para mayor claridad.')
+
+    if not clean_fields['requested_by']:
+        add_issue('warning', 'requested_by', 'recommended', 'Se recomienda indicar quién solicitó la tarea.')
+
+    assignee, assignee_match = _resolve_assignee_user(clean_fields['assignee'], users)
+    if assignee_match['status'] == 'empty':
+        add_issue('error', 'assignee', 'required', 'Debes indicar a quién asignar la tarea.')
+    elif assignee_match['status'] == 'not_found':
+        add_issue('error', 'assignee', 'assignee_not_found', 'No se encontró un usuario activo con ese nombre o correo.')
+    elif assignee_match['status'] == 'ambiguous':
+        candidates = ', '.join(assignee_match.get('candidates') or [])
+        message = 'Coincidencia ambigua en "Asignar a".'
+        if candidates:
+            message = f'{message} Posibles usuarios: {candidates}.'
+        add_issue('error', 'assignee', 'assignee_ambiguous', message)
+    elif assignee_match['status'] == 'partial_unique':
+        add_issue(
+            'warning',
+            'assignee',
+            'assignee_partial_match',
+            f'Se resolvió por coincidencia parcial con: {assignee.username}.',
+            fields['assignee'],
+        )
+
+    start_date, start_date_warning = _parse_csv_flexible_date(clean_fields['start_date'])
+    if clean_fields['start_date'] and not start_date:
+        add_issue('error', 'start_date', 'invalid_date', 'Fecha inválida. Usa MM/DD/YYYY o D-MMM.')
+    elif start_date_warning == 'year_inferred_current':
+        add_issue(
+            'warning',
+            'start_date',
+            'year_inferred_current',
+            f'Se infirió el año actual ({date.today().year}) para esta fecha.',
+        )
+
+    end_date, end_date_warning = _parse_csv_flexible_date(clean_fields['end_date'])
+    if clean_fields['end_date'] and not end_date:
+        add_issue('error', 'end_date', 'invalid_date', 'Fecha inválida. Usa MM/DD/YYYY o D-MMM.')
+    elif end_date_warning == 'year_inferred_current':
+        add_issue(
+            'warning',
+            'end_date',
+            'year_inferred_current',
+            f'Se infirió el año actual ({date.today().year}) para esta fecha.',
+        )
+
+    due_date, due_date_warning = _parse_csv_flexible_date(clean_fields['due_date'])
+    if not clean_fields['due_date']:
+        add_issue('error', 'due_date', 'required', 'La fecha de entrega es obligatoria.')
+    elif not due_date:
+        add_issue('error', 'due_date', 'invalid_date', 'Fecha inválida. Usa MM/DD/YYYY o D-MMM.')
+    elif due_date_warning == 'year_inferred_current':
+        add_issue(
+            'warning',
+            'due_date',
+            'year_inferred_current',
+            f'Se infirió el año actual ({date.today().year}) para esta fecha.',
+        )
+
+    recurrence_type = _normalize_recurrence_value(clean_fields['recurrence'])
+    if recurrence_type is None:
+        add_issue('error', 'recurrence', 'invalid_recurrence', 'Valor inválido. Usa: No, Diaria, Semanal o Mensual.')
+        recurrence_type = ''
+
+    if due_date and _is_weekend(due_date):
+        add_issue('error', 'due_date', 'weekend_not_allowed', 'Sábado y domingo solo se permiten para tareas manuales, no por CSV.')
+
+    if start_date and end_date and end_date < start_date:
+        add_issue('error', 'end_date', 'invalid_range', 'La fecha de finalización no puede ser menor que la fecha de inicio.')
+
+    has_errors = any(issue['severity'] == 'error' for issue in issues)
+    has_warnings = any(issue['severity'] == 'warning' for issue in issues)
+    status = 'error' if has_errors else ('warning' if has_warnings else 'ok')
+
+    parsed_preview = {
+        'start_date': _format_mmddyyyy(start_date),
+        'end_date': _format_mmddyyyy(end_date),
+        'due_date': _format_mmddyyyy(due_date),
+        'recurrence_type': recurrence_type or 'No',
+        'assignee_resolved': assignee.username if assignee else '',
+    }
+
+    return {
+        'status': status,
+        'issues': issues,
+        'fields': fields,
+        'clean_fields': clean_fields,
+        'parsed': {
+            'start_date': start_date,
+            'end_date': end_date,
+            'due_date': due_date,
+            'assignee': assignee,
+            'recurrence_type': recurrence_type,
+        },
+        'preview': parsed_preview,
+    }
+
+
+def _build_csv_preview_rows(rows, users):
+    preview_rows = []
+    ok_rows = 0
+    warning_rows = 0
+    error_rows = 0
+    flat_errors = []
+
+    for row in rows:
+        row_number = int(row.get('row_number') or 0)
+        fields = row.get('fields') or {}
+        validation = _validate_task_csv_row(fields, users)
+
+        preview_row = {
+            'row_number': row_number,
+            'fields': validation['fields'],
+            'status': validation['status'],
+            'issues': validation['issues'],
+            'parsed': validation['preview'],
+        }
+        preview_rows.append(preview_row)
+
+        if validation['status'] == 'ok':
+            ok_rows += 1
+        elif validation['status'] == 'warning':
+            warning_rows += 1
+        else:
+            error_rows += 1
+
+        for issue in validation['issues']:
+            if issue['severity'] != 'error':
+                continue
+            flat_errors.append({
+                'row': row_number,
+                'column': issue.get('column', 'General'),
+                'value': issue.get('value', ''),
+                'code': issue.get('code', 'error'),
+                'message': issue.get('message', 'Error de validación.'),
+            })
+
+    return {
+        'rows': preview_rows,
+        'total_rows': len(preview_rows),
+        'ok_rows': ok_rows,
+        'warning_rows': warning_rows,
+        'error_rows': error_rows,
+        'errors': flat_errors,
+    }
+
+
+def _create_tasks_from_validated_csv(validation):
+    parsed = validation['parsed']
+    clean = validation['clean_fields']
+
+    assignee = parsed['assignee']
+    due_date = parsed['due_date']
+    start_date = parsed['start_date']
+    end_date = parsed['end_date']
+
+    area = _task_area_key_for_user(assignee)
+    task = Task(
+        title=clean['title'],
+        description=clean['description'],
+        client=clean['client'],
+        start_date=start_date,
+        end_date=end_date,
+        directorate=clean['directorate'],
+        requested_by=clean['requested_by'],
+        budget_type=clean['budget_type'],
+        due_date=due_date,
+        status='Pendiente',
+        is_recurrent=False,
+        recurrence_type=None,
+        area=area,
+        creator_id=current_user.id,
+        assignee_id=assignee.id,
+    )
+    db.session.add(task)
+
+    return 1
 
 
 # ─────────────────────────────────────────────────────────────
@@ -717,10 +1118,10 @@ def api_admin_tasks_export_csv():
     )
 
 
-@tasks_bp.route('/api/admin/tasks/import-csv', methods=['POST'])
+@tasks_bp.route('/api/admin/tasks/import-csv/preview', methods=['POST'])
 @login_required
-def api_admin_tasks_import_csv():
-    """Import tasks from CSV (partial import: valid rows are saved, invalid rows are reported)."""
+def api_admin_tasks_import_csv_preview():
+    """Validate and preview CSV rows before importing."""
     if not current_user.is_admin:
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
 
@@ -736,309 +1137,116 @@ def api_admin_tasks_import_csv():
     if decoded_text is None:
         return jsonify({'success': False, 'error': 'No se pudo leer el CSV. Usa UTF-8, UTF-16 o CP1252.'}), 400
 
-    sample = decoded_text[:4096]
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
-        delimiter = dialect.delimiter
-    except csv.Error:
-        delimiter = ','
-
-    reader = csv.DictReader(io.StringIO(decoded_text), delimiter=delimiter)
-    fieldnames = reader.fieldnames or []
-    if not fieldnames:
-        return jsonify({'success': False, 'error': 'No se detectaron cabeceras en el CSV.'}), 400
-
-    expected_by_norm = {_normalize_csv_header(c): c for c in TASK_CSV_COLUMNS}
-    received_by_norm = {}
-    duplicate_headers = []
-
-    for header in fieldnames:
-        normalized = _normalize_csv_header(header)
-        if normalized in received_by_norm:
-            duplicate_headers.append(_normalize_whitespace(header))
-            continue
-        received_by_norm[normalized] = header
-
-    missing_headers = [label for norm, label in expected_by_norm.items() if norm not in received_by_norm]
-    unexpected_headers = [
-        _normalize_whitespace(header)
-        for header in fieldnames
-        if _normalize_csv_header(header) not in expected_by_norm
-    ]
-
-    if duplicate_headers or missing_headers or unexpected_headers:
-        return jsonify({
-            'success': False,
-            'error': 'La estructura del CSV no coincide con el formato requerido.',
-            'details': {
-                'missing_headers': missing_headers,
-                'unexpected_headers': unexpected_headers,
-                'duplicate_headers': duplicate_headers,
-                'expected_headers': TASK_CSV_COLUMNS,
-            },
-        }), 400
-
-    header_map = {expected: received_by_norm[_normalize_csv_header(expected)] for expected in TASK_CSV_COLUMNS}
+    rows, parse_error = _extract_task_csv_rows(decoded_text)
+    if parse_error:
+        return jsonify({'success': False, **parse_error}), 400
 
     users = User.query.filter_by(is_active=True).all()
-    user_lookup = {}
-    for user in users:
-        if user.username:
-            user_lookup[user.username.strip().lower()] = user
-        if user.email:
-            user_lookup[user.email.strip().lower()] = user
+    preview = _build_csv_preview_rows(rows, users)
 
-    errors = []
+    return jsonify({'success': True, **preview})
+
+
+@tasks_bp.route('/api/admin/tasks/import-csv/commit', methods=['POST'])
+@login_required
+def api_admin_tasks_import_csv_commit():
+    """Import validated CSV rows. Valid rows are saved, invalid rows are returned for correction."""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
+
+    data = request.get_json(force=True) or {}
+    payload_rows = data.get('rows')
+    if not isinstance(payload_rows, list):
+        return jsonify({'success': False, 'error': 'Formato inválido: se esperaba una lista de filas.'}), 400
+    if len(payload_rows) > 5000:
+        return jsonify({'success': False, 'error': 'Puedes importar hasta 5000 filas por lote.'}), 400
+
+    normalized_rows = []
+    for idx, payload_row in enumerate(payload_rows):
+        if not isinstance(payload_row, dict):
+            continue
+
+        row_number_raw = payload_row.get('row_number')
+        try:
+            row_number = int(row_number_raw)
+        except (TypeError, ValueError):
+            row_number = idx + 2
+
+        input_fields = payload_row.get('fields')
+        if not isinstance(input_fields, dict):
+            input_fields = {}
+
+        fields = {
+            key: str(input_fields.get(key, '') or '')
+            for key, _label in TASK_CSV_FIELD_DEFS
+        }
+
+        normalized_rows.append({
+            'row_number': row_number,
+            'fields': fields,
+        })
+
+    users = User.query.filter_by(is_active=True).all()
+    total_rows = len(normalized_rows)
     imported_rows = 0
     failed_rows = 0
     created_tasks = 0
-    total_rows = 0
+    errors = []
+    remaining_rows = []
 
-    def row_value(row_dict, canonical_name):
-        key = header_map[canonical_name]
-        return str(row_dict.get(key, '') or '')
+    for row in normalized_rows:
+        row_number = row['row_number']
+        validation = _validate_task_csv_row(row['fields'], users)
+        row_errors = [issue for issue in validation['issues'] if issue['severity'] == 'error']
 
-    def add_error(row_number, column, value, code, message):
-        errors.append({
-            'row': row_number,
-            'column': column,
-            'value': value,
-            'code': code,
-            'message': message,
-        })
-
-    for row_number, row in enumerate(reader, start=2):
-        if row is None:
-            continue
-
-        raw_row_values = [str(v or '') for v in row.values()]
-        if not any(v.strip() for v in raw_row_values):
-            continue
-
-        total_rows += 1
-        row_errors_before = len(errors)
-
-        start_raw = row_value(row, 'Fecha De inicio')
-        end_raw = row_value(row, 'Fecha De finalizacion')
-        due_raw = row_value(row, 'Fecha De entrega')
-        directorate = row_value(row, 'Director o Gerencia')
-        client = row_value(row, 'Cliente')
-        title = row_value(row, 'Titulo')
-        requested_by = row_value(row, 'Solicitado por')
-        assignee_raw = row_value(row, 'Asignar a')
-        description = row_value(row, 'Descripcion')
-        budget_type = row_value(row, 'Tipo de Presupuesto')
-        recurrence_raw = row_value(row, 'Recurrencia')
-
-        title_for_validation = title.strip()
-        assignee_lookup_key = assignee_raw.strip().lower()
-
-        if not title_for_validation:
-            add_error(row_number, 'Titulo', title, 'required', 'El título es obligatorio.')
-
-        if not assignee_lookup_key:
-            assignee = None
-            add_error(row_number, 'Asignar a', assignee_raw, 'required', 'Debes indicar a quién asignar la tarea.')
-        else:
-            assignee = user_lookup.get(assignee_lookup_key)
-            if not assignee:
-                add_error(
-                    row_number,
-                    'Asignar a',
-                    assignee_raw,
-                    'assignee_not_found',
-                    'No se encontró un usuario activo con ese nombre o correo.',
-                )
-
-        due_date = _parse_mmddyyyy_date(due_raw.strip())
-        if not due_date:
-            add_error(
-                row_number,
-                'Fecha De entrega',
-                due_raw,
-                'invalid_date',
-                'Fecha inválida. Usa formato MM/DD/YYYY.',
-            )
-
-        start_date = None
-        if start_raw.strip():
-            start_date = _parse_mmddyyyy_date(start_raw.strip())
-            if not start_date:
-                add_error(
-                    row_number,
-                    'Fecha De inicio',
-                    start_raw,
-                    'invalid_date',
-                    'Fecha inválida. Usa formato MM/DD/YYYY.',
-                )
-
-        end_date = None
-        if end_raw.strip():
-            end_date = _parse_mmddyyyy_date(end_raw.strip())
-            if not end_date:
-                add_error(
-                    row_number,
-                    'Fecha De finalizacion',
-                    end_raw,
-                    'invalid_date',
-                    'Fecha inválida. Usa formato MM/DD/YYYY.',
-                )
-
-        recurrence_type = _normalize_recurrence_value(recurrence_raw.strip())
-        if recurrence_type is None:
-            add_error(
-                row_number,
-                'Recurrencia',
-                recurrence_raw,
-                'invalid_recurrence',
-                'Valor inválido. Usa: No, Diaria, Semanal o Mensual.',
-            )
-            recurrence_type = ''
-
-        is_recurrent = bool(recurrence_type)
-
-        if due_date and _is_weekend(due_date):
-            add_error(
-                row_number,
-                'Fecha De entrega',
-                due_raw,
-                'weekend_not_allowed',
-                'Sábado y domingo solo se permiten para tareas manuales, no por CSV.',
-            )
-
-        if start_date and end_date and end_date < start_date:
-            add_error(
-                row_number,
-                'Fecha De finalizacion',
-                end_raw,
-                'invalid_range',
-                'La fecha de finalización no puede ser menor que la fecha de inicio.',
-            )
-
-        if is_recurrent and not end_date:
-            add_error(
-                row_number,
-                'Fecha De finalizacion',
-                end_raw,
-                'required',
-                'La fecha de finalización es obligatoria cuando hay recurrencia.',
-            )
-
-        if is_recurrent and end_date and due_date and end_date < due_date:
-            add_error(
-                row_number,
-                'Fecha De finalizacion',
-                end_raw,
-                'invalid_range',
-                'La fecha de finalización no puede ser menor que la fecha de entrega.',
-            )
-
-        if len(errors) > row_errors_before:
+        if row_errors:
             failed_rows += 1
+            remaining_rows.append({
+                'row_number': row_number,
+                'fields': validation['fields'],
+                'status': validation['status'],
+                'issues': validation['issues'],
+                'parsed': validation['preview'],
+            })
+            for issue in row_errors:
+                errors.append({
+                    'row': row_number,
+                    'column': issue.get('column', 'General'),
+                    'value': issue.get('value', ''),
+                    'code': issue.get('code', 'error'),
+                    'message': issue.get('message', 'Error de validación.'),
+                })
             continue
 
         try:
-            area = _task_area_key_for_user(assignee)
-            created_in_row = 0
-
-            if is_recurrent:
-                recurrence_dates = _generate_recurrence_dates(due_date, recurrence_type, end_date)
-                if not recurrence_dates:
-                    failed_rows += 1
-                    add_error(
-                        row_number,
-                        'Recurrencia',
-                        recurrence_raw,
-                        'no_workdays_generated',
-                        'No se generaron fechas laborables para esa recurrencia.',
-                    )
-                    continue
-                if len(recurrence_dates) > 365:
-                    failed_rows += 1
-                    add_error(
-                        row_number,
-                        'Recurrencia',
-                        recurrence_raw,
-                        'too_many_instances',
-                        'La recurrencia supera el máximo permitido de 365 tareas.',
-                    )
-                    continue
-
-                parent_task = Task(
-                    title=title,
-                    description=description,
-                    client=client,
-                    start_date=start_date,
-                    end_date=end_date,
-                    directorate=directorate,
-                    requested_by=requested_by,
-                    budget_type=budget_type,
-                    due_date=recurrence_dates[0],
-                    status='Pendiente',
-                    is_recurrent=True,
-                    recurrence_type=recurrence_type,
-                    area=area,
-                    creator_id=current_user.id,
-                    assignee_id=assignee.id,
-                )
-                db.session.add(parent_task)
-                db.session.flush()
-                created_in_row += 1
-
-                for recurring_date in recurrence_dates[1:]:
-                    child_task = Task(
-                        title=title,
-                        description=description,
-                        client=client,
-                        start_date=start_date,
-                        end_date=end_date,
-                        directorate=directorate,
-                        requested_by=requested_by,
-                        budget_type=budget_type,
-                        due_date=recurring_date,
-                        status='Pendiente',
-                        is_recurrent=True,
-                        recurrence_type=recurrence_type,
-                        parent_task_id=parent_task.id,
-                        area=area,
-                        creator_id=current_user.id,
-                        assignee_id=assignee.id,
-                    )
-                    db.session.add(child_task)
-                    created_in_row += 1
-            else:
-                task = Task(
-                    title=title,
-                    description=description,
-                    client=client,
-                    start_date=start_date,
-                    end_date=end_date,
-                    directorate=directorate,
-                    requested_by=requested_by,
-                    budget_type=budget_type,
-                    due_date=due_date,
-                    status='Pendiente',
-                    is_recurrent=False,
-                    area=area,
-                    creator_id=current_user.id,
-                    assignee_id=assignee.id,
-                )
-                db.session.add(task)
-                created_in_row += 1
-
+            created_in_row = _create_tasks_from_validated_csv(validation)
             db.session.commit()
             imported_rows += 1
             created_tasks += created_in_row
         except Exception:
             db.session.rollback()
             failed_rows += 1
-            add_error(
-                row_number,
-                'General',
-                '',
-                'db_error',
-                'No se pudo guardar la fila por un error de base de datos.',
-            )
+            db_issue = {
+                'severity': 'error',
+                'column': 'General',
+                'code': 'db_error',
+                'message': 'No se pudo guardar la fila por un error de base de datos.',
+                'value': '',
+            }
+            remaining_rows.append({
+                'row_number': row_number,
+                'fields': validation['fields'],
+                'status': 'error',
+                'issues': validation['issues'] + [db_issue],
+                'parsed': validation['preview'],
+            })
+            errors.append({
+                'row': row_number,
+                'column': 'General',
+                'value': '',
+                'code': 'db_error',
+                'message': 'No se pudo guardar la fila por un error de base de datos.',
+            })
 
     from blueprints.admin import log_activity
     log_activity(
@@ -1053,6 +1261,7 @@ def api_admin_tasks_import_csv():
         'failed_rows': failed_rows,
         'created_tasks': created_tasks,
         'errors': errors,
+        'remaining_rows': remaining_rows,
     })
 
 
