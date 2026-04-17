@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block title %}Admin BLACKSITE V2 | Operations Console{% endblock %}
+{% block page_name %}Admin BLACKSITE V2 · Operations{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_v2_blacksite.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set jobs_recent = jobs_recent if jobs_recent is defined else (jobs if jobs is defined else []) %}
+{% set runs_recent = runs_recent if runs_recent is defined else (runs if runs is defined else []) %}
+{% set job_status_options = job_status_options if job_status_options is defined and job_status_options else ['queued', 'running', 'done', 'failed', 'cancelled'] %}
+
+<section class="blacksite-v2 bs2-operations">
+  <div class="bs2-panel" style="margin-bottom: 16px;">
+    <div class="bs2-header">
+      <div>
+        <h1 class="bs2-title">Operations Console</h1>
+        <p class="bs2-subtitle">Orquesta jobs operativos y audita sus ejecuciones en tiempo real.</p>
+      </div>
+      <div class="bs2-actions bs2-header-actions">
+        <a href="{{ url_for('admin_v2.dashboard') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+        <a href="{{ url_for('admin_v2.identity_center') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-user-shield"></i> Identity</a>
+        <a href="{{ url_for('admin_v2.incidents_list') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-triangle-exclamation"></i> Incidents</a>
+        <a href="{{ url_for('admin_v2.config_center') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-sliders"></i> Config</a>
+        <a href="{{ url_for('admin_v2.audit_ledger') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-shield-halved"></i> Audit Ledger</a>
+      </div>
+    </div>
+
+    <h2 class="bs2-title" style="font-size: 1.04rem; margin-bottom: 8px;">Crear job</h2>
+    <form method="POST" action="{{ url_for('admin_v2.operations_create_job') }}" class="bs2-ops-create-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div>
+        <label class="bs2-label" for="job_type">Job type</label>
+        <input id="job_type" class="bs2-input" type="text" name="job_type" placeholder="ej. sync, reindex, refresh_cache" required>
+      </div>
+
+      <div>
+        <label class="bs2-label" for="module_key">Module key</label>
+        <input id="module_key" class="bs2-input" type="text" name="module_key" placeholder="ej. incidents" required>
+      </div>
+
+      <div class="bs2-ops-json-field">
+        <label class="bs2-label" for="payload_json">Payload JSON (opcional)</label>
+        <textarea id="payload_json" class="bs2-textarea bs2-json-textarea" name="payload_json" placeholder='{"force": true, "priority": "high"}'></textarea>
+      </div>
+
+      <div class="bs2-actions">
+        <button type="submit" class="bs2-btn bs2-btn-primary">
+          <i class="fa-solid fa-play"></i> Crear job
+        </button>
+      </div>
+    </form>
+    <p class="bs2-hint">Payload JSON inválido será rechazado por backend para evitar ejecuciones ambiguas.</p>
+  </div>
+
+  <div class="bs2-ops-layout">
+    <section class="bs2-panel">
+      <h2 class="bs2-title" style="font-size: 1.04rem;">Jobs recientes</h2>
+      <p class="bs2-subtitle">Actualiza estado o reintenta jobs fallidos sin deploy.</p>
+
+      {% if jobs_recent %}
+      <div class="bs2-table-wrap">
+        <table class="bs2-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Type</th>
+              <th>Módulo</th>
+              <th>Status</th>
+              <th>Retries</th>
+              <th>Created at</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for job in jobs_recent %}
+            {% set job_status_raw = (job.status or 'queued')|lower %}
+            {% set job_status = 'done' if job_status_raw == 'success' else job_status_raw %}
+            {% set job_retry_count = job.retry_count if job.retry_count is defined and job.retry_count is not none else (job.retries if job.retries is defined and job.retries is not none else (job.retry if job.retry is defined and job.retry is not none else 0)) %}
+            <tr>
+              <td>#{{ job.id if job.id is defined else loop.index }}</td>
+              <td>{{ job.job_type if job.job_type is defined else (job.type if job.type is defined else '—') }}</td>
+              <td>{{ job.module_key if job.module_key is defined else '—' }}</td>
+              <td>
+                <span class="bs2-badge bs2-job-status-{{ job_status if job_status in ['queued', 'running', 'done', 'failed', 'cancelled'] else 'queued' }}">{{ job_status|upper }}</span>
+              </td>
+              <td>{{ job_retry_count }}</td>
+              <td>{{ job.created_at if job.created_at is defined else '—' }}</td>
+              <td>
+                <div class="bs2-actions">
+                  <form method="POST" action="{{ url_for('admin_v2.operations_update_job_status', job_id=job.id) }}" class="bs2-inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="bs2-sr-only" for="job_status_{{ job.id if job.id is defined else loop.index }}">Estado del job {{ job.id if job.id is defined else loop.index }}</label>
+                    <select id="job_status_{{ job.id if job.id is defined else loop.index }}" name="status" class="bs2-select bs2-select-compact" required>
+                      {% for option in job_status_options %}
+                      {% set option_value = option|lower %}
+                      <option value="{{ option_value }}" {{ 'selected' if option_value == job_status else '' }}>{{ option_value|upper }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="submit" class="bs2-btn bs2-btn-outline">Actualizar</button>
+                  </form>
+
+                  <form method="POST" action="{{ url_for('admin_v2.operations_retry_job', job_id=job.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="bs2-btn bs2-btn-warning">
+                      <i class="fa-solid fa-rotate-right"></i> Retry
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="bs2-empty">No hay jobs recientes para mostrar.</div>
+      {% endif %}
+    </section>
+
+    <section class="bs2-panel">
+      <h2 class="bs2-title" style="font-size: 1.04rem;">Runs recientes</h2>
+      <p class="bs2-subtitle">Trazabilidad de ejecuciones para diagnóstico rápido entre turnos.</p>
+
+      {% if runs_recent %}
+      <div class="bs2-table-wrap">
+        <table class="bs2-table">
+          <thead>
+            <tr>
+              <th>Run ID</th>
+              <th>Job ID</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Finished</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for run in runs_recent %}
+            {% set run_status_raw = (run.status or 'queued')|lower %}
+            {% set run_status = 'done' if run_status_raw == 'success' else run_status_raw %}
+            <tr>
+              <td>#{{ run.id if run.id is defined else loop.index }}</td>
+              <td>#{{ run.job_id if run.job_id is defined else '—' }}</td>
+              <td><span class="bs2-badge bs2-job-status-{{ run_status if run_status in ['queued', 'running', 'done', 'failed', 'cancelled'] else 'queued' }}">{{ run_status|upper }}</span></td>
+              <td>{{ run.started_at if run.started_at is defined else '—' }}</td>
+              <td>{{ run.finished_at if run.finished_at is defined else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="bs2-empty">No hay runs recientes para mostrar.</div>
+      {% endif %}
+    </section>
+  </div>
+</section>
+{% endblock %}

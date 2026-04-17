@@ -25,11 +25,21 @@ from flask_talisman import Talisman
 
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
+from blueprints.admin_v2 import admin_v2_bp
 from blueprints.tasks import tasks_bp
 
 
 from extensions import db, login_manager, csrf, limiter
-from models import User, Report, ActivityLog, ClassificationPreset, Task, TempArtifact
+from models import (
+    User,
+    Report,
+    ActivityLog,
+    ClassificationPreset,
+    Task,
+    TempArtifact,
+    AdminFreezeState,
+    ModuleLock,
+)
 from services import calculation as report
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 from pptx_builder import engine as ppt_engine
@@ -149,6 +159,7 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
 # Registrar blueprints
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
+app.register_blueprint(admin_v2_bp)
 app.register_blueprint(tasks_bp)
 
 # ─────────────────────────────────────────────────────────────
@@ -183,6 +194,37 @@ def check_force_logout():
         logout_user()
         flash('Tu sesion ha sido terminada por un administrador.', 'warning')
         return redirect(url_for('auth.login'))
+
+
+@app.before_request
+def enforce_admin_freeze_state():
+    """Block legacy admin mutations when freeze mode is enabled."""
+    if not request.endpoint:
+        return None
+
+    is_legacy_admin_mutation = request.endpoint.startswith('admin.')
+    is_tasks_admin_mutation = request.endpoint.startswith('tasks.api_admin_tasks_')
+    if not is_legacy_admin_mutation and not is_tasks_admin_mutation:
+        return None
+    if request.method not in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+        return None
+    if not current_user.is_authenticated or not current_user.is_admin:
+        return None
+
+    state = db.session.get(AdminFreezeState, 1)
+    if state and state.is_frozen:
+        message = 'Admin legacy está congelado por incidente. Gestiona cambios desde Admin Center V2.'
+        is_json_or_ajax = (
+            request.is_json
+            or (request.headers.get('X-Requested-With', '') or '').lower() == 'xmlhttprequest'
+            or 'application/json' in (request.headers.get('Accept', '') or '').lower()
+            or (request.headers.get('Content-Type', '') or '').startswith('multipart')
+        )
+        if is_json_or_ajax:
+            return jsonify({'success': False, 'error': message}), 423
+        flash(message, 'warning')
+        return redirect(url_for('admin_v2.dashboard'))
+    return None
 
 # ─────────────────────────────────────────────────────────────
 # Automatic Request Logging (after_request)
@@ -560,6 +602,16 @@ def tool_required(tool_key):
                     from flask import jsonify as _jsonify
                     return _jsonify({"success": False, "error": "No tienes permiso para acceder a esta herramienta."}), 403
                 flash('No tienes permiso para acceder a esta herramienta.', 'error')
+                return redirect(url_for('menu'))
+
+            lock = ModuleLock.query.filter_by(module_key=tool_key, lock_state='locked').first()
+            if lock:
+                lock_reason = f" Motivo: {lock.reason}" if lock.reason else ""
+                error_msg = f"La herramienta '{tool_key}' está bloqueada por incidente.{lock_reason}"
+                if _is_ajax():
+                    from flask import jsonify as _jsonify
+                    return _jsonify({"success": False, "error": error_msg}), 423
+                flash(error_msg, 'warning')
                 return redirect(url_for('menu'))
             return f(*args, **kwargs)
         return decorated

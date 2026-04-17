@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+{% block title %}Admin BLACKSITE V2 | Incidents{% endblock %}
+{% block page_name %}Admin BLACKSITE V2 · Incidents{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_v2_blacksite.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set incidents = incidents if incidents is defined else [] %}
+{% set playbooks = playbooks if playbooks is defined else [] %}
+
+<section class="blacksite-v2">
+  {# --- PLAYBOOKS SECTION --- #}
+  <div class="bs2-panel" style="margin-bottom: 16px;">
+    <div class="bs2-header">
+      <div>
+        <h1 class="bs2-title">Playbooks de Containment</h1>
+        <p class="bs2-subtitle">Automatiza respuestas de contención con un solo clic.</p>
+      </div>
+    </div>
+
+    {# Playbooks List #}
+    {% if playbooks %}
+    <div class="bs2-playbooks-grid">
+      {% for playbook in playbooks %}
+      <div class="bs2-playbook-card{% if not playbook.is_enabled %} is-disabled{% endif %}">
+        <div class="bs2-playbook-head">
+          <span class="bs2-playbook-key">{{ playbook.playbook_key }}</span>
+          <span class="bs2-badge{% if playbook.is_enabled %} bs2-badge-enabled{% else %} bs2-badge-disabled{% endif %}">
+            {% if playbook.is_enabled %}<i class="fa-solid fa-check"></i> Enabled{% else %}<i class="fa-solid fa-ban"></i> Disabled{% endif %}
+          </span>
+        </div>
+        <h3 class="bs2-playbook-name">{{ playbook.name }}</h3>
+        {% if playbook.description %}
+        <p class="bs2-playbook-desc">{{ playbook.description }}</p>
+        {% endif %}
+        <div class="bs2-playbook-actions">
+          <form method="POST" action="{{ url_for('admin_v2.incident_playbook_toggle', playbook_id=playbook.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="mode" value="{% if playbook.is_enabled %}disable{% else %}enable{% endif %}">
+            <button type="submit" class="bs2-btn bs2-btn-outline bs2-btn-sm" title="{% if playbook.is_enabled %}Deshabilitar{% else %}Habilitar{% endif %}">
+              <i class="fa-solid fa-toggle-{% if playbook.is_enabled %}on{% else %}off{% endif %}"></i>
+              {% if playbook.is_enabled %}Disable{% else %}Enable{% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="bs2-empty">No hay playbooks configurados.</div>
+    {% endif %}
+
+    {# Create Playbook Form #}
+    <details class="bs2-playbook-create-toggle">
+      <summary class="bs2-btn bs2-btn-outline">
+        <i class="fa-solid fa-plus"></i> Nuevo Playbook
+      </summary>
+      <div class="bs2-playbook-form-wrap">
+        <form method="POST" action="{{ url_for('admin_v2.incident_playbook_upsert') }}" class="bs2-playbook-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="bs2-playbook-form-grid">
+            <div class="bs2-playbook-field">
+              <label class="bs2-label" for="playbook_key">playbook_key <span class="bs2-req">*</span></label>
+              <input id="playbook_key" class="bs2-input" name="playbook_key" type="text" placeholder="e.g. strict_containment" maxlength="60" required>
+              <span class="bs2-hint">Identificador único (max 60 chars). Keys por defecto: <code>strict_containment</code>, <code>business_containment</code></span>
+            </div>
+            <div class="bs2-playbook-field">
+              <label class="bs2-label" for="playbook_name">Nombre <span class="bs2-req">*</span></label>
+              <input id="playbook_name" class="bs2-input" name="name" type="text" placeholder="Nombre descriptivo" required>
+            </div>
+          </div>
+          <div class="bs2-playbook-field">
+            <label class="bs2-label" for="playbook_description">Description</label>
+            <textarea id="playbook_description" class="bs2-textarea" name="description" rows="2" placeholder="Descripción breve del playbook"></textarea>
+          </div>
+          <div class="bs2-playbook-field">
+            <label class="bs2-label" for="playbook_definition">Definition JSON <span class="bs2-req">*</span></label>
+            <textarea id="playbook_definition" class="bs2-textarea bs2-json-textarea" name="definition_json" rows="6" placeholder='{"actions": [{"type": "freeze", "mode": "freeze", "reason": "..."}]}' required></textarea>
+            <span class="bs2-hint">JSON con array de acciones. Estructura: <code>{"actions": [{"type": "freeze", "mode": "freeze", "reason": "..."}]}</code></span>
+            <div class="bs2-json-validator" id="json_validator">
+              <i class="fa-solid fa-circle-check"></i> <span>JSON válido</span>
+            </div>
+          </div>
+          <div class="bs2-playbook-field">
+            <label class="bs2-checkbox">
+              <input type="checkbox" name="is_enabled" value="true" checked>
+              Habilitado por defecto
+            </label>
+          </div>
+          <button type="submit" class="bs2-btn bs2-btn-primary">
+            <i class="fa-solid fa-save"></i> Guardar Playbook
+          </button>
+        </form>
+      </div>
+    </details>
+  </div>
+
+  {# --- INCIDENTS SECTION --- #}
+  <div class="bs2-panel">
+    <div class="bs2-header">
+      <div>
+        <h1 class="bs2-title">Incidents Console</h1>
+        <p class="bs2-subtitle">Crea, prioriza y ejecuta acciones de respuesta inmediata.</p>
+      </div>
+      <div class="bs2-actions bs2-header-actions">
+        <a href="/admin/v2/identity" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-user-shield"></i> Identity Studio</a>
+        <a href="/admin/v2/operations" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gears"></i> Operations</a>
+        <a href="/admin/v2/config" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-sliders"></i> Config</a>
+        <a href="{{ url_for('admin_v2.audit_ledger') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-shield-halved"></i> Audit Ledger</a>
+        <a href="/admin/v2/" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-arrow-left"></i> Volver al Dashboard</a>
+      </div>
+    </div>
+
+    <h2 class="bs2-title" style="font-size: 1.04rem; margin-bottom: 8px;">Crear incidente</h2>
+    <form method="POST" action="{{ url_for('admin_v2.incident_create') }}" class="bs2-grid" style="grid-template-columns: 1fr auto auto; align-items: end;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label class="bs2-label" for="summary">Summary</label>
+        <input id="summary" class="bs2-input" name="summary" type="text" placeholder="Describe el impacto operativo en una línea" maxlength="180" required>
+      </div>
+      <div>
+        <label class="bs2-label" for="severity">Severity</label>
+        <select id="severity" class="bs2-select" name="severity" required>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <button type="submit" class="bs2-btn bs2-btn-primary" name="incident_action" value="create">
+        <i class="fa-solid fa-plus"></i> Crear
+      </button>
+    </form>
+    <p class="bs2-hint">Microcopy: usa summary orientado a impacto para acelerar diagnóstico del siguiente turno.</p>
+  </div>
+
+  <div class="bs2-panel">
+    <h2 class="bs2-title" style="font-size: 1.04rem;">Listado de incidentes</h2>
+    <p class="bs2-subtitle">Acciones de riesgo elevado requieren confirmación del operador en backend.</p>
+
+    <div class="bs2-risk-note">
+      Acciones críticas: <strong>Revoke Sessions</strong> y <strong>Freeze</strong> afectan sesiones activas y pueden interrumpir operaciones en curso.
+    </div>
+
+    {% if incidents %}
+    <div class="bs2-table-wrap">
+      <table class="bs2-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Summary</th>
+            <th>Severity</th>
+            <th>Estado</th>
+            <th>Owner</th>
+            <th>Contain</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for incident in incidents %}
+          {% set sev = (incident.severity or 'low')|lower %}
+          <tr>
+            <td>#{{ incident.id if incident.id is defined else loop.index }}</td>
+            <td>{{ incident.summary if incident.summary is defined else 'Sin resumen' }}</td>
+            <td><span class="bs2-badge bs2-sev-{{ sev if sev in ['low', 'medium', 'high', 'critical'] else 'low' }}">{{ sev|upper }}</span></td>
+            <td>{{ incident.status if incident.status is defined else 'open' }}</td>
+            <td>{{ incident.owner if incident.owner is defined else (incident.created_by if incident.created_by is defined else '—') }}</td>
+            <td>
+              {% set enabled_playbooks = playbooks|selectattr('is_enabled')|list %}
+              {% if enabled_playbooks and incident.status == 'open' %}
+              <div class="bs2-contain-dropdown">
+                <button type="button" class="bs2-btn bs2-btn-primary bs2-btn-sm bs2-contain-trigger">
+                  <i class="fa-solid fa-shield-halved"></i> Contain <i class="fa-solid fa-chevron-down"></i>
+                </button>
+                <div class="bs2-contain-menu">
+                  {% for pb in enabled_playbooks %}
+                  <form method="POST" action="{{ url_for('admin_v2.incident_contain_with_playbook', incident_id=incident.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="playbook_key" value="{{ pb.playbook_key }}">
+                    <button type="submit" class="bs2-contain-option">
+                      <i class="fa-solid fa-bolt"></i> {{ pb.name }}
+                    </button>
+                  </form>
+                  {% endfor %}
+                </div>
+              </div>
+              {% else %}
+              <span class="bs2-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="bs2-actions">
+                <form method="POST" action="{{ url_for('admin_v2.incident_resolve', incident_id=incident.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="bs2-btn bs2-btn-outline bs2-icon-btn" type="submit" name="incident_action" value="resolve" aria-label="Resolver incidente {{ incident.id if incident.id is defined else loop.index }}" title="Resolver">
+                    <i class="fa-solid fa-check"></i>
+                  </button>
+                </form>
+
+                <form method="POST" action="{{ url_for('admin_v2.incident_revoke_sessions', incident_id=incident.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="scope" value="global">
+                  <button class="bs2-btn bs2-btn-warning bs2-icon-btn" type="submit" name="incident_action" value="revoke_sessions" aria-label="Revocar sesiones por incidente {{ incident.id if incident.id is defined else loop.index }}" title="Revoke Sessions">
+                    <i class="fa-solid fa-user-slash"></i>
+                  </button>
+                </form>
+
+                <form method="POST" action="{{ url_for('admin_v2.incident_freeze_toggle', incident_id=incident.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="mode" value="freeze">
+                  <button class="bs2-btn bs2-btn-danger bs2-icon-btn" type="submit" name="incident_action" value="freeze" aria-label="Activar freeze por incidente {{ incident.id if incident.id is defined else loop.index }}" title="Freeze">
+                    <i class="fa-solid fa-snowflake"></i>
+                  </button>
+                </form>
+
+                <form method="POST" action="{{ url_for('admin_v2.incident_freeze_toggle', incident_id=incident.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="mode" value="unfreeze">
+                  <button class="bs2-btn bs2-btn-outline bs2-icon-btn" type="submit" name="incident_action" value="unfreeze" aria-label="Desactivar freeze por incidente {{ incident.id if incident.id is defined else loop.index }}" title="Unfreeze">
+                    <i class="fa-solid fa-play"></i>
+                  </button>
+                </form>
+
+                <div class="bs2-export-dropdown">
+                  <button type="button" class="bs2-btn bs2-btn-outline bs2-icon-btn" title="Exportar evidencia">
+                    <i class="fa-solid fa-download"></i>
+                  </button>
+                  <div class="bs2-export-menu">
+                    <a href="{{ url_for('admin_v2.incident_postmortem_evidence_export', incident_id=incident.id, format='json') }}" class="bs2-export-option" download>
+                      <i class="fa-solid fa-file-code"></i> Export JSON
+                    </a>
+                    <a href="{{ url_for('admin_v2.incident_postmortem_evidence_export', incident_id=incident.id, format='csv') }}" class="bs2-export-option" download>
+                      <i class="fa-solid fa-file-csv"></i> Export CSV
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="bs2-empty">No existen incidentes cargados para mostrar.</div>
+    {% endif %}
+  </div>
+</section>
+
+{# Client-side JSON validation #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var defInput = document.getElementById('playbook_definition');
+  var validator = document.getElementById('json_validator');
+  if (!defInput || !validator) return;
+
+  function validateJSON() {
+    var val = defInput.value.trim();
+    if (!val) {
+      validator.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>JSON válido</span>';
+      validator.classList.remove('is-invalid');
+      return;
+    }
+    try {
+      JSON.parse(val);
+      validator.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>JSON válido</span>';
+      validator.classList.remove('is-invalid');
+    } catch (e) {
+      validator.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> <span>JSON inválido: ' + e.message + '</span>';
+      validator.classList.add('is-invalid');
+    }
+  }
+
+  defInput.addEventListener('input', validateJSON);
+  defInput.addEventListener('blur', validateJSON);
+  validateJSON();
+});
+
+{# Contain dropdown toggle #}
+document.addEventListener('DOMContentLoaded', function() {
+  var triggers = document.querySelectorAll('.bs2-contain-trigger');
+  triggers.forEach(function(trigger) {
+    trigger.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var dropdown = trigger.closest('.bs2-contain-dropdown');
+      dropdown.classList.toggle('is-open');
+    });
+  });
+
+  var exportTriggers = document.querySelectorAll('.bs2-export-dropdown > button');
+  exportTriggers.forEach(function(trigger) {
+    trigger.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var dropdown = trigger.closest('.bs2-export-dropdown');
+      dropdown.classList.toggle('is-open');
+    });
+  });
+
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.bs2-contain-dropdown.is-open, .bs2-export-dropdown.is-open').forEach(function(dd) {
+      dd.classList.remove('is-open');
+    });
+  });
+});
+</script>
+{% endblock %}

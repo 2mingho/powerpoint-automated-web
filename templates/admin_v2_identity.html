@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% block title %}Admin BLACKSITE V2 | Identity Studio{% endblock %}
+{% block page_name %}Admin BLACKSITE V2 · Identity{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_v2_blacksite.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set users = users if users is defined else [] %}
+{% set roles = roles if roles is defined else [] %}
+{% set areas = areas if areas is defined else [] %}
+{% set selected_user = selected_user if selected_user is defined else None %}
+{% set tools_catalog = all_tools if all_tools is defined and all_tools else {
+  'reports': 'Generar Reporte',
+  'classification': 'Clasificación de Data',
+  'file_merge': 'Unión de Archivos',
+  'csv_analysis': 'Análisis Rápido CSV',
+  'tasks': 'Gestión de Tareas'
+} %}
+
+{% if selected_user and selected_user.get_allowed_tools is defined %}
+  {% set selected_tools = selected_user.get_allowed_tools() %}
+{% elif selected_user_tools is defined %}
+  {% set selected_tools = selected_user_tools %}
+{% else %}
+  {% set selected_tools = [] %}
+{% endif %}
+
+{% if selected_user_effective is defined and selected_user_effective %}
+  {% if selected_user_effective.tools_allowed is defined %}
+    {% set effective_tools = selected_user_effective.tools_allowed %}
+  {% elif selected_user_effective is mapping and 'tools_allowed' in selected_user_effective %}
+    {% set effective_tools = selected_user_effective['tools_allowed'] %}
+  {% else %}
+    {% set effective_tools = selected_tools %}
+  {% endif %}
+{% else %}
+  {% set effective_tools = selected_tools %}
+{% endif %}
+
+<section class="blacksite-v2 bs2-identity">
+  <div class="bs2-panel" style="margin-bottom: 16px;">
+    <div class="bs2-header">
+      <div>
+        <h1 class="bs2-title">Identity Studio</h1>
+        <p class="bs2-subtitle">Controla rol, área y herramientas por operador sin cambios de código.</p>
+      </div>
+      <div class="bs2-actions bs2-header-actions">
+        <a href="{{ url_for('admin_v2.dashboard') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+        <a href="{{ url_for('admin_v2.incidents_list') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-triangle-exclamation"></i> Incidents</a>
+        <a href="/admin/v2/operations" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gears"></i> Operations</a>
+        <a href="/admin/v2/config" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-sliders"></i> Config</a>
+        <a href="{{ url_for('admin_v2.audit_ledger') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-shield-halved"></i> Audit Ledger</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="bs2-identity-layout">
+    <section class="bs2-panel">
+      <h2 class="bs2-title" style="font-size: 1.02rem;">Usuarios</h2>
+      <p class="bs2-subtitle">Selecciona un usuario para editar su acceso operativo.</p>
+
+      {% if users %}
+      <div class="bs2-table-wrap">
+        <table class="bs2-table bs2-users-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Email</th>
+              <th>Rol</th>
+              <th>Área</th>
+              <th>Estado</th>
+              <th>Tools</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+            {% set row_selected = selected_user and selected_user.id == user.id %}
+            {% if user.get_allowed_tools is defined %}
+              {% set user_tools = user.get_allowed_tools() %}
+            {% elif user.allowed_tools_list is defined %}
+              {% set user_tools = user.allowed_tools_list %}
+            {% else %}
+              {% set user_tools = [] %}
+            {% endif %}
+            <tr class="{{ 'is-selected' if row_selected else '' }}">
+              <td>
+                <a class="bs2-user-link" href="{{ url_for('admin_v2.identity_center', user_id=user.id) }}">{{ user.username }}</a>
+              </td>
+              <td>{{ user.email }}</td>
+              <td>{{ user.role if user.role is defined else '—' }}</td>
+              <td>{{ user.area.name if user.area is defined and user.area else (user.area_name if user.area_name is defined else 'Sin área') }}</td>
+              <td>
+                <span class="bs2-badge {{ 'bs2-sev-low' if (user.is_active if user.is_active is defined else true) else 'bs2-sev-high' }}">
+                  {{ 'Activo' if (user.is_active if user.is_active is defined else true) else 'Inactivo' }}
+                </span>
+              </td>
+              <td>
+                {% if user_tools %}
+                  {{ user_tools|length }} habilitadas
+                {% else %}
+                  Sin definición
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="bs2-empty">No hay usuarios para administrar en este momento.</div>
+      {% endif %}
+    </section>
+
+    <section class="bs2-grid" style="gap: 16px;">
+      <article class="bs2-panel">
+        <h2 class="bs2-title" style="font-size: 1.02rem;">Editor de acceso</h2>
+        <p class="bs2-subtitle">Actualiza permisos del usuario seleccionado con trazabilidad operativa.</p>
+
+        {% if selected_user %}
+        <form method="POST" action="{{ url_for('admin_v2.identity_update_user_access', user_id=selected_user.id) }}" class="bs2-identity-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div>
+            <label class="bs2-label" for="role">Rol</label>
+            <select id="role" class="bs2-select" name="role" required>
+              <option value="admin" {{ 'selected' if selected_user.role == 'admin' else '' }}>Admin</option>
+
+              {% if roles %}
+                {% for role in roles %}
+                {% set role_value = role.code if role.code is defined else role %}
+                {% if role_value != 'admin' %}
+                <option value="{{ role_value }}" {{ 'selected' if role_value == selected_user.role else '' }}>
+                  {{ role.display_name if role.display_name is defined else role }}
+                </option>
+                {% endif %}
+                {% endfor %}
+              {% else %}
+                {% if selected_user.role != 'admin' %}
+                <option value="{{ selected_user.role }}" selected>{{ selected_user.role }}</option>
+                {% endif %}
+              {% endif %}
+            </select>
+          </div>
+
+          <div>
+            <label class="bs2-label" for="area_id">Área</label>
+            <select id="area_id" class="bs2-select" name="area_id">
+              <option value="">Sin área</option>
+              {% for area in areas %}
+              <option value="{{ area.id if area.id is defined else area }}" {{ 'selected' if selected_user.area_id is defined and selected_user.area_id == (area.id if area.id is defined else area) else '' }}>
+                {{ area.name if area.name is defined else area }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="bs2-label" for="is_active">Estado</label>
+            <select id="is_active" class="bs2-select" name="is_active" required>
+              <option value="1" {{ 'selected' if selected_user.is_active else '' }}>Activo</option>
+              <option value="0" {{ 'selected' if not selected_user.is_active else '' }}>Inactivo</option>
+            </select>
+          </div>
+
+          <fieldset class="bs2-tools-fieldset">
+            <legend class="bs2-label">Herramientas habilitadas</legend>
+            <div class="bs2-tools-grid">
+              {% for tool_key, tool_name in tools_catalog.items() %}
+              <label class="bs2-tool-item" for="tool_{{ tool_key }}">
+                <input
+                  id="tool_{{ tool_key }}"
+                  type="checkbox"
+                  name="tools"
+                  value="{{ tool_key }}"
+                  {{ 'checked' if tool_key in selected_tools else '' }}
+                >
+                <span>{{ tool_name }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+
+          <div class="bs2-actions">
+            <button type="submit" class="bs2-btn bs2-btn-primary">
+              <i class="fa-solid fa-floppy-disk"></i> Guardar cambios
+            </button>
+          </div>
+        </form>
+
+        {% if default_admin_email is defined and selected_user.email == default_admin_email %}
+        <p class="bs2-subtitle" style="margin-top: 10px;">
+          Esta cuenta está protegida y no permite revocar sesión.
+        </p>
+        {% else %}
+        <form method="POST" action="{{ url_for('admin_v2.identity_revoke_session', user_id=selected_user.id) }}" style="margin-top: 10px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="bs2-btn bs2-btn-warning">
+            <i class="fa-solid fa-user-slash"></i> Revocar sesión
+          </button>
+        </form>
+        {% endif %}
+        {% else %}
+        <div class="bs2-empty">Selecciona un usuario desde el listado para editar sus accesos.</div>
+        {% endif %}
+      </article>
+
+      <article class="bs2-panel bs2-effective-permissions">
+        <h2 class="bs2-title" style="font-size: 1.02rem;">Permisos efectivos</h2>
+        <p class="bs2-subtitle">Resumen de cómo queda el acceso real para operación diaria.</p>
+
+        {% if selected_user %}
+        <div class="bs2-permissions-stack">
+          <div class="bs2-permission-row"><strong>Usuario:</strong> <span>{{ selected_user.username }}</span></div>
+          <div class="bs2-permission-row"><strong>Rol:</strong> <span>{{ selected_user.role }}</span></div>
+          <div class="bs2-permission-row"><strong>Área:</strong> <span>{{ selected_user.area.name if selected_user.area is defined and selected_user.area else 'Sin área' }}</span></div>
+          <div class="bs2-permission-row"><strong>Estado:</strong> <span>{{ 'Activo' if selected_user.is_active else 'Inactivo' }}</span></div>
+
+          <div class="bs2-effective-tools">
+            <strong>Tools disponibles:</strong>
+            {% if effective_tools %}
+            <ul>
+              {% for tool_item in effective_tools %}
+                {% if tool_item is mapping %}
+                  {% set tool_key = tool_item.key if tool_item.key is defined else (tool_item['key'] if 'key' in tool_item else None) %}
+                  {% set tool_label = tool_item.label if tool_item.label is defined else (tool_item['label'] if 'label' in tool_item else None) %}
+                {% else %}
+                  {% set tool_key = tool_item %}
+                  {% set tool_label = None %}
+                {% endif %}
+
+                {% if tool_label %}
+                  <li>{{ tool_label }}</li>
+                {% elif tool_key is not none and tool_key in tools_catalog %}
+                  <li>{{ tools_catalog[tool_key] }}</li>
+                {% elif tool_key %}
+                  <li>{{ tool_key }}</li>
+                {% else %}
+                  <li>Tool sin nombre</li>
+                {% endif %}
+              {% endfor %}
+            </ul>
+            {% else %}
+            <p class="bs2-hint" style="margin: 8px 0 0;">Sin tools habilitadas para este usuario.</p>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="bs2-empty">No hay un usuario seleccionado para mostrar permisos efectivos.</div>
+        {% endif %}
+      </article>
+    </section>
+  </div>
+</section>
+{% endblock %}

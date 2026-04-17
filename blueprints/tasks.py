@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 from flask import Blueprint, render_template, request, jsonify, Response, abort
 from flask_login import login_required, current_user
 from extensions import db
-from models import User, Task, Area
+from models import User, Task, Area, ModuleLock
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -43,6 +43,48 @@ TASK_CSV_FIELD_DEFS = [
 TASK_CSV_KEY_TO_LABEL = {key: label for key, label in TASK_CSV_FIELD_DEFS}
 
 
+def _is_json_or_ajax_request():
+    return (
+        request.is_json
+        or (request.headers.get('X-Requested-With', '') or '').lower() == 'xmlhttprequest'
+        or 'application/json' in (request.headers.get('Accept', '') or '').lower()
+        or (request.headers.get('Content-Type', '') or '').startswith('multipart')
+    )
+
+
+def _tasks_module_lock_message(lock):
+    lock_reason = f" Motivo: {lock.reason}" if lock.reason else ""
+    return f"La herramienta 'tasks' está bloqueada por incidente.{lock_reason}"
+
+
+def _enforce_tasks_module_lock():
+    lock = ModuleLock.query.filter_by(module_key='tasks', lock_state='locked').first()
+    if not lock:
+        return None
+
+    error_msg = _tasks_module_lock_message(lock)
+    if _is_json_or_ajax_request():
+        return jsonify({'success': False, 'error': error_msg}), 423
+
+    abort(423)
+
+
+def _is_admin_tasks_endpoint(endpoint):
+    return endpoint == 'tasks.tasks_dashboard' or endpoint.startswith('tasks.api_admin_')
+
+
+@tasks_bp.before_request
+def tasks_module_lock_guard():
+    endpoint = request.endpoint or ''
+    if not endpoint.startswith('tasks.') or not _is_admin_tasks_endpoint(endpoint):
+        return None
+
+    if not current_user.is_authenticated or not current_user.is_admin:
+        return None
+
+    return _enforce_tasks_module_lock()
+
+
 def task_access_required(f):
     """Decorator: requires authenticated user access to tasks module."""
     @functools.wraps(f)
@@ -50,6 +92,11 @@ def task_access_required(f):
     def decorated(*args, **kwargs):
         if not current_user.is_admin and not current_user.has_tool_access('tasks'):
             abort(403)
+
+        lock_response = _enforce_tasks_module_lock()
+        if lock_response is not None:
+            return lock_response
+
         return f(*args, **kwargs)
     return decorated
 

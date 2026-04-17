@@ -1,0 +1,1151 @@
+{% extends 'base.html' %}
+{% block title %}BLACKSITE Admin CLI{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_v2_cli.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="cli-container">
+  <!-- Header con título y tabs -->
+  <header class="cli-header">
+    <div class="cli-header-title">
+      <span class="cli-logo">▣</span> BLACKSITE ADMIN <span class="cli-version">v2.0</span>
+    </div>
+    <nav class="cli-nav" role="tablist" aria-label="Navegación CLI">
+      <button class="cli-tab is-active" role="tab" data-tab="dashboard" aria-selected="true" tabindex="0">
+        [DASHBOARD]
+      </button>
+      <button class="cli-tab" role="tab" data-tab="users" aria-selected="false" tabindex="-1">
+        [USERS]
+      </button>
+      <button class="cli-tab" role="tab" data-tab="activity" aria-selected="false" tabindex="-1">
+        [ACTIVITY]
+      </button>
+      <button class="cli-tab" role="tab" data-tab="roles" aria-selected="false" tabindex="-1">
+        [ROLES]
+      </button>
+      <button class="cli-tab" role="tab" data-tab="areas" aria-selected="false" tabindex="-1">
+        [AREAS]
+      </button>
+      <button class="cli-tab" role="tab" data-tab="system" aria-selected="false" tabindex="-1">
+        [SYSTEM]
+      </button>
+      <button class="cli-tab" role="tab" data-tab="monitor" aria-selected="false" tabindex="-1">
+        [MONITOR]
+      </button>
+      <button class="cli-tab" role="tab" data-tab="settings" aria-selected="false" tabindex="-1">
+        [CONFIG]
+      </button>
+    </nav>
+  </header>
+
+  <!-- Área de contenido (se carga por AJAX) -->
+  <main class="cli-content" id="cli-content" role="tabpanel" aria-live="polite">
+    <!-- Loading state -->
+    <div class="cli-loading">
+      <span class="cli-cursor-blink">_</span> loading module...
+    </div>
+  </main>
+
+  <!-- Status bar -->
+  <footer class="cli-status-bar">
+    <div class="cli-status-left">
+      <span class="cli-status-item">
+        <span class="cli-status-indicator" id="cli-connection-indicator"></span>
+        <span id="cli-connection-text">connected</span>
+      </span>
+      <span class="cli-status-sep">|</span>
+      <span class="cli-status-item">user: {{ current_user.email }}</span>
+      <span class="cli-status-sep">|</span>
+      <span class="cli-status-item" id="cli-freeze-status">admin: ACTIVE</span>
+    </div>
+    <div class="cli-status-right">
+      <span class="cli-status-item cli-status-path" id="cli-clock">--:--:--</span>
+      <span class="cli-status-item">BLKSITE</span>
+    </div>
+  </footer>
+</div>
+
+<!-- JavaScript para navegación AJAX -->
+<script>
+(function() {
+  'use strict';
+
+  // === Configuration ===
+  const ENDPOINTS = {
+    dashboard: '/admin/dashboard/stats',
+    users: '/admin/users',
+    activity: '/admin/activity',
+    roles: '/admin/roles',
+    areas: '/admin/areas',
+    system: '/admin/system',
+    monitor: '/admin/monitor',
+    settings: '/admin/preferences',
+    preferences: '/admin/preferences'
+  };
+
+  // === State ===
+  let currentTab = 'dashboard';
+  let isLoading = false;
+
+  // Auto-refresh timer
+  let autoRefreshInterval = null;
+  const AUTO_REFRESH_MS = 30000;
+
+  function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(() => {
+      if (currentTab === 'dashboard' || currentTab === 'system' || currentTab === 'monitor') {
+        loadContent(currentTab);
+      }
+    }, AUTO_REFRESH_MS);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+  }
+
+  // === DOM Elements ===
+  const tabs = document.querySelectorAll('.cli-tab');
+  const contentArea = document.getElementById('cli-content');
+  const clockEl = document.getElementById('cli-clock');
+
+  // === CSRF Token ===
+  function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  // === Clock ===
+  function updateClock() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    clockEl.textContent = `${hours}:${minutes}:${seconds}`;
+  }
+
+  // === Tab Navigation ===
+  function setActiveTab(tabName) {
+    currentTab = tabName;
+
+    tabs.forEach(tab => {
+      const isActive = tab.dataset.tab === tabName;
+      tab.classList.toggle('is-active', isActive);
+      tab.setAttribute('aria-selected', isActive);
+      tab.setAttribute('tabindex', isActive ? '0' : '-1');
+    });
+
+    loadContent(tabName);
+  }
+
+  // === Content Loading ===
+  function showLoading() {
+    isLoading = true;
+    contentArea.innerHTML = `
+      <div class="cli-loading">
+        <span class="cli-cursor-blink">_</span> loading module...
+      </div>
+    `;
+  }
+
+  function showError(message, details) {
+    const errorHtml = `
+      <div class="cli-output error">
+        <div class="cli-output-line error">>> ERROR: ${escapeHtml(message)}</div>
+        ${details ? `<div class="cli-output-line info">${escapeHtml(details)}</div>` : ''}
+        <div class="cli-output-line info">Press [R] to retry or select another module.</div>
+      </div>
+    `;
+    contentArea.innerHTML = errorHtml;
+    isLoading = false;
+  }
+
+  async function loadContent(tabName) {
+    const endpoint = ENDPOINTS[tabName];
+    if (!endpoint) return;
+
+    showLoading();
+
+    try {
+      const response = await fetch(endpoint, {
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      renderContent(tabName, data);
+
+    } catch (error) {
+      console.error('Load error:', error);
+      showError('Failed to load module', error.message);
+    }
+  }
+
+  // === Content Rendering ===
+  function renderContent(tabName, data) {
+    let html = '';
+
+    switch(tabName) {
+      case 'dashboard':
+        html = renderDashboard(data);
+        break;
+      case 'users':
+        html = renderUsers(data);
+        break;
+      case 'activity':
+        html = renderActivity(data);
+        break;
+      case 'roles':
+        html = renderRoles(data);
+        break;
+      case 'areas':
+        html = renderAreas(data);
+        break;
+      case 'system':
+        html = renderSystem(data);
+        break;
+      case 'monitor':
+        html = renderMonitor(data);
+        break;
+      case 'settings':
+        html = renderSettings(data);
+        break;
+    }
+
+    contentArea.innerHTML = html;
+    attachFormHandlers(contentArea);
+    attachActionHandlers(contentArea);
+    isLoading = false;
+  }
+
+  // === Render Functions ===
+
+  function renderDashboard(data) {
+    const totalUsers = data.total_users || 0;
+    const activeUsers = data.active_users || 0;
+    const rolesCount = data.roles_count || 0;
+    const totalLogs = data.total_logs || 0;
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">Dashboard Stats</h2>
+
+        <div class="cli-grid cli-grid-4">
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Total Users</div>
+            <div class="cli-kpi-value">${totalUsers}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Active Users</div>
+            <div class="cli-kpi-value cli-text-success">${activeUsers}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Roles</div>
+            <div class="cli-kpi-value">${rolesCount}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Total Logs</div>
+            <div class="cli-kpi-value">${totalLogs}</div>
+          </article>
+        </div>
+
+        <div class="cli-mt-md cli-mb-md">
+          <button class="cli-btn cli-btn-primary" data-action="nav-users">Gestionar Usuarios</button>
+          <button class="cli-btn" data-action="nav-users-new">Crear Usuario</button>
+          <button class="cli-btn" data-action="nav-activity">Ver Actividad</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderUsers(data) {
+    const users = data.users || [];
+    const roles = data.roles || [];
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">Lista de Usuarios</h2>
+
+        <div class="cli-mb-md">
+          <button class="cli-btn cli-btn-primary" data-action="create-user">+ New User</button>
+        </div>
+
+        <div class="cli-form-row cli-mb-md">
+          <div class="cli-form-group" style="flex: 1;">
+            <input class="cli-input" type="text" id="user-search" placeholder="Search by username or email..." style="width: 100%;">
+          </div>
+          <div class="cli-form-group">
+            <select class="cli-select" id="user-role-filter">
+              <option value="">All Roles</option>
+              ${roles.map(role => `<option value="${role.code}">${role.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="cli-form-group cli-flex cli-flex-center">
+            <button type="button" class="cli-btn cli-btn-primary" data-action="filter-users">FILTER</button>
+          </div>
+        </div>
+
+        ${users.length > 0 ? `
+          <div class="cli-table-wrap">
+            <table class="cli-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${users.map(user => `
+                  <tr>
+                    <td>${escapeHtml(user.username) || '-'}</td>
+                    <td>${escapeHtml(user.email) || '-'}</td>
+                    <td>${escapeHtml(user.role) || 'user'}</td>
+                    <td>
+                      <span class="cli-badge ${user.is_active ? 'cli-badge-success' : 'cli-badge-error'}">
+                        ${user.is_active ? 'active' : 'inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <button class="cli-btn cli-btn-sm" data-action="toggle-user" data-user-id="${user.id}" data-state="${user.is_active ? 'deactivate' : 'activate'}">
+                        ${user.is_active ? 'DEACTIVATE' : 'ACTIVATE'}
+                      </button>
+                      <button class="cli-btn cli-btn-sm" data-action="kick-user" data-user-id="${user.id}">KICK</button>
+                      <button class="cli-btn cli-btn-sm cli-btn-danger" data-action="delete-user" data-user-id="${user.id}">DELETE</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <div class="cli-empty">No users found</div>
+        `}
+      </section>
+
+      <!-- Create User Modal -->
+      <div id="create-user-modal" class="cli-modal" style="display: none;">
+        <div class="cli-modal-content">
+          <div class="cli-modal-header">
+            <h3>Crear Usuario</h3>
+            <button class="cli-modal-close" data-action="close-modal">&times;</button>
+          </div>
+          <div class="cli-modal-body">
+            <form class="cli-form" data-action="/admin/users/new">
+              <input type="hidden" name="csrf_token" value="${getCsrfToken()}">
+              <div class="cli-form-group">
+                <input class="cli-input" type="text" name="username" placeholder="Username" required>
+              </div>
+              <div class="cli-form-group">
+                <input class="cli-input" type="email" name="email" placeholder="Email" required>
+              </div>
+              <div class="cli-form-group">
+                <input class="cli-input" type="password" name="password" placeholder="Password" required>
+              </div>
+              <div class="cli-form-group">
+                <select class="cli-select" name="role" required>
+                  <option value="">Select Role</option>
+                  ${roles.map(role => `<option value="${role.code}">${role.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="cli-form-group cli-flex cli-flex-center">
+                <button type="submit" class="cli-btn cli-btn-primary">CREAR</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderActivity(data) {
+    const logs = data.logs || data.activity || [];
+    const users = data.users || [];
+    const page = data.page || 1;
+    const totalPages = data.total_pages || 1;
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">Logs de Actividad</h2>
+
+        <div class="cli-form-row cli-mb-md">
+          <div class="cli-form-group">
+            <select class="cli-select" id="activity-user-filter">
+              <option value="">All Users</option>
+              ${users.map(user => `<option value="${user.id}">${escapeHtml(user.username) || user.email}</option>`).join('')}
+            </select>
+          </div>
+          <div class="cli-form-group">
+            <input class="cli-input" type="text" id="activity-action-filter" placeholder="Filter by action...">
+          </div>
+          <div class="cli-form-group">
+            <input class="cli-input" type="date" id="activity-date-from" placeholder="Date from">
+          </div>
+          <div class="cli-form-group">
+            <input class="cli-input" type="date" id="activity-date-to" placeholder="Date to">
+          </div>
+          <div class="cli-form-group cli-flex cli-flex-center">
+            <button type="button" class="cli-btn cli-btn-primary" data-action="filter-activity">FILTER</button>
+          </div>
+        </div>
+
+        ${logs.length > 0 ? `
+          <div class="cli-table-wrap">
+            <table class="cli-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${logs.map(log => `
+                  <tr>
+                    <td>${escapeHtml(log.timestamp) || '-'}</td>
+                    <td>${escapeHtml(log.username) || '-'}</td>
+                    <td>${escapeHtml(log.action) || '-'}</td>
+                    <td>${escapeHtml(log.details) || '-'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          ${totalPages > 1 ? `
+            <div class="cli-pagination cli-mt-md">
+              <button class="cli-btn cli-btn-sm" data-action="activity-page" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>PREV</button>
+              <span class="cli-pagination-info">Page ${page} of ${totalPages}</span>
+              <button class="cli-btn cli-btn-sm" data-action="activity-page" data-page="${page + 1}" ${page >= totalPages ? 'disabled' : ''}>NEXT</button>
+            </div>
+          ` : ''}
+        ` : `
+          <div class="cli-empty">No activity logs found</div>
+        `}
+      </section>
+    `;
+  }
+
+  function renderRoles(data) {
+    const roles = data.roles || [];
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">Lista de Roles</h2>
+
+        <div class="cli-mb-md">
+          <button class="cli-btn cli-btn-primary" data-action="create-role">+ New Role</button>
+        </div>
+
+        ${roles.length > 0 ? `
+          <div class="cli-table-wrap">
+            <table class="cli-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Users</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${roles.map(role => `
+                  <tr>
+                    <td><code>${escapeHtml(role.code) || '-'}</code></td>
+                    <td>${escapeHtml(role.name) || '-'}</td>
+                    <td>${escapeHtml(role.description) || '-'}</td>
+                    <td>${role.users_count || 0}</td>
+                    <td>
+                      <button class="cli-btn cli-btn-sm" data-action="edit-role" data-role-id="${role.id}">EDIT</button>
+                      <button class="cli-btn cli-btn-sm cli-btn-danger" data-action="delete-role" data-role-id="${role.id}">DELETE</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <div class="cli-empty">No roles found</div>
+        `}
+      </section>
+
+      <!-- Create/Edit Role Modal -->
+      <div id="role-modal" class="cli-modal" style="display: none;">
+        <div class="cli-modal-content">
+          <div class="cli-modal-header">
+            <h3 id="role-modal-title">Nuevo Role</h3>
+            <button class="cli-modal-close" data-action="close-modal">&times;</button>
+          </div>
+          <div class="cli-modal-body">
+            <form class="cli-form" id="role-form" data-action="/admin/roles">
+              <input type="hidden" name="csrf_token" value="${getCsrfToken()}">
+              <input type="hidden" name="role_id" id="role-id-input">
+              <div class="cli-form-group">
+                <input class="cli-input" type="text" name="code" placeholder="Code (e.g., admin, moderator)" required>
+              </div>
+              <div class="cli-form-group">
+                <input class="cli-input" type="text" name="name" placeholder="Name" required>
+              </div>
+              <div class="cli-form-group">
+                <input class="cli-input" type="text" name="description" placeholder="Description">
+              </div>
+              <div class="cli-form-group cli-flex cli-flex-center">
+                <button type="submit" class="cli-btn cli-btn-primary">GUARDAR</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAreas(data) {
+    const areas = data.areas || [];
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">Lista de Áreas</h2>
+
+        <div class="cli-mb-md">
+          <button class="cli-btn cli-btn-primary" data-action="create-area">+ New Area</button>
+        </div>
+
+        ${areas.length > 0 ? `
+          <div class="cli-table-wrap">
+            <table class="cli-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Users</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${areas.map(area => `
+                  <tr>
+                    <td>${escapeHtml(area.name) || '-'}</td>
+                    <td>${escapeHtml(area.description) || '-'}</td>
+                    <td>${area.users_count || 0}</td>
+                    <td>
+                      <button class="cli-btn cli-btn-sm" data-action="edit-area" data-area-id="${area.id}">EDIT</button>
+                      <button class="cli-btn cli-btn-sm cli-btn-danger" data-action="delete-area" data-area-id="${area.id}">DELETE</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <div class="cli-empty">No areas found</div>
+        `}
+      </section>
+
+      <!-- Create/Edit Area Modal -->
+      <div id="area-modal" class="cli-modal" style="display: none;">
+        <div class="cli-modal-content">
+          <div class="cli-modal-header">
+            <h3 id="area-modal-title">Nueva Área</h3>
+            <button class="cli-modal-close" data-action="close-modal">&times;</button>
+          </div>
+          <div class="cli-modal-body">
+            <form class="cli-form" id="area-form" data-action="/admin/areas">
+              <input type="hidden" name="csrf_token" value="${getCsrfToken()}">
+              <input type="hidden" name="area_id" id="area-id-input">
+              <div class="cli-form-group">
+                <input class="cli-input" type="text" name="name" placeholder="Name" required>
+              </div>
+              <div class="cli-form-group">
+                <input class="cli-input" type="text" name="description" placeholder="Description">
+              </div>
+              <div class="cli-form-group cli-flex cli-flex-center">
+                <button type="submit" class="cli-btn cli-btn-primary">GUARDAR</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSystem(data) {
+    const sys = data.system || {};
+    const users = sys.users || {};
+    const reports = sys.reports || {};
+    const activity = sys.activity || {};
+    const state = sys.state || {};
+    const storage = sys.storage || {};
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">System Status</h2>
+
+        <div class="cli-grid cli-grid-4">
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Total Users</div>
+            <div class="cli-kpi-value">${users.total || 0}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Active</div>
+            <div class="cli-kpi-value cli-text-success">${users.active || 0}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Reports (Total)</div>
+            <div class="cli-kpi-value">${reports.total || 0}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Reports (Hoy)</div>
+            <div class="cli-kpi-value cli-text-success">${reports.today || 0}</div>
+          </article>
+        </div>
+
+        <div class="cli-grid cli-grid-4 cli-mt-md">
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Activity (24h)</div>
+            <div class="cli-kpi-value">${activity.today || 0}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Activity (7d)</div>
+            <div class="cli-kpi-value">${activity.last_7_days || 0}</div>
+          </article>
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">DB Storage</div>
+            <div class="cli-kpi-value">${storage.mb || 0} MB</div>
+          </article>
+          <article class="cli-kpi ${state.is_frozen ? 'cli-kpi-error' : 'cli-kpi-success'}">
+            <div class="cli-kpi-label">Admin State</div>
+            <div class="cli-kpi-value">${state.is_frozen ? 'FROZEN' : 'ACTIVE'}</div>
+          </article>
+        </div>
+
+        ${state.locked_modules && state.locked_modules.length > 0 ? `
+          <div class="cli-mt-md">
+            <h3 class="cli-section-subtitle">Locked Modules</h3>
+            <div class="cli-tags">
+              ${state.locked_modules.map(m => `<span class="cli-tag cli-tag-error">${m}</span>`).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </section>
+    `;
+  }
+
+  function renderMonitor(data) {
+    const timeline = data.timeline || {};
+    const hourly = timeline.hourly || [];
+    const topActions = timeline.top_actions || [];
+    const totalEvents = timeline.total_events_24h || 0;
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">Activity Monitor (24h)</h2>
+
+        <div class="cli-grid cli-grid-3">
+          <article class="cli-kpi">
+            <div class="cli-kpi-label">Total Events</div>
+            <div class="cli-kpi-value cli-text-success">${totalEvents}</div>
+          </article>
+        </div>
+
+        <div class="cli-mt-md">
+          <h3 class="cli-section-subtitle">Hourly Activity</h3>
+          <div class="cli-bar-chart">
+            ${hourly.map(h => `
+              <div class="cli-bar-item">
+                <div class="cli-bar-label">${h.hour}</div>
+                <div class="cli-bar-track">
+                  <div class="cli-bar-fill" style="width: ${Math.min(100, (h.count / Math.max(1, totalEvents)) * 100)}%;"></div>
+                </div>
+                <div class="cli-bar-value">${h.count}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="cli-mt-md">
+          <h3 class="cli-section-subtitle">Top Actions</h3>
+          <div class="cli-tags">
+            ${topActions.slice(0, 10).map(a => `
+              <span class="cli-tag">${a[0]}: ${a[1]}</span>
+            `).join('')}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSettings(data) {
+    const currentAccent = data.preferences?.accent_color || 'green';
+    const colors = ['green', 'blue', 'cyan', 'magenta', 'orange', 'red', 'yellow', 'white'];
+
+    return `
+      <section class="cli-section">
+        <h2 class="cli-section-title">Terminal Configuration</h2>
+
+        <div class="cli-mb-md">
+          <h3 class="cli-section-subtitle">Accent Color</h3>
+          <div class="cli-color-picker">
+            ${colors.map(color => `
+              <button class="cli-color-swatch ${currentAccent === color ? 'is-active' : ''}"
+                      data-accent="${color}"
+                      style="--accent: var(--cli-${color});"
+                      title="${color}">
+              </button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="cli-mt-md">
+          <h3 class="cli-section-subtitle">Auto-Refresh</h3>
+          <div class="cli-form-row">
+            <div class="cli-form-group">
+              <label class="cli-toggle">
+                <input type="checkbox" id="auto-refresh-toggle" checked>
+                <span class="cli-toggle-slider"></span>
+                <span class="cli-toggle-label">Enable auto-refresh (30s)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // === Helpers ===
+  function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // === Form Handling ===
+  function attachFormHandlers(container) {
+    const forms = container.querySelectorAll('form');
+    forms.forEach(form => {
+      form.addEventListener('submit', handleFormSubmit);
+    });
+  }
+
+  async function handleFormSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const action = form.dataset.action;
+
+    if (!action) return;
+
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      const response = await fetch(action, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      showNotification(result.message || 'Done', 'success');
+      closeAllModals();
+      loadContent(currentTab);
+
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
+    }
+  }
+
+  // === Action Handlers ===
+  function attachActionHandlers(container) {
+    container.querySelectorAll('[data-action]').forEach(el => {
+      el.addEventListener('click', handleActionClick);
+    });
+  }
+
+  async function handleActionClick(e) {
+    const btn = e.currentTarget;
+    const action = btn.dataset.action;
+
+    switch(action) {
+      case 'nav-users':
+        setActiveTab('users');
+        break;
+
+      case 'nav-users-new':
+        openModal('create-user-modal');
+        break;
+
+      case 'nav-activity':
+        setActiveTab('activity');
+        break;
+
+      case 'create-user':
+        openModal('create-user-modal');
+        break;
+
+      case 'filter-users':
+        loadContent('users');
+        break;
+
+      case 'toggle-user':
+        await performAction(`/admin/users/${btn.dataset.userId}/toggle`, {});
+        break;
+
+      case 'kick-user':
+        await performAction(`/admin/users/${btn.dataset.userId}/kick`, {});
+        break;
+
+      case 'delete-user':
+        if (confirm('Are you sure you want to delete this user?')) {
+          await performAction(`/admin/users/${btn.dataset.userId}`, {}, 'DELETE');
+        }
+        break;
+
+      case 'filter-activity':
+        loadContent('activity');
+        break;
+
+      case 'activity-page':
+        loadContent('activity');
+        break;
+
+      case 'create-role':
+        document.getElementById('role-modal-title').textContent = 'Nuevo Role';
+        document.getElementById('role-form').reset();
+        document.getElementById('role-id-input').value = '';
+        document.getElementById('role-form').dataset.action = '/admin/roles';
+        openModal('role-modal');
+        break;
+
+      case 'edit-role':
+        const roleData = btn.closest('tr');
+        document.getElementById('role-modal-title').textContent = 'Editar Role';
+        // Note: Would need to fetch role data for edit mode
+        openModal('role-modal');
+        break;
+
+      case 'delete-role':
+        if (confirm('Are you sure you want to delete this role?')) {
+          await performAction(`/admin/roles/${btn.dataset.roleId}`, {}, 'DELETE');
+        }
+        break;
+
+      case 'create-area':
+        document.getElementById('area-modal-title').textContent = 'Nueva Área';
+        document.getElementById('area-form').reset();
+        document.getElementById('area-id-input').value = '';
+        openModal('area-modal');
+        break;
+
+      case 'edit-area':
+        document.getElementById('area-modal-title').textContent = 'Editar Área';
+        openModal('area-modal');
+        break;
+
+      case 'delete-area':
+        if (confirm('Are you sure you want to delete this area?')) {
+          await performAction(`/admin/areas/${btn.dataset.areaId}`, {}, 'DELETE');
+        }
+        break;
+
+      case 'close-modal':
+        closeAllModals();
+        break;
+
+      case 'set-accent':
+        const accent = btn.dataset.accent;
+        await fetch('/admin/preferences', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({ accent_color: accent })
+        }).then(r => r.json()).then(result => {
+          if (result.success) {
+            document.documentElement.style.setProperty('--cli-accent', `var(--cli-${accent})`);
+            showNotification(`Accent color: ${accent}`, 'success');
+          }
+        });
+        break;
+
+      case 'toggle-auto-refresh':
+        const toggle = document.getElementById('auto-refresh-toggle');
+        if (toggle.checked) {
+          startAutoRefresh();
+          showNotification('Auto-refresh enabled', 'success');
+        } else {
+          stopAutoRefresh();
+          showNotification('Auto-refresh disabled', 'info');
+        }
+        break;
+
+      default:
+        console.log('Unknown action:', action);
+    }
+  }
+
+  async function performAction(endpoint, data, method = 'POST') {
+    try {
+      const response = await fetch(endpoint, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      showNotification(result.message || 'Done', 'success');
+      loadContent(currentTab);
+
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
+    }
+  }
+
+  // === Modal Handling ===
+  function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeAllModals() {
+    document.querySelectorAll('.cli-modal').forEach(modal => {
+      modal.style.display = 'none';
+    });
+  }
+
+  // === Notifications ===
+  function showNotification(message, type) {
+    const existing = document.querySelector('.cli-notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.className = `cli-notification cli-notification-${type}`;
+    notification.innerHTML = `
+      <span class="cli-notification-icon">${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span>
+      <span class="cli-notification-message">${escapeHtml(message)}</span>
+    `;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+      notification.classList.add('is-visible');
+    }, 10);
+
+    setTimeout(() => {
+      notification.classList.remove('is-visible');
+      setTimeout(() => notification.remove(), 300);
+    }, 3000);
+  }
+
+  // === Keyboard Navigation ===
+  function handleKeydown(e) {
+    const tabsArray = Array.from(tabs);
+    const currentIndex = tabsArray.findIndex(t => t.dataset.tab === currentTab);
+
+    if (e.key === 'ArrowLeft' && currentIndex > 0) {
+      e.preventDefault();
+      setActiveTab(tabsArray[currentIndex - 1].dataset.tab);
+    } else if (e.key === 'ArrowRight' && currentIndex < tabsArray.length - 1) {
+      e.preventDefault();
+      setActiveTab(tabsArray[currentIndex + 1].dataset.tab);
+    } else if (e.key === 'r' || e.key === 'R') {
+      if (!isLoading) {
+        e.preventDefault();
+        loadContent(currentTab);
+      }
+    }
+  }
+
+  // === Event Listeners ===
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.dataset.tab;
+      if (tabName !== currentTab && !isLoading) {
+        setActiveTab(tabName);
+      }
+    });
+  });
+
+  document.addEventListener('keydown', handleKeydown);
+
+  // Close modals on outside click
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('cli-modal')) {
+      closeAllModals();
+    }
+  });
+
+  // === Initialize ===
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // Start auto-refresh
+  startAutoRefresh();
+
+  // Load initial content
+  loadContent('dashboard');
+
+})();
+</script>
+
+<style>
+/* Notification styles */
+.cli-notification {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  background: var(--cli-bg-panel);
+  border: 1px solid var(--cli-border);
+  padding: var(--cli-space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--cli-space-sm);
+  z-index: 1000;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  font-family: var(--cli-font);
+}
+
+.cli-notification.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cli-notification-success {
+  border-color: var(--cli-text-success);
+}
+
+.cli-notification-success .cli-notification-icon {
+  color: var(--cli-text-success);
+}
+
+.cli-notification-error {
+  border-color: var(--cli-text-error);
+}
+
+.cli-notification-error .cli-notification-icon {
+  color: var(--cli-text-error);
+}
+
+.cli-notification-info {
+  border-color: var(--cli-text-muted);
+}
+
+.cli-notification-info .cli-notification-icon {
+  color: var(--cli-text-muted);
+}
+
+/* Modal styles */
+.cli-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.cli-modal-content {
+  background: var(--cli-bg-panel);
+  border: 1px solid var(--cli-border);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.cli-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--cli-space-md);
+  border-bottom: 1px solid var(--cli-border);
+}
+
+.cli-modal-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: normal;
+  color: var(--cli-text);
+}
+
+.cli-modal-close {
+  background: none;
+  border: none;
+  color: var(--cli-text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.cli-modal-close:hover {
+  color: var(--cli-text);
+}
+
+.cli-modal-body {
+  padding: var(--cli-space-md);
+}
+
+/* Pagination */
+.cli-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cli-space-md);
+}
+
+.cli-pagination-info {
+  color: var(--cli-text-muted);
+  font-size: 0.85rem;
+}
+
+/* Status bar enhancements */
+.cli-status-sep {
+  color: var(--cli-border);
+  margin: 0 var(--cli-space-xs);
+}
+
+/* Form styles enhancement */
+.cli-form .cli-form-group {
+  margin-bottom: var(--cli-space-md);
+}
+</style>
+{% endblock %}

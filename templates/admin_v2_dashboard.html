@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}Admin BLACKSITE V2 | Dashboard{% endblock %}
+{% block page_name %}Admin BLACKSITE V2{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_v2_blacksite.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set kpi_active_users = kpi_active_users if kpi_active_users is defined else (active_users if active_users is defined else 0) %}
+{% set kpi_open_incidents = kpi_open_incidents if kpi_open_incidents is defined else (open_incidents if open_incidents is defined else 0) %}
+{% set kpi_locked_modules = kpi_locked_modules if kpi_locked_modules is defined else (locked_modules_count if locked_modules_count is defined else 0) %}
+{% set is_freeze_enabled = is_freeze_enabled if is_freeze_enabled is defined else false %}
+{% set recent_incidents = recent_incidents if recent_incidents is defined else [] %}
+{% set module_locks = module_locks if module_locks is defined else [] %}
+
+<section class="blacksite-v2">
+  <div class="bs2-panel" style="margin-bottom: 16px;">
+    <div class="bs2-header">
+      <div>
+        <h1 class="bs2-title">Centro de Control BLACKSITE</h1>
+        <p class="bs2-subtitle">Visión rápida de incidentes y controles críticos de operación.</p>
+      </div>
+      <div class="bs2-actions bs2-header-actions">
+        <a href="/admin/v2/identity" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-user-shield"></i> Identity Studio</a>
+        <a href="/admin/v2/incidents" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-triangle-exclamation"></i> Incidents</a>
+        <a href="/admin/v2/operations" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gears"></i> Operations</a>
+        <a href="/admin/v2/config" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-sliders"></i> Config</a>
+        <a href="{{ url_for('admin_v2.audit_ledger') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-shield-halved"></i> Audit Ledger</a>
+        <div class="bs2-badge {{ 'bs2-sev-critical' if is_freeze_enabled else 'bs2-sev-low' }}">
+          Freeze: {{ 'ACTIVO' if is_freeze_enabled else 'INACTIVO' }}
+        </div>
+      </div>
+    </div>
+
+    <div class="bs2-grid bs2-kpi-grid">
+      <article class="bs2-kpi">
+        <div class="bs2-kpi-label">Usuarios activos</div>
+        <div class="bs2-kpi-value">{{ kpi_active_users }}</div>
+      </article>
+      <article class="bs2-kpi">
+        <div class="bs2-kpi-label">Incidentes abiertos</div>
+        <div class="bs2-kpi-value">{{ kpi_open_incidents }}</div>
+      </article>
+      <article class="bs2-kpi">
+        <div class="bs2-kpi-label">Módulos bloqueados</div>
+        <div class="bs2-kpi-value">{{ kpi_locked_modules }}</div>
+      </article>
+      <article class="bs2-kpi">
+        <div class="bs2-kpi-label">Estado Freeze</div>
+        <div class="bs2-kpi-value {{ 'bs2-status-on' if is_freeze_enabled else 'bs2-status-off' }}">
+          {{ 'Activo' if is_freeze_enabled else 'Inactivo' }}
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <div class="bs2-row">
+    <section class="bs2-panel">
+      <h2 class="bs2-title" style="font-size: 1.04rem;">Incidentes recientes</h2>
+      <p class="bs2-subtitle">Monitoreo de los últimos eventos reportados por operaciones.</p>
+
+      {% if recent_incidents %}
+      <div class="bs2-table-wrap">
+        <table class="bs2-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Resumen</th>
+              <th>Severidad</th>
+              <th>Estado</th>
+              <th>Actualizado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for incident in recent_incidents %}
+            {% set sev = (incident.severity or 'low')|lower %}
+            <tr>
+              <td>#{{ incident.id if incident.id is defined else loop.index }}</td>
+              <td>{{ incident.summary if incident.summary is defined else 'Sin resumen' }}</td>
+              <td>
+                <span class="bs2-badge bs2-sev-{{ sev if sev in ['low', 'medium', 'high', 'critical'] else 'low' }}">{{ sev|upper }}</span>
+              </td>
+              <td>{{ incident.status if incident.status is defined else 'open' }}</td>
+              <td>{{ incident.updated_at if incident.updated_at is defined else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="bs2-empty">No hay incidentes recientes.</div>
+      {% endif %}
+
+      <div class="bs2-actions" style="margin-top: 12px;">
+        <a href="/admin/v2/incidents" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-triangle-exclamation"></i> Ir a Incidents</a>
+      </div>
+    </section>
+
+    <section class="bs2-panel">
+      <h2 class="bs2-title" style="font-size: 1.04rem;">Freeze status</h2>
+      <p class="bs2-subtitle">Estado global visible desde dashboard. Las acciones freeze/unfreeze se ejecutan por incidente.</p>
+
+      <div class="bs2-risk-note">
+        {{ 'Freeze activo: operaciones sensibles pueden estar pausadas.' if is_freeze_enabled else 'Freeze inactivo: operaciones sensibles habilitadas.' }}
+      </div>
+
+      <div class="bs2-actions" style="margin-bottom: 14px;">
+        <a href="{{ url_for('admin_v2.incidents_list') }}" class="bs2-btn {{ 'bs2-btn-outline' if is_freeze_enabled else 'bs2-btn-danger' }}">
+          <i class="fa-solid fa-snowflake"></i>
+          {{ 'Revisar Incidents Console' if is_freeze_enabled else 'Ir a Incidents Console para activar Freeze' }}
+        </a>
+      </div>
+
+      <h3 class="bs2-title" style="font-size: 0.98rem; margin-top: 8px;">Module locks</h3>
+      <p class="bs2-subtitle">Bloquea o desbloquea módulos sin despliegues de código.</p>
+
+      <form method="POST" action="{{ url_for('admin_v2.module_lock_toggle') }}" class="bs2-form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div>
+          <label class="bs2-label" for="module_key">Módulo</label>
+          <input id="module_key" class="bs2-input" type="text" name="module_key" placeholder="ej. reports" required>
+        </div>
+        <div>
+          <label class="bs2-label" for="lock_reason">Motivo</label>
+          <input id="lock_reason" class="bs2-input" type="text" name="reason" placeholder="Motivo del lock/unlock" required>
+        </div>
+        <div class="bs2-actions">
+          <button type="submit" class="bs2-btn bs2-btn-warning" name="mode" value="lock">
+            <i class="fa-solid fa-lock"></i> Lock
+          </button>
+          <button type="submit" class="bs2-btn bs2-btn-outline" name="mode" value="unlock">
+            <i class="fa-solid fa-lock-open"></i> Unlock
+          </button>
+        </div>
+      </form>
+
+      {% if module_locks %}
+      <div class="bs2-table-wrap" style="margin-top: 12px;">
+        <table class="bs2-table">
+          <thead>
+            <tr>
+              <th>Módulo</th>
+              <th>Estado</th>
+              <th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lock in module_locks %}
+            <tr>
+              <td>{{ lock.module_key if lock.module_key is defined else '—' }}</td>
+              <td>{{ lock.lock_state if lock.lock_state is defined else '—' }}</td>
+              <td>{{ lock.reason if lock.reason is defined else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+</section>
+{% endblock %}

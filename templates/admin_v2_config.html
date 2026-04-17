@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% block title %}Admin BLACKSITE V2 | Config Governance{% endblock %}
+{% block page_name %}Admin BLACKSITE V2 · Config{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_v2_blacksite.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set config_items = config_items if config_items is defined else (items if items is defined else []) %}
+{% set selected_item = selected_item if selected_item is defined else None %}
+{% set item_versions = item_versions if item_versions is defined else (versions if versions is defined else []) %}
+
+<section class="blacksite-v2 bs2-config">
+  <div class="bs2-panel" style="margin-bottom: 16px;">
+    <div class="bs2-header">
+      <div>
+        <h1 class="bs2-title">Config Governance</h1>
+        <p class="bs2-subtitle">Gestiona configuración dinámica y versionada sin cambios de código.</p>
+      </div>
+      <div class="bs2-actions bs2-header-actions">
+        <a href="{{ url_for('admin_v2.dashboard') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+        <a href="/admin/v2/identity" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-user-shield"></i> Identity</a>
+        <a href="{{ url_for('admin_v2.incidents_list') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-triangle-exclamation"></i> Incidents</a>
+        <a href="/admin/v2/operations" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gears"></i> Operations</a>
+        <a href="{{ url_for('admin_v2.audit_ledger') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-shield-halved"></i> Audit Ledger</a>
+      </div>
+    </div>
+
+    <h2 class="bs2-title" style="font-size: 1.04rem; margin-bottom: 8px;">Upsert config item</h2>
+    <form method="POST" action="{{ url_for('admin_v2.config_upsert_item') }}" class="bs2-config-upsert-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div>
+        <label class="bs2-label" for="namespace">Namespace</label>
+        <input id="namespace" class="bs2-input" type="text" name="namespace" placeholder="ej. risk_controls" required>
+      </div>
+
+      <div>
+        <label class="bs2-label" for="config_key">Config key</label>
+        <input id="config_key" class="bs2-input" type="text" name="config_key" placeholder="ej. max_retry_jobs" required>
+      </div>
+
+      <div class="bs2-config-json-field">
+        <label class="bs2-label" for="value_json">Value JSON</label>
+        <textarea id="value_json" class="bs2-textarea bs2-json-textarea" name="value_json" placeholder='{"value": 3}' required></textarea>
+      </div>
+
+      <div class="bs2-config-toggle-row">
+        <label class="bs2-checkbox" for="is_sensitive">
+          <input id="is_sensitive" type="checkbox" name="is_sensitive" value="1">
+          <span>is_sensitive</span>
+        </label>
+      </div>
+
+      <div>
+        <label class="bs2-label" for="reason">Reason</label>
+        <input id="reason" class="bs2-input" type="text" name="reason" maxlength="240" placeholder="Contexto de negocio / incidente asociado" required>
+      </div>
+
+      <div class="bs2-actions">
+        <button type="submit" class="bs2-btn bs2-btn-primary">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar versión
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="bs2-config-layout">
+    <section class="bs2-panel">
+      <h2 class="bs2-title" style="font-size: 1.04rem;">Config items</h2>
+      <p class="bs2-subtitle">Selecciona un item para inspeccionar historial y ejecutar rollback.</p>
+
+      {% if config_items %}
+      <div class="bs2-table-wrap">
+        <table class="bs2-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Namespace</th>
+              <th>Key</th>
+              <th>Sensible</th>
+              <th>Acceso</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in config_items %}
+            {% set is_selected = selected_item and item.id == selected_item.id %}
+            <tr class="{{ 'is-selected' if is_selected else '' }}">
+              <td>#{{ item.id if item.id is defined else loop.index }}</td>
+              <td>{{ item.namespace if item.namespace is defined else '—' }}</td>
+              <td>{{ item.config_key if item.config_key is defined else (item.key if item.key is defined else '—') }}</td>
+              <td>
+                <span class="bs2-badge {{ 'bs2-sev-high' if (item.is_sensitive if item.is_sensitive is defined else false) else 'bs2-sev-low' }}">
+                  {{ 'Sí' if (item.is_sensitive if item.is_sensitive is defined else false) else 'No' }}
+                </span>
+              </td>
+              <td>
+                <a class="bs2-btn bs2-btn-outline" href="?item_id={{ item.id if item.id is defined else loop.index }}">Ver historial</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="bs2-empty">No hay items de configuración cargados.</div>
+      {% endif %}
+    </section>
+
+    <section class="bs2-panel bs2-version-panel">
+      <h2 class="bs2-title" style="font-size: 1.04rem;">Historial de versiones</h2>
+
+      {% if selected_item %}
+      <p class="bs2-subtitle">
+        Item seleccionado: <strong>{{ selected_item.namespace if selected_item.namespace is defined else '—' }}</strong> / <strong>{{ selected_item.config_key if selected_item.config_key is defined else (selected_item.key if selected_item.key is defined else '—') }}</strong>
+      </p>
+
+      {% if item_versions %}
+      <div class="bs2-version-list">
+        {% for version in item_versions %}
+        <article class="bs2-version-card">
+          <div class="bs2-version-head">
+            <strong>v{{ version.version if version.version is defined else loop.revindex }}</strong>
+            <span>{{ version.created_at if version.created_at is defined else '—' }}</span>
+          </div>
+          <p class="bs2-hint" style="margin: 6px 0 0;">Reason: {{ version.reason if version.reason is defined else 'Sin motivo registrado' }}</p>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="bs2-empty">Este item aún no tiene historial de versiones.</div>
+      {% endif %}
+
+      <div class="bs2-risk-note" style="margin-top: 14px;">
+        <strong>Rollback de riesgo:</strong> restaurar una versión previa puede degradar comportamiento actual y afectar operaciones en vivo.
+      </div>
+
+      <h3 class="bs2-title" style="font-size: 0.98rem; margin-top: 10px;">Rollback</h3>
+      <form method="POST" action="{{ url_for('admin_v2.config_rollback_item', item_id=selected_item.id) }}" class="bs2-config-rollback-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div>
+          <label class="bs2-label" for="target_version">Target version</label>
+          <input id="target_version" class="bs2-input" type="number" name="target_version" min="1" placeholder="ej. 3" required>
+        </div>
+
+        <div>
+          <label class="bs2-label" for="rollback_reason">Reason</label>
+          <input id="rollback_reason" class="bs2-input" type="text" name="reason" maxlength="240" placeholder="Motivo del rollback" required>
+        </div>
+
+        <div class="bs2-actions">
+          <button type="submit" class="bs2-btn bs2-btn-danger">
+            <i class="fa-solid fa-clock-rotate-left"></i> Ejecutar rollback
+          </button>
+        </div>
+      </form>
+      {% else %}
+      <div class="bs2-empty">Selecciona un item para ver su historial y habilitar rollback.</div>
+      {% endif %}
+    </section>
+  </div>
+</section>
+{% endblock %}

@@ -22,6 +22,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/loading-overlay.css') }}" />
+    {% block extra_head %}{% endblock %}
   </head>
   <body>
     {% if session.get('impersonating_from') %}
@@ -95,10 +96,11 @@
           <span>Mis Reportes</span>
         </a>
         {% if current_user.role == 'admin' %}
-        <a href="{{ url_for('admin.dashboard') }}" class="sidebar-item {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" aria-label="Admin Panel">
+        <a href="{{ url_for('admin_v2.cli_terminal') }}" class="sidebar-item {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" aria-label="Admin Panel">
           <i class="fa-solid fa-gear"></i>
           <span>Admin Panel</span>
         </a>
+
         <a href="{{ url_for('tasks.tasks_dashboard') }}" class="sidebar-item {% if request.endpoint == 'tasks.tasks_dashboard' %}active{% endif %}" aria-label="Dashboard Tareas">
           <i class="fa-solid fa-clipboard-list"></i>
           <span>Dashboard Tareas</span>
@@ -140,7 +142,7 @@
           <div class="topbar-dropdown">
             <a href="{{ url_for('mis_reportes') }}"><i class="fa-solid fa-folder-open"></i> Mis Reportes</a>
             {% if current_user.role == 'admin' %}
-            <a href="{{ url_for('admin.dashboard') }}"><i class="fa-solid fa-gear"></i> Admin Panel</a>
+<a href="{{ url_for('admin_v2.cli_terminal') }}"><i class="fa-solid fa-gear"></i> Admin Panel</a>
             {% endif %}
             <div class="topbar-divider"></div>
             <a href="{{ url_for('auth.logout') }}" class="danger-link"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesion</a>

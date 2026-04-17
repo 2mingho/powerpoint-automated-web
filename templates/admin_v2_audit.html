@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% block title %}Admin BLACKSITE V2 | Audit & Forensics Ledger{% endblock %}
+{% block page_name %}Admin BLACKSITE V2 · Audit Ledger{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_v2_blacksite.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set events = events if events is defined else [] %}
+{% set filters = filters if filters is defined else {} %}
+{% set pagination = pagination if pagination is defined else {'page': 1, 'per_page': 25, 'total': 0, 'pages': 0, 'has_prev': false, 'has_next': false} %}
+{% set actors = actors if actors is defined else [] %}
+{% set incidents = incidents if incidents is defined else [] %}
+{% set selected_per_page = request.args.get('per_page', pagination.per_page if pagination.per_page is defined else 25) %}
+
+<section class="blacksite-v2 bs2-audit">
+  <div class="bs2-panel" style="margin-bottom: 16px;">
+    <div class="bs2-header">
+      <div>
+        <h1 class="bs2-title">Audit &amp; Forensics Ledger</h1>
+        <p class="bs2-subtitle">Trazabilidad operativa con filtros, evidencias y export para auditoría.</p>
+      </div>
+      <div class="bs2-actions bs2-header-actions">
+        <a href="{{ url_for('admin_v2.dashboard') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+        <a href="{{ url_for('admin_v2.identity_center') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-user-shield"></i> Identity</a>
+        <a href="{{ url_for('admin_v2.incidents_list') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-triangle-exclamation"></i> Incidents</a>
+        <a href="{{ url_for('admin_v2.operations_console') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-gears"></i> Operations</a>
+        <a href="{{ url_for('admin_v2.config_center') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-sliders"></i> Config</a>
+      </div>
+    </div>
+
+    <form method="GET" action="{{ url_for('admin_v2.audit_ledger') }}" class="bs2-audit-filters">
+      <div>
+        <label class="bs2-label" for="actor_id">Actor</label>
+        <select id="actor_id" class="bs2-select" name="actor_id">
+          <option value="">Todos</option>
+          {% for actor in actors %}
+          {% set actor_value = actor.id if actor.id is defined else '' %}
+          <option value="{{ actor_value }}" {{ 'selected' if filters.actor_id|string == actor_value|string else '' }}>
+            {{ actor.email if actor.email is defined else (actor.username if actor.username is defined else ('User #' ~ actor_value)) }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="bs2-label" for="incident_id">Incidente</label>
+        <select id="incident_id" class="bs2-select" name="incident_id">
+          <option value="">Todos</option>
+          {% for incident in incidents %}
+          {% set incident_value = incident.id if incident.id is defined else '' %}
+          <option value="{{ incident_value }}" {{ 'selected' if filters.incident_id|string == incident_value|string else '' }}>
+            #{{ incident_value }} · {{ incident.summary if incident.summary is defined else 'Sin resumen' }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="bs2-label" for="module_key">Módulo</label>
+        <input id="module_key" class="bs2-input" type="text" name="module_key" value="{{ filters.module_key if filters.module_key is defined else '' }}" placeholder="ej. incidents">
+      </div>
+
+      <div>
+        <label class="bs2-label" for="action">Acción</label>
+        <input id="action" class="bs2-input" type="text" name="action" value="{{ filters.action if filters.action is defined else '' }}" placeholder="ej. freeze_toggle">
+      </div>
+
+      <div>
+        <label class="bs2-label" for="date_from">Desde</label>
+        <input id="date_from" class="bs2-input" type="date" name="date_from" value="{{ filters.date_from if filters.date_from is defined else '' }}">
+      </div>
+
+      <div>
+        <label class="bs2-label" for="date_to">Hasta</label>
+        <input id="date_to" class="bs2-input" type="date" name="date_to" value="{{ filters.date_to if filters.date_to is defined else '' }}">
+      </div>
+
+      <div>
+        <label class="bs2-label" for="per_page">Resultados</label>
+        <select id="per_page" class="bs2-select" name="per_page">
+          {% for option in [25, 50, 100, 200] %}
+          <option value="{{ option }}" {{ 'selected' if selected_per_page|string == option|string else '' }}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="bs2-actions bs2-audit-filter-actions">
+        <button type="submit" class="bs2-btn bs2-btn-primary"><i class="fa-solid fa-filter"></i> Aplicar filtros</button>
+        <a href="{{ url_for('admin_v2.audit_ledger') }}" class="bs2-btn bs2-btn-outline"><i class="fa-solid fa-rotate-left"></i> Limpiar filtros</a>
+      </div>
+    </form>
+
+    <div class="bs2-actions" style="margin-top: 12px;">
+      <a
+        class="bs2-btn bs2-btn-outline"
+        href="{{ url_for('admin_v2.audit_export', format='csv', actor_id=filters.actor_id if filters.actor_id is defined else None, incident_id=filters.incident_id if filters.incident_id is defined else None, module_key=filters.module_key if filters.module_key is defined else None, action=filters.action if filters.action is defined else None, date_from=filters.date_from if filters.date_from is defined else None, date_to=filters.date_to if filters.date_to is defined else None) }}"
+      ><i class="fa-solid fa-file-csv"></i> Export CSV</a>
+      <a
+        class="bs2-btn bs2-btn-outline"
+        href="{{ url_for('admin_v2.audit_export', format='json', actor_id=filters.actor_id if filters.actor_id is defined else None, incident_id=filters.incident_id if filters.incident_id is defined else None, module_key=filters.module_key if filters.module_key is defined else None, action=filters.action if filters.action is defined else None, date_from=filters.date_from if filters.date_from is defined else None, date_to=filters.date_to if filters.date_to is defined else None) }}"
+      ><i class="fa-solid fa-file-code"></i> Export JSON</a>
+    </div>
+  </div>
+
+  <div class="bs2-panel">
+    <h2 class="bs2-title" style="font-size: 1.04rem;">Timeline</h2>
+    <p class="bs2-subtitle">{{ pagination.total if pagination.total is defined else 0 }} eventos encontrados.</p>
+
+    {% if events %}
+    <div class="bs2-table-wrap bs2-audit-table-wrap">
+      <table class="bs2-table bs2-audit-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Actor</th>
+            <th>Módulo</th>
+            <th>Acción</th>
+            <th>Recurso</th>
+            <th>Incidente</th>
+            <th>Resumen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          {% set module_key = event.module_key if event.module_key is defined and event.module_key else 'unknown' %}
+          {% set action_key = event.action if event.action is defined and event.action else 'unknown' %}
+          <tr>
+            <td>{{ event.created_at if event.created_at is defined and event.created_at else '—' }}</td>
+            <td>
+              {% if event.actor and event.actor.id is defined %}
+                <a class="bs2-user-link" href="{{ url_for('admin_v2.audit_timeline_by_actor', user_id=event.actor.id) }}">{{ event.actor.email if event.actor.email is defined else ('User #' ~ event.actor.id) }}</a>
+              {% elif event.actor_user_id is defined and event.actor_user_id %}
+                <a class="bs2-user-link" href="{{ url_for('admin_v2.audit_timeline_by_actor', user_id=event.actor_user_id) }}">User #{{ event.actor_user_id }}</a>
+              {% else %}
+                System
+              {% endif %}
+            </td>
+            <td><span class="bs2-badge bs2-audit-badge-module">{{ module_key }}</span></td>
+            <td><span class="bs2-badge bs2-audit-badge-action">{{ action_key }}</span></td>
+            <td>{{ event.resource_type if event.resource_type is defined else '—' }}{% if event.resource_id is defined and event.resource_id %} / {{ event.resource_id }}{% endif %}</td>
+            <td>
+              {% if event.incident_id is defined and event.incident_id %}
+                <a class="bs2-user-link" href="{{ url_for('admin_v2.audit_timeline_by_incident', incident_id=event.incident_id) }}">#{{ event.incident_id }}</a>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              <div>{{ event.summary if event.summary is defined and event.summary else 'Sin resumen' }}</div>
+              <details class="bs2-audit-details">
+                <summary>Details</summary>
+                <div class="bs2-audit-details-grid">
+                  <div>
+                    <h4>BEFORE</h4>
+                    <pre class="bs2-audit-json">{{ (event.before if event.before is defined else none)|tojson(indent=2) }}</pre>
+                  </div>
+                  <div>
+                    <h4>AFTER</h4>
+                    <pre class="bs2-audit-json">{{ (event.after if event.after is defined else none)|tojson(indent=2) }}</pre>
+                  </div>
+                  <div>
+                    <h4>METADATA</h4>
+                    <pre class="bs2-audit-json">{{ (event.metadata if event.metadata is defined else none)|tojson(indent=2) }}</pre>
+                  </div>
+                </div>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <nav class="bs2-pagination" aria-label="Paginación de audit ledger">
+      {% set current_page = pagination.page if pagination.page is defined else 1 %}
+      {% if pagination.has_prev %}
+      <a
+        class="bs2-btn bs2-btn-outline"
+        href="{{ url_for('admin_v2.audit_ledger', page=current_page - 1, per_page=selected_per_page, actor_id=filters.actor_id if filters.actor_id is defined else None, incident_id=filters.incident_id if filters.incident_id is defined else None, module_key=filters.module_key if filters.module_key is defined else None, action=filters.action if filters.action is defined else None, date_from=filters.date_from if filters.date_from is defined else None, date_to=filters.date_to if filters.date_to is defined else None) }}"
+      ><i class="fa-solid fa-chevron-left"></i> Prev</a>
+      {% else %}
+      <span class="bs2-btn bs2-btn-outline bs2-btn-disabled" aria-disabled="true"><i class="fa-solid fa-chevron-left"></i> Prev</span>
+      {% endif %}
+
+      <span class="bs2-pagination-meta">Página {{ current_page }} de {{ pagination.pages if pagination.pages is defined and pagination.pages else 1 }}</span>
+
+      {% if pagination.has_next %}
+      <a
+        class="bs2-btn bs2-btn-outline"
+        href="{{ url_for('admin_v2.audit_ledger', page=current_page + 1, per_page=selected_per_page, actor_id=filters.actor_id if filters.actor_id is defined else None, incident_id=filters.incident_id if filters.incident_id is defined else None, module_key=filters.module_key if filters.module_key is defined else None, action=filters.action if filters.action is defined else None, date_from=filters.date_from if filters.date_from is defined else None, date_to=filters.date_to if filters.date_to is defined else None) }}"
+      >Next <i class="fa-solid fa-chevron-right"></i></a>
+      {% else %}
+      <span class="bs2-btn bs2-btn-outline bs2-btn-disabled" aria-disabled="true">Next <i class="fa-solid fa-chevron-right"></i></span>
+      {% endif %}
+    </nav>
+    {% else %}
+    <div class="bs2-empty">
+      No hay eventos de auditoría para los filtros actuales.<br>
+      Ajusta criterios o limpia filtros para ampliar la búsqueda.
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
