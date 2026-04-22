@@ -12,6 +12,7 @@ from flask_login import current_user, login_required
 from services.classifier import classify_mentions
 from services.file_loader import detect_format, read_full_as_tsv
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -38,6 +39,7 @@ from services.csv_analysis import analyze_csv, generate_summary_csv
 load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config['UPLOAD_FOLDER'] = 'scratch'
 
 # Security configuration

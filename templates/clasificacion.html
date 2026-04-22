@@ -1,33 +1,33 @@
 ﻿{% extends 'base.html' %}
-{% block title %}Clasificacion de Data | Data Intel{% endblock %}
+{% block title %}Clasificacion de Data | Newlink{% endblock %}
 {% block page_name %}Clasificacion{% endblock %}
 
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="page-header">
-  <h1>Clasificacion de Data</h1>
-  <p>Organiza tus menciones automaticamente definiendo categorias y tematicas con palabras clave.</p>
-</div>
-
 <!-- PASO 1: CARGA DE ARCHIVO -->
-<div class="card" style="margin-bottom: 24px;">
-  <div class="card-title"><i class="fa-solid fa-file-csv"></i> 1. Seleccionar Archivo</div>
+<div class="card section-card view-start">
+  <div class="card-title"><i class="fa-solid fa-file-csv"></i> 1. Seleccionar Archivo
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Organiza menciones automaticamente definiendo categorias y tematicas con palabras clave.</span>
+    </div>
+  </div>
   <div class="upload-zone" id="drop-zone" onclick="document.getElementById('csv_file').click()">
     <i class="fa-solid fa-cloud-arrow-up"></i>
     <div class="upload-zone-title">Haz clic o arrastra tu archivo</div>
     <div class="upload-zone-hint" id="file-name-display">No se ha seleccionado ningun archivo (.csv, .xlsx, .xls)</div>
-    <input type="file" id="csv_file" accept=".csv,.xlsx,.xls,.txt" style="display: none;" />
+    <input type="file" id="csv_file" accept=".csv,.xlsx,.xls,.txt" class="is-hidden" />
   </div>
 </div>
 
 
 <!-- PASO 1.5: MAPEO DE COLUMNAS (aparece tras detectar el archivo) -->
-<div class="card animate-fade" id="mapping-card" style="display:none; margin-bottom: 24px;">
+<div class="card animate-fade section-card is-hidden" id="mapping-card">
   <div class="card-title"><i class="fa-solid fa-table-columns"></i> 1.5. Mapear Columnas</div>
-  <p class="form-hint" style="margin-bottom:16px;">El sistema detecto el formato automaticamente. Indica cual columna contiene el texto a clasificar.</p>
+  <p class="form-hint mb-16">El sistema detecto el formato automaticamente. Indica cual columna contiene el texto a clasificar.</p>
 
-  <div class="form-row" style="margin-bottom: 16px; align-items: flex-end;">
+  <div class="form-row form-row-align-end mb-16">
     <div class="form-group">
       <label class="form-label" for="sel_text_col"><strong>Columna de texto</strong> (requerido)</label>
       <select id="sel_text_col" class="form-input"></select>
@@ -39,16 +39,16 @@
   </div>
 
   <!-- Manual encoding / separator overrides -->
-  <details style="margin-bottom:16px;">
-    <summary style="cursor:pointer; font-size:0.85rem; color:var(--c-text-secondary); user-select:none;">
-      <i class="fa-solid fa-wrench" style="margin-right:4px;"></i>
+  <details class="mb-16">
+    <summary class="muted-inline summary-advanced">
+      <i class="fa-solid fa-wrench"></i>
       Opciones avanzadas de formato
-      <span style="font-size:0.78rem; margin-left:6px; color:var(--c-warning);">(cambia solo si los datos se ven incorrectos)</span>
+      <span class="hint-sm summary-warning">(cambia solo si los datos se ven incorrectos)</span>
     </summary>
-    <div class="form-row" style="margin-top:12px; align-items:flex-end;">
+    <div class="form-row form-row-align-end mt-12">
       <div class="form-group">
         <label class="form-label" for="sel_encoding">Codificacion</label>
-        <select id="sel_encoding" class="form-input" style="font-size:0.85rem;">
+        <select id="sel_encoding" class="form-input muted-inline">
           <option value="">Auto-detectada</option>
           <option value="utf-8">UTF-8</option>
           <option value="utf-16">UTF-16</option>
@@ -58,7 +58,7 @@
       </div>
       <div class="form-group">
         <label class="form-label" for="sel_separator">Separador</label>
-        <select id="sel_separator" class="form-input" style="font-size:0.85rem;">
+        <select id="sel_separator" class="form-input muted-inline">
           <option value="">Auto-detectado</option>
           <option value=",">Coma ( , )</option>
           <option value=";">Punto y Coma ( ; )</option>
@@ -67,105 +67,105 @@
         </select>
       </div>
     </div>
-    <p class="form-hint" style="margin-top:4px; font-size:0.78rem;">
+    <p class="form-hint hint-sm mt-8">
       <i class="fa-solid fa-circle-info"></i>
       Si cambias la codificacion o separador, haz clic en
       <strong>Volver a detectar</strong> para actualizar la vista previa.
     </p>
-    <button type="button" class="btn btn-secondary" style="margin-top:8px; padding:6px 14px; font-size:0.83rem;" onclick="redetectFile()">
+    <button type="button" class="btn btn-secondary btn-compact mt-8" onclick="redetectFile()">
       <i class="fa-solid fa-rotate"></i> Volver a detectar
     </button>
   </details>
 
-  <div id="col-preview-wrap" style="overflow-x:auto; max-height:180px; border:1px solid var(--c-border-light); border-radius:var(--r-md);">
-    <table id="col-preview-table" style="width:100%; border-collapse:collapse; font-size:0.8rem;"></table>
+  <div id="col-preview-wrap" class="col-preview-wrap">
+    <table id="col-preview-table" class="col-preview-table"></table>
   </div>
 </div>
 <!-- PASO 2: REGLAS -->
-<div class="card" id="settings-card" style="margin-bottom: 24px;">
+<div class="card section-card" id="settings-card">
   <div class="card-title"><i class="fa-solid fa-sliders"></i> 2. Configuracion y Reglas</div>
 
-  <div class="form-row" style="margin-bottom: 20px;">
+  <div class="form-row mb-20">
     <div class="form-group">
       <label class="form-label" for="default_val">Etiqueta para filas no clasificadas</label>
       <input type="text" id="default_val" class="form-input" placeholder="Sin Clasificar" value="Sin Clasificar">
     </div>
 
-    <div class="form-group" style="background: var(--c-warning-bg); padding: 16px; border-radius: var(--r-md); border: 1px solid var(--c-warning);">
-      <label class="form-check" style="font-weight: 600; color: var(--c-warning);">
+    <div class="form-group warning-panel">
+      <label class="form-check">
         <input type="checkbox" id="use_keywords">
         Doble Pasada (Columna 'Keywords')
       </label>
-      <p class="form-hint" style="color: var(--c-warning); margin-top: 6px;">
+      <p class="form-hint mt-8">
         <strong>Nota:</strong> Mas preciso al capturar menciones sin texto en 'Hit Sentence', pero puede aumentar el tiempo.
       </p>
     </div>
   </div>
 
-  <p class="form-hint" style="margin-bottom: 20px;">
+  <p class="form-hint mb-20">
     Las menciones se buscaran primero en <strong>'Hit Sentence'</strong> y opcionalmente en <strong>'Keywords'</strong>.
   </p>
 
   <!-- Preset management bar -->
-  <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; padding:12px 16px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light); flex-wrap:wrap;">
-    <i class="fa-solid fa-bookmark" style="color:var(--c-primary);"></i>
-    <span style="font-size:0.85rem; color:var(--c-text-secondary);">Presets:</span>
-    <select id="preset-select" class="form-input" style="flex:1; max-width:260px; font-size:0.85rem;" onchange="onPresetChanged(this.value)">
+  <div class="preset-bar">
+    <i class="fa-solid fa-bookmark icon-primary"></i>
+    <span class="muted-inline">Presets:</span>
+    <select id="preset-select" class="form-input preset-select" onchange="onPresetChanged(this.value)">
       <option value="">-- Seleccionar preset guardado --</option>
     </select>
-    <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="savePreset()" title="Guardar nuevo preset">
+    <button class="btn btn-secondary btn-compact" onclick="savePreset()" title="Guardar nuevo preset">
       <i class="fa-solid fa-floppy-disk"></i> Guardar
     </button>
-    <button id="btn-preset-overwrite" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem;" onclick="overwritePreset()" disabled title="Sobrescribir reglas del preset seleccionado">
+    <button id="btn-preset-overwrite" class="btn btn-outline btn-compact" onclick="overwritePreset()" disabled title="Sobrescribir reglas del preset seleccionado">
       <i class="fa-solid fa-arrows-rotate"></i> Actualizar
     </button>
-    <button id="btn-preset-rename" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem;" onclick="renamePreset()" disabled title="Renombrar preset">
+    <button id="btn-preset-rename" class="btn btn-outline btn-compact" onclick="renamePreset()" disabled title="Renombrar preset">
       <i class="fa-solid fa-pen"></i>
     </button>
-    <button id="btn-preset-delete" class="btn btn-outline" style="padding:6px 14px; font-size:0.83rem; color:var(--c-danger); border-color:var(--c-danger);" onclick="deletePreset()" disabled title="Eliminar preset">
+    <button id="btn-preset-delete" class="btn btn-outline btn-compact btn-danger-outline" onclick="deletePreset()" disabled title="Eliminar preset">
       <i class="fa-solid fa-trash"></i>
     </button>
   </div>
   <div id="rules-container"></div>
 
-  <button type="button" class="btn-add" onclick="addCategory()" style="margin-top: 12px;">
+  <button type="button" class="btn-add mt-12" onclick="addCategory()">
     <i class="fa-solid fa-plus"></i> Anadir Nueva Categoria
   </button>
 </div>
 
 <!-- PASO 3: RESULTADOS -->
-<div class="card animate-fade" id="results-card" style="display: none; margin-bottom: 24px;">
+<div class="card animate-fade section-card is-hidden" id="results-card">
   <div class="card-title"><i class="fa-solid fa-chart-pie"></i> Insights y Resultados</div>
 
-  <div id="insights-text" class="flash-msg info" style="margin-bottom: 24px;"></div>
+  <div id="insights-text" class="flash-msg info mb-20"></div>
 
-  <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; margin-bottom: 24px;">
-    <div style="background: var(--c-bg); padding: 16px; border-radius: var(--r-lg); border: 1px solid var(--c-border-light);">
+  <div class="grid-results">
+    <div class="surface-panel">
       <canvas id="distChart"></canvas>
     </div>
     <div id="results-summary"></div>
   </div>
 
-  <div id="results-tree" style="background: var(--c-bg); padding: 20px; border-radius: var(--r-lg); border: 1px solid var(--c-border-light); max-height: 400px; overflow-y: auto;"></div>
+  <div id="results-tree" class="surface-panel-scroll"></div>
 
-  <div style="margin-top: 24px; display: flex; gap: 12px;">
+  <div class="row-actions mt-24">
     <button class="btn btn-secondary" onclick="resetForm()">
       <i class="fa-solid fa-arrow-left"></i> Volver a ajustar
     </button>
-    <a id="download-link" href="#" class="btn btn-primary" style="flex-grow: 1; text-align: center;">
+    <a id="download-link" href="#" class="btn btn-primary download-grow">
       <i class="fa-solid fa-download"></i> Descargar Archivo Clasificado
     </a>
   </div>
 </div>
 
 <!-- ACCION FINAL -->
-<div id="action-bar-container" style="text-align: center; margin-top: 32px;">
+<div id="action-bar-container" class="text-center mt-24">
   <div class="classifier-actions">
     <div>
-      <span style="color: var(--c-text-secondary); font-size: 0.88rem;">Listo para procesar:</span>
-      <strong style="color: var(--c-primary);" id="status-text">Definir reglas y subir archivo</strong>
+      <span class="status-caption">Listo para procesar:</span>
+      <strong class="status-value" id="status-text">Definir reglas y subir archivo</strong>
     </div>
-    <div style="width: 1px; height: 20px; background: var(--c-border);"></div>
+    <div class="row-divider"></div>
     <button id="btnProcess" onclick="processClassification()" class="btn btn-primary">
       <i class="fa-solid fa-bolt"></i> Clasificar Datos
     </button>
@@ -173,15 +173,15 @@
 </div>
 
 <!-- PROGRESS BAR (chunked mode) -->
-<div id="progress-container" style="display:none; margin-top: 20px; padding: 20px; background: var(--c-white); border: 1px solid var(--c-border-light); border-radius: var(--r-lg);">
-  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-    <span style="font-size: 0.88rem; color: var(--c-text-secondary);">Procesando lotes de datos...</span>
-    <span id="progress-label" style="font-size: 0.88rem; font-weight: 600; color: var(--c-primary);">0%</span>
+<div id="progress-container" class="progress-shell is-hidden">
+  <div class="progress-head">
+    <span class="progress-text">Procesando lotes de datos...</span>
+    <span id="progress-label" class="progress-label">0%</span>
   </div>
-  <div style="background: var(--c-bg); border-radius: 999px; height: 10px; overflow: hidden;">
-    <div id="progress-bar" style="height: 100%; width: 0%; background: var(--c-primary); border-radius: 999px; transition: width 0.3s ease;"></div>
+  <div class="progress-track">
+    <div id="progress-bar" class="progress-bar progress-bar-dynamic"></div>
   </div>
-  <div id="progress-detail" style="margin-top: 8px; font-size: 0.8rem; color: var(--c-text-secondary); text-align: center;"></div>
+  <div id="progress-detail" class="progress-detail"></div>
 </div>
 <script>
     let myChart = null;
@@ -250,11 +250,11 @@
         tbl.innerHTML = '';
         const thead = tbl.createTHead();
         const hrow = thead.insertRow();
-        data.columns.forEach(c => { const th = document.createElement('th'); th.textContent = c; th.style.cssText = 'padding:6px 8px; background:var(--c-primary-light); font-size:0.78rem; white-space:nowrap;'; hrow.appendChild(th); });
+        data.columns.forEach(c => { const th = document.createElement('th'); th.className = 'col-preview-th'; th.textContent = c; hrow.appendChild(th); });
         const tbody = tbl.createTBody();
         (data.preview || []).forEach(row => {
             const tr = tbody.insertRow();
-            data.columns.forEach(c => { const td = tr.insertCell(); td.textContent = row[c] != null ? row[c] : ''; td.style.cssText = 'padding:5px 8px; border-bottom:1px solid var(--c-border-light); font-size:0.78rem; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'; });
+            data.columns.forEach(c => { const td = tr.insertCell(); td.className = 'col-preview-td'; td.textContent = row[c] != null ? row[c] : ''; });
         });
         card.style.display = 'block';
     }
@@ -273,16 +273,16 @@
             const catDiv = document.createElement('div');
             catDiv.className = 'rule-category animate-fade';
             catDiv.innerHTML = '<div class="category-header">' +
-                '<input type="text" class="form-input" style="border:none; background:transparent; font-size:1.05rem; font-weight:600; padding:4px 8px; width:60%;" value="' + cat.name.replace(/"/g,'&quot;') + '" onchange="updateCategoryName(' + catIdx + ', this.value)" onfocus="this.style.background=\'var(--c-white)\';this.style.border=\'1px solid var(--c-border)\'" onblur="this.style.background=\'transparent\';this.style.border=\'none\'">' +
+                '<input type="text" class="form-input category-title-input" value="' + cat.name.replace(/"/g,'&quot;') + '" onchange="updateCategoryName(' + catIdx + ', this.value)">' +
                 '<button class="btn-remove" onclick="removeCategory(' + catIdx + ')"><i class="fa-solid fa-trash"></i> Eliminar</button>' +
                 '</div><div id="tematicas-' + catIdx + '">' +
                 cat.tematicas.map((tem, temIdx) =>
                     '<div class="tematica-group animate-fade"><div class="tematica-header">' +
-                    '<input type="text" class="form-input" placeholder="Tematica" style="font-weight:600; width:40%; padding:6px 10px;" value="' + tem.name.replace(/"/g,'&quot;') + '" onchange="updateTematicaName(' + catIdx + ',' + temIdx + ', this.value)">' +
+                    '<input type="text" class="form-input tematica-name-input" placeholder="Tematica" value="' + tem.name.replace(/"/g,'&quot;') + '" onchange="updateTematicaName(' + catIdx + ',' + temIdx + ', this.value)">' +
                     '<button class="btn-remove" onclick="removeTematica(' + catIdx + ',' + temIdx + ')"><i class="fa-solid fa-xmark"></i></button>' +
-                    '</div><input type="text" class="form-input" placeholder="Palabras clave (separadas por comas)" style="font-size:0.85rem;" value="' + tem.keywords.replace(/"/g,'&quot;') + '" onchange="updateKeywords(' + catIdx + ',' + temIdx + ', this.value)"></div>'
+                    '</div><input type="text" class="form-input tematica-keywords-input" placeholder="Palabras clave (separadas por comas)" value="' + tem.keywords.replace(/"/g,'&quot;') + '" onchange="updateKeywords(' + catIdx + ',' + temIdx + ', this.value)"></div>'
                 ).join('') + '</div>' +
-                '<button type="button" class="btn-add" onclick="addTematica(' + catIdx + ')" style="margin-top:8px;"><i class="fa-solid fa-plus"></i> Anadir Tematica</button>';
+                '<button type="button" class="btn-add mt-8" onclick="addTematica(' + catIdx + ')"><i class="fa-solid fa-plus"></i> Anadir Tematica</button>';
             container.appendChild(catDiv);
         });
     }
@@ -535,20 +535,20 @@
             : '<strong>Resumen:</strong> No se han detectado categorias predominantes. ';
         insightMsg += 'Clasificado: <strong>' + percent + '%</strong> del total.';
         insightsDiv.innerHTML = '<i class="fa-solid fa-lightbulb"></i> ' + insightMsg;
-        summary.innerHTML = '<div style="background:var(--c-primary-light); padding:20px; border-radius:var(--r-lg); height:100%;">' +
-            '<div style="margin-bottom:16px;"><div style="font-size:2.2rem; font-weight:700; color:var(--c-primary);">' + percent + '%</div><div style="font-size:0.82rem; color:var(--c-text-secondary);">Tasa de Clasificacion</div></div>' +
-            '<div style="font-size:0.92rem;">' +
-            '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>Total:</span><strong>' + totalRows + '</strong></div>' +
-            '<div style="display:flex; justify-content:space-between; margin-bottom:8px; color:var(--c-success);"><span>Clasificados:</span><strong>' + classifiedCount + '</strong></div>' +
-            '<div style="display:flex; justify-content:space-between; color:var(--c-danger);"><span>Sin Clasificar:</span><strong>' + unclassifiedCount + '</strong></div></div></div>';
+        summary.innerHTML = '<div class="summary-panel">' +
+            '<div class="summary-head"><div class="summary-percent">' + percent + '%</div><div class="summary-label">Tasa de Clasificacion</div></div>' +
+            '<div class="summary-stats">' +
+            '<div class="summary-row"><span>Total:</span><strong>' + totalRows + '</strong></div>' +
+            '<div class="summary-row summary-row-success"><span>Clasificados:</span><strong>' + classifiedCount + '</strong></div>' +
+            '<div class="summary-row summary-row-danger"><span>Sin Clasificar:</span><strong>' + unclassifiedCount + '</strong></div></div></div>';
         renderChart(result.stats, defaultVal);
         const tree = document.getElementById('results-tree');
-        if (tree) { tree.innerHTML = "<h4 style='margin-bottom:16px; border-bottom:2px solid var(--c-primary); display:inline-block; padding-bottom:4px;'>Desglose por Categoria</h4>"; }
+        if (tree) { tree.innerHTML = '<h4 class="tree-title">Desglose por Categoria</h4>'; }
         Object.keys(result.stats).sort((a,b) => a === defaultVal ? 1 : b === defaultVal ? -1 : a.localeCompare(b)).forEach(catName => {
             const data = result.stats[catName]; if (!data || !tree) return;
-            const catNode = document.createElement('div'); catNode.style.marginBottom = "12px";
-            catNode.innerHTML = '<div style="display:flex; justify-content:space-between; font-weight:600; background:var(--c-white); padding:10px 14px; border-radius:var(--r-md); border:1px solid var(--c-border-light);"><span><i class="fa-solid fa-folder-open" style="color:var(--c-accent); margin-right:8px;"></i>' + catName + '</span><span class="badge badge-primary">' + (data.total||0) + '</span></div>' +
-                '<div style="padding-left:20px; margin-top:4px;">' + (data.tematicas ? Object.entries(data.tematicas).sort((a,b)=>b[1]-a[1]).map(([tem,count])=>'<div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:5px 10px; border-bottom:1px dashed var(--c-border-light);"><span style="color:var(--c-text-secondary);">&#x2022; '+tem+'</span><span style="font-weight:600;">'+count+'</span></div>').join(''):'') + '</div>';
+            const catNode = document.createElement('div'); catNode.className = 'tree-node';
+            catNode.innerHTML = '<div class="tree-node-head"><span><i class="fa-solid fa-folder-open tree-node-icon"></i>' + catName + '</span><span class="badge badge-primary">' + (data.total||0) + '</span></div>' +
+                '<div class="tree-node-list">' + (data.tematicas ? Object.entries(data.tematicas).sort((a,b)=>b[1]-a[1]).map(([tem,count])=>'<div class="tree-node-item"><span class="tree-node-item-name">&#x2022; '+tem+'</span><span class="tree-node-item-count">'+count+'</span></div>').join(''):'') + '</div>';
             tree.appendChild(catNode);
         });
         document.getElementById('download-link').href = result.download_url;
@@ -581,10 +581,84 @@
     #results-tree::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 10px; }
     #results-tree::-webkit-scrollbar-thumb:hover { background: var(--c-primary); }
 
-    @media (max-width: 768px) {
-      #results-card div[style*="grid-template-columns: 1fr 1.5fr"] {
-        grid-template-columns: 1fr !important;
-      }
+    .summary-advanced { cursor: pointer; user-select: none; }
+    .summary-warning { margin-left: 6px; color: var(--c-warning); }
+    .col-preview-th {
+      padding: 6px 8px;
+      background: var(--c-primary-light);
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+    .col-preview-td {
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--c-border-light);
+      font-size: 0.78rem;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .category-title-input {
+      border: none;
+      background: transparent;
+      font-size: 1.05rem;
+      font-weight: 600;
+      padding: 4px 8px;
+      width: 60%;
+    }
+    .category-title-input:focus {
+      background: var(--c-white);
+      border: 1px solid var(--c-border);
+    }
+    .tematica-name-input {
+      font-weight: 600;
+      width: 40%;
+      padding: 6px 10px;
+    }
+    .tematica-keywords-input { font-size: 0.85rem; }
+    .summary-panel {
+      background: var(--c-primary-light);
+      padding: 20px;
+      border-radius: var(--r-lg);
+      height: 100%;
+    }
+    .summary-head { margin-bottom: 16px; }
+    .summary-percent { font-size: 2.2rem; font-weight: 700; color: var(--c-primary); }
+    .summary-label { font-size: 0.82rem; color: var(--c-text-secondary); }
+    .summary-stats { font-size: 0.92rem; }
+    .summary-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .summary-row-success { color: var(--c-success); }
+    .summary-row-danger { color: var(--c-danger); margin-bottom: 0; }
+    .tree-title {
+      margin-bottom: 16px;
+      border-bottom: 2px solid var(--c-primary);
+      display: inline-block;
+      padding-bottom: 4px;
+    }
+    .tree-node { margin-bottom: 12px; }
+    .tree-node-head {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 600;
+      background: var(--c-white);
+      padding: 10px 14px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--c-border-light);
+    }
+    .tree-node-icon { color: var(--c-accent); margin-right: 8px; }
+    .tree-node-list { padding-left: 20px; margin-top: 4px; }
+    .tree-node-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      padding: 5px 10px;
+      border-bottom: 1px dashed var(--c-border-light);
+    }
+    .tree-node-item-name { color: var(--c-text-secondary); }
+    .tree-node-item-count { font-weight: 600; }
+    .progress-bar-dynamic {
+      width: 0%;
+      transition: width 0.3s ease;
     }
 </style>
 {% endblock %}

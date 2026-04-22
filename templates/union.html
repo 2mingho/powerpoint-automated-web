@@ -1,16 +1,17 @@
 {% extends 'base.html' %}
-{% block title %}Union de Archivos | Data Intel{% endblock %}
+{% block title %}Union de Archivos | Newlink{% endblock %}
 {% block page_name %}Union de Archivos{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>Union de Archivos</h1>
-  <p>Une multiples archivos tabulares en uno solo. Soporta CSV, Excel (.xlsx, .xls) con deteccion automatica de formato.</p>
-</div>
 
 <!-- PASO 1: SELECCION DE MODO -->
-<div class="card" style="margin-bottom: 24px;">
-  <div class="card-title"><i class="fa-solid fa-sliders"></i> 1. Seleccionar Modo</div>
+<div class="card section-card view-start">
+  <div class="card-title"><i class="fa-solid fa-sliders"></i> 1. Seleccionar Modo
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Une multiples archivos tabulares en uno solo. Soporta CSV y Excel (.xlsx, .xls) con deteccion automatica de formato.</span>
+    </div>
+  </div>
   <div class="merge-mode-toggle">
     <button id="btn-mode-default" class="merge-mode-btn active" onclick="setMode('default')">
       <i class="fa-solid fa-layer-group"></i>
@@ -30,34 +31,34 @@
 </div>
 
 <!-- PASO 2: CARGA DE ARCHIVOS (DEFAULT MODE) -->
-<div id="section-default" class="card animate-fade" style="margin-bottom: 24px;">
+<div id="section-default" class="card animate-fade section-card">
   <div class="card-title"><i class="fa-solid fa-file-arrow-up"></i> 2. Subir Archivos (minimo 2)</div>
   <div class="upload-zone" id="drop-zone-default" onclick="document.getElementById('files-default').click()">
     <i class="fa-solid fa-cloud-arrow-up"></i>
     <div class="upload-zone-title">Haz clic o arrastra tus archivos aqui</div>
     <div class="upload-zone-hint">.csv, .xlsx, .xls — Puedes seleccionar varios</div>
-    <input type="file" id="files-default" accept=".csv,.xlsx,.xls,.txt" multiple style="display:none;" />
+    <input type="file" id="files-default" accept=".csv,.xlsx,.xls,.txt" multiple class="is-hidden" />
   </div>
-  <div id="file-list-default" style="margin-top: 16px;"></div>
+  <div id="file-list-default" class="mt-16"></div>
 </div>
 
 <!-- PASO 2: CARGA DE ARCHIVOS (ADVANCED MODE) -->
-<div id="section-advanced" class="card animate-fade" style="display:none; margin-bottom: 24px;">
+<div id="section-advanced" class="card animate-fade section-card is-hidden">
   <div class="card-title"><i class="fa-solid fa-file-arrow-up"></i> 2. Subir Archivos (2 archivos)</div>
-  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+  <div class="grid-2">
     <!-- File A -->
     <div>
-      <h4 style="margin-bottom: 12px; color: var(--c-primary);"><i class="fa-solid fa-a"></i> Archivo Principal (estructura base)</h4>
+      <h4 class="mb-12"><i class="fa-solid fa-a"></i> Archivo Principal (estructura base)</h4>
       <div class="upload-zone upload-zone-sm" id="drop-zone-a" onclick="document.getElementById('file-a').click()">
         <i class="fa-solid fa-cloud-arrow-up"></i>
         <div class="upload-zone-hint" id="file-a-name">Seleccionar archivo A</div>
-        <input type="file" id="file-a" accept=".csv,.xlsx,.xls,.txt" style="display:none;" />
+        <input type="file" id="file-a" accept=".csv,.xlsx,.xls,.txt" class="is-hidden" />
       </div>
-      <div id="settings-a" class="file-settings" style="display:none;">
-        <div class="form-row" style="gap: 8px;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size:0.72rem;">Codificacion</label>
-            <select id="enc-a" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+      <div id="settings-a" class="file-settings is-hidden">
+        <div class="form-row form-row-compact">
+          <div class="form-group mb-0">
+            <label class="form-label label-xs">Codificacion</label>
+            <select id="enc-a" class="form-select control-sm">
               <option value="">Auto</option>
               <option value="utf-8">UTF-8</option>
               <option value="utf-16">UTF-16</option>
@@ -65,9 +66,9 @@
               <option value="cp1252">CP-1252</option>
             </select>
           </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size:0.72rem;">Separador</label>
-            <select id="sep-a" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+          <div class="form-group mb-0">
+            <label class="form-label label-xs">Separador</label>
+            <select id="sep-a" class="form-select control-sm">
               <option value="">Auto</option>
               <option value="&#9;">Tab</option>
               <option value=",">Coma</option>
@@ -77,21 +78,21 @@
           </div>
         </div>
       </div>
-      <div id="preview-a" style="margin-top: 8px;"></div>
+      <div id="preview-a" class="mt-8"></div>
     </div>
     <!-- File B -->
     <div>
-      <h4 style="margin-bottom: 12px; color: var(--c-text-secondary);"><i class="fa-solid fa-b"></i> Archivo Secundario</h4>
+      <h4 class="mb-12 muted-inline"><i class="fa-solid fa-b"></i> Archivo Secundario</h4>
       <div class="upload-zone upload-zone-sm" id="drop-zone-b" onclick="document.getElementById('file-b').click()">
         <i class="fa-solid fa-cloud-arrow-up"></i>
         <div class="upload-zone-hint" id="file-b-name">Seleccionar archivo B</div>
-        <input type="file" id="file-b" accept=".csv,.xlsx,.xls,.txt" style="display:none;" />
+        <input type="file" id="file-b" accept=".csv,.xlsx,.xls,.txt" class="is-hidden" />
       </div>
-      <div id="settings-b" class="file-settings" style="display:none;">
-        <div class="form-row" style="gap: 8px;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size:0.72rem;">Codificacion</label>
-            <select id="enc-b" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+      <div id="settings-b" class="file-settings is-hidden">
+        <div class="form-row form-row-compact">
+          <div class="form-group mb-0">
+            <label class="form-label label-xs">Codificacion</label>
+            <select id="enc-b" class="form-select control-sm">
               <option value="">Auto</option>
               <option value="utf-8">UTF-8</option>
               <option value="utf-16">UTF-16</option>
@@ -99,9 +100,9 @@
               <option value="cp1252">CP-1252</option>
             </select>
           </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size:0.72rem;">Separador</label>
-            <select id="sep-b" class="form-select" style="font-size:0.8rem; padding:6px 8px;">
+          <div class="form-group mb-0">
+            <label class="form-label label-xs">Separador</label>
+            <select id="sep-b" class="form-select control-sm">
               <option value="">Auto</option>
               <option value="&#9;">Tab</option>
               <option value=",">Coma</option>
@@ -111,53 +112,53 @@
           </div>
         </div>
       </div>
-      <div id="preview-b" style="margin-top: 8px;"></div>
+      <div id="preview-b" class="mt-8"></div>
     </div>
   </div>
 </div>
 
 <!-- PASO 3: MAPEO DE COLUMNAS (ADVANCED ONLY) -->
-<div id="section-mapping" class="card animate-fade" style="display:none; margin-bottom: 24px;">
+<div id="section-mapping" class="card animate-fade section-card is-hidden">
   <div class="card-title"><i class="fa-solid fa-arrows-left-right"></i> 3. Mapeo de Columnas</div>
-  <p class="form-hint" style="margin-bottom: 16px;">Empareja cada columna del <strong>Archivo A</strong> con su equivalente en el <strong>Archivo B</strong>. Las columnas con nombres similares se auto-sugieren.</p>
-  <div id="mapping-grid" style="display: flex; flex-direction: column; gap: 8px;"></div>
+  <p class="form-hint mb-16">Empareja cada columna del <strong>Archivo A</strong> con su equivalente en el <strong>Archivo B</strong>. Las columnas con nombres similares se auto-sugieren.</p>
+  <div id="mapping-grid" class="mapping-grid"></div>
 
   <!-- Extra Columns -->
-  <div style="margin-top: 20px; padding-top: 16px; border-top: 2px dashed var(--c-border-light);">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
-      <h4 style="margin:0; font-size:0.92rem; color:var(--c-text-secondary);">
-        <i class="fa-solid fa-plus-circle" style="color:var(--c-primary);"></i> Columnas Adicionales
+  <div class="section-divider">
+    <div class="row-between mb-12">
+      <h4 class="subtle-title">
+        <i class="fa-solid fa-plus-circle icon-primary"></i> Columnas Adicionales
       </h4>
-      <button class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;" onclick="addExtraColumn()">
+      <button class="btn btn-secondary btn-compact" onclick="addExtraColumn()">
         <i class="fa-solid fa-plus"></i> Agregar Columna
       </button>
     </div>
-    <p class="form-hint" style="margin-bottom: 12px; font-size:0.78rem;">Agrega columnas que no existen en los archivos originales. Se llenaran con el valor que definas.</p>
+    <p class="form-hint mb-12 hint-sm">Agrega columnas que no existen en los archivos originales. Se llenaran con el valor que definas.</p>
     <div id="extra-columns-list"></div>
   </div>
 </div>
 
 <!-- PASO: RESULTADOS -->
-<div id="section-results" class="card animate-fade" style="display:none; margin-bottom: 24px;">
+<div id="section-results" class="card animate-fade section-card is-hidden">
   <div class="card-title"><i class="fa-solid fa-circle-check"></i> Resultado</div>
-  <div id="result-insights" class="flash-msg info" style="margin-bottom: 16px;"></div>
-  <div id="result-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"></div>
-  <div style="display: flex; gap: 12px;">
+  <div id="result-insights" class="flash-msg info mb-16"></div>
+  <div id="result-stats" class="grid-3-stats"></div>
+  <div class="row-actions">
     <button class="btn btn-secondary" onclick="resetAll()"><i class="fa-solid fa-arrow-left"></i> Nueva Union</button>
-    <a id="download-link" href="#" class="btn btn-primary" style="flex-grow:1; text-align:center;">
+    <a id="download-link" href="#" class="btn btn-primary download-grow">
       <i class="fa-solid fa-download"></i> Descargar Archivo Unido
     </a>
   </div>
 </div>
 
 <!-- ACCION FINAL -->
-<div id="action-bar" style="text-align:center; margin-top: 32px;">
+<div id="action-bar" class="text-center mt-24">
   <div class="classifier-actions">
     <div>
-      <span style="color: var(--c-text-secondary); font-size: 0.88rem;">Estado:</span>
-      <strong style="color: var(--c-primary);" id="status-text">Selecciona archivos para empezar</strong>
+      <span class="status-caption">Estado:</span>
+      <strong class="status-value" id="status-text">Selecciona archivos para empezar</strong>
     </div>
-    <div style="width: 1px; height: 20px; background: var(--c-border);"></div>
+    <div class="row-divider"></div>
     <button id="btnMerge" onclick="doMerge()" class="btn btn-primary" disabled>
       <i class="fa-solid fa-bolt"></i> Unir Archivos
     </button>
@@ -165,13 +166,13 @@
 </div>
 
 <!-- PROGRESS BAR -->
-<div id="progress-container" style="display:none; margin-top: 20px; padding: 20px; background: var(--c-white); border: 1px solid var(--c-border-light); border-radius: var(--r-lg);">
-  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-    <span style="font-size: 0.88rem; color: var(--c-text-secondary);">Procesando union...</span>
-    <span id="progress-label" style="font-size: 0.88rem; font-weight: 600; color: var(--c-primary);">...</span>
+<div id="progress-container" class="progress-shell is-hidden">
+  <div class="progress-head">
+    <span class="progress-text">Procesando union...</span>
+    <span id="progress-label" class="progress-label">...</span>
   </div>
-  <div style="background: var(--c-bg); border-radius: 999px; height: 10px; overflow: hidden;">
-    <div id="progress-bar" style="height: 100%; width: 100%; background: var(--c-primary); border-radius: 999px; animation: progressPulse 1.5s ease infinite;"></div>
+  <div class="progress-track">
+    <div id="progress-bar" class="progress-bar progress-bar-pulse"></div>
   </div>
 </div>
 
@@ -236,13 +237,13 @@ function renderDefaultFileList() {
     const cols = item.info.columns.slice(0, 6).join(', ') + (item.info.columns.length > 6 ? '...' : '');
     return '<div class="file-item animate-fade">' +
       '<div class="file-item-info">' +
-        '<i class="fa-solid fa-file-lines" style="color:var(--c-primary); font-size:1.1rem;"></i>' +
+        '<i class="fa-solid fa-file-lines file-item-icon"></i>' +
         '<div>' +
           '<strong>' + esc(item.file.name) + '</strong>' +
-          '<div style="font-size:0.78rem; color:var(--c-text-secondary);">' + item.info.columns.length + ' columnas · ' + esc(item.info.file_type) +
+          '<div class="file-item-meta">' + item.info.columns.length + ' columnas · ' + esc(item.info.file_type) +
             (item.info.encoding ? ' · ' + esc(item.info.encoding) : '') +
           '</div>' +
-          '<div style="font-size:0.72rem; color:var(--c-text-secondary); margin-top:2px;" title="' + esc(cols) + '">' + esc(cols) + '</div>' +
+          '<div class="file-item-cols" title="' + esc(cols) + '">' + esc(cols) + '</div>' +
         '</div>' +
       '</div>' +
       '<button class="btn btn-icon btn-outline" onclick="removeDefaultFile(' + i + ')" title="Quitar"><i class="fa-solid fa-xmark"></i></button>' +
@@ -291,8 +292,8 @@ async function loadAdvFile(side, file) {
 function renderPreview(containerId, info) {
   const el = document.getElementById(containerId);
   const cols = info.columns;
-  el.innerHTML = '<div style="font-size:0.75rem; color:var(--c-text-secondary); margin-bottom:4px;">' + cols.length + ' columnas detectadas</div>' +
-    '<div style="display:flex; flex-wrap:wrap; gap:4px;">' +
+  el.innerHTML = '<div class="preview-meta">' + cols.length + ' columnas detectadas</div>' +
+    '<div class="preview-chip-row">' +
     cols.map(c => '<span class="col-tag">' + esc(c) + '</span>').join('') +
     '</div>';
 }
@@ -314,8 +315,8 @@ function buildMappingGrid() {
       const exactIdx = colsBLower.indexOf(lowerA);
       if (exactIdx >= 0) bestMatch = colsB[exactIdx];
 
-      return '<div class="mapping-row animate-fade" style="animation-delay:' + (i * 30) + 'ms">' +
-        '<div class="mapping-col-a"><i class="fa-solid fa-table-columns" style="color:var(--c-primary);"></i> ' + esc(colA) + '</div>' +
+      return '<div class="mapping-row animate-fade" data-anim-delay="' + (i * 30) + '">' +
+        '<div class="mapping-col-a"><i class="fa-solid fa-table-columns icon-primary"></i> ' + esc(colA) + '</div>' +
         '<div class="mapping-arrow"><i class="fa-solid fa-arrow-left"></i></div>' +
         '<div><select class="form-select mapping-select" data-col-a="' + esc(colA) + '">' +
           '<option value="">— Ignorar —</option>' +
@@ -323,6 +324,10 @@ function buildMappingGrid() {
         '</select></div>' +
       '</div>';
     }).join('');
+
+  grid.querySelectorAll('.mapping-row[data-anim-delay]').forEach((row) => {
+    row.style.animationDelay = row.dataset.animDelay + 'ms';
+  });
 }
 
 // ─── Detect File ───
@@ -465,12 +470,11 @@ function addExtraColumn() {
   const container = document.getElementById('extra-columns-list');
   const row = document.createElement('div');
   row.id = 'extra-col-' + id;
-  row.className = 'animate-fade';
-  row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:8px;';
+  row.className = 'animate-fade extra-col-row';
   row.innerHTML =
-    '<input type="text" class="form-input" placeholder="Nombre de la columna" data-extra-name="' + id + '" style="flex:1; font-size:0.85rem;" />' +
-    '<input type="text" class="form-input" placeholder="Valor por defecto" data-extra-value="' + id + '" style="flex:1; font-size:0.85rem;" />' +
-    '<button class="btn btn-icon btn-outline" onclick="removeExtraColumn(' + id + ')" title="Quitar" style="padding:6px 10px;"><i class="fa-solid fa-xmark"></i></button>';
+    '<input type="text" class="form-input extra-col-input" placeholder="Nombre de la columna" data-extra-name="' + id + '" />' +
+    '<input type="text" class="form-input extra-col-input" placeholder="Valor por defecto" data-extra-value="' + id + '" />' +
+    '<button class="btn btn-icon btn-outline extra-col-remove" onclick="removeExtraColumn(' + id + ')" title="Quitar"><i class="fa-solid fa-xmark"></i></button>';
   container.appendChild(row);
 }
 
@@ -515,6 +519,16 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 .upload-zone i { font-size: 2rem; margin-bottom: 8px; display: block; }
 .upload-zone-title { font-weight: 600; font-size: 0.92rem; margin-bottom: 4px; }
 .upload-zone-hint { font-size: 0.78rem; }
+
+.file-item-icon { color: var(--c-primary); font-size: 1.1rem; }
+.file-item-meta { font-size: 0.78rem; color: var(--c-text-secondary); }
+.file-item-cols { font-size: 0.72rem; color: var(--c-text-secondary); margin-top: 2px; }
+.preview-meta { font-size: 0.75rem; color: var(--c-text-secondary); margin-bottom: 4px; }
+.preview-chip-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.extra-col-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.extra-col-input { flex: 1; font-size: 0.85rem; }
+.extra-col-remove { padding: 6px 10px; }
+.progress-bar-pulse { animation: progressPulse 1.5s ease infinite; }
 
 /* ─── Animate ─── */
 .animate-fade { animation: fadeIn 0.3s ease; }

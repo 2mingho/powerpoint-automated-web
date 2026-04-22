@@ -357,6 +357,18 @@
   gap: var(--sp-md);
 }
 
+.form-group-tight {
+  margin-bottom: 0;
+}
+
+.modal-hidden {
+  display: none;
+}
+
+.modal-push-left {
+  margin-right: auto;
+}
+
 .task-form-message {
   display: none;
   border-radius: var(--r-md);

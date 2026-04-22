@@ -13,8 +13,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}Data Intel{% endblock %}</title>
-    <meta name="description" content="Data Intelligence — Herramientas de análisis y reportes para Newlink Dominicana">
+    <title>{% block title %}Newlink{% endblock %}</title>
+    <meta name="description" content="Newlink — Herramientas de análisis y reportes para Newlink Dominicana">
     <link rel="shortcut icon" href="{{ url_for('static', filename='img/Logo-Data-Intelligence_01.ico') }}" type="image/x-icon" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,7 +47,7 @@
         <a href="{{ url_for('menu') }}">
           <img src="{{ url_for('static', filename='img/Newlink_logo.png') }}" alt="Logo Newlink" />
         </a>
-        <span class="sidebar-logo-text">DATA INTELLIGENCE</span>
+        <span class="sidebar-logo-text">Newlink</span>
       </div>
 
       <nav class="sidebar-nav">
@@ -122,7 +122,7 @@
           <i class="fa-solid fa-bars"></i>
         </button>
         <div class="topbar-breadcrumb">
-          <strong>{% block page_name %}Data Intelligence{% endblock %}</strong>
+          <strong>{% block page_name %}Newlink{% endblock %}</strong>
         </div>
       </div>
       <div class="topbar-right">

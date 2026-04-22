@@ -3,17 +3,20 @@
 {% block page_name %}Gestion de Areas{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>Gestion de Areas</h1>
-  <p>Administra las areas organizacionales para agrupar usuarios.</p>
-</div>
+
+<div class="admin-shell view-start">
 
 <!-- Create Area -->
-<div class="card" style="margin-bottom: 24px;">
-  <div class="card-title"><i class="fa-solid fa-plus-circle"></i> Nueva Area</div>
+<section class="admin-panel">
+  <div class="card-title"><i class="fa-solid fa-plus-circle"></i> Nueva Area
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Administra areas organizacionales para agrupar usuarios y facilitar filtros operativos.</span>
+    </div>
+  </div>
   <form method="POST" action="{{ url_for('admin.area_create') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="form-row" style="margin-bottom: 16px;">
+    <div class="form-row mb-16">
       <div class="form-group">
         <label class="form-label" for="name">Nombre del Area</label>
         <input type="text" id="name" name="name" class="form-input" placeholder="Ej: Marketing" required maxlength="100">
@@ -25,16 +28,16 @@
     </div>
     <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Crear Area</button>
   </form>
-</div>
+</section>
 
 <!-- Areas Table -->
-<div class="card">
+<section class="admin-panel admin-panel-tight">
   <div class="card-title"><i class="fa-solid fa-building"></i> Areas Existentes</div>
   {% if areas | length == 0 %}
-    <p style="color:var(--c-text-secondary); text-align:center; padding:20px;">No hay areas definidas aun.</p>
+    <p class="admin-empty">No hay areas definidas aun.</p>
   {% else %}
-  <div style="overflow-x: auto;">
-    <table class="stats-table" style="width:100%;">
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
       <thead>
         <tr><th>Nombre</th><th>Descripcion</th><th>Usuarios</th><th>Acciones</th></tr>
       </thead>
@@ -42,21 +45,21 @@
         {% for area in areas %}
         <tr>
           <td><strong>{{ area.name }}</strong></td>
-          <td style="color:var(--c-text-secondary); font-size:0.85rem;">{{ area.description or '—' }}</td>
+          <td class="text-muted-sm">{{ area.description or '—' }}</td>
           <td>{{ area.users | length }}</td>
           <td>
-            <div style="display:flex; gap:6px;">
-              <form method="POST" action="{{ url_for('admin.area_edit', area_id=area.id) }}" style="display:inline;" onsubmit="return editArea(event, this);">
+            <div class="inline-actions">
+              <form method="POST" action="{{ url_for('admin.area_edit', area_id=area.id) }}" class="inline-form" onsubmit="return editArea(event, this);">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="name" value="{{ area.name }}">
                 <input type="hidden" name="description" value="{{ area.description or '' }}">
-                <button type="submit" class="btn btn-outline" style="padding:4px 10px; font-size:0.8rem;" title="Editar">
+                <button type="submit" class="btn btn-outline btn-xs" title="Editar">
                   <i class="fa-solid fa-pen"></i>
                 </button>
               </form>
-              <form method="POST" action="{{ url_for('admin.area_delete', area_id=area.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar esta area?');">
+              <form method="POST" action="{{ url_for('admin.area_delete', area_id=area.id) }}" class="inline-form" onsubmit="return confirm('¿Eliminar esta area?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-outline" style="padding:4px 10px; font-size:0.8rem; color:var(--c-danger); border-color:var(--c-danger);" title="Eliminar">
+                <button type="submit" class="btn btn-outline btn-xs icon-danger" title="Eliminar">
                   <i class="fa-solid fa-trash"></i>
                 </button>
               </form>
@@ -68,6 +71,7 @@
     </table>
   </div>
   {% endif %}
+</section>
 </div>
 
 <script>

@@ -3,12 +3,13 @@ import functools
 import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, session
 from flask_login import login_required, current_user, login_user
+from sqlalchemy import func
 from werkzeug.security import generate_password_hash
 from extensions import db
 from models import User, ActivityLog, Role, Area
 
 # The default admin email — this account is fully protected
-DEFAULT_ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
+DEFAULT_ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com').strip().lower()
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -30,7 +31,7 @@ def admin_required(f):
 
 def is_default_admin(user):
     """Check if this user is the protected default admin account."""
-    return user.email == DEFAULT_ADMIN_EMAIL
+    return (user.email or '').strip().lower() == DEFAULT_ADMIN_EMAIL
 
 
 def log_activity(action, detail="", user_id=None):
@@ -73,7 +74,7 @@ def dashboard():
     total_areas = Area.query.count()
 
     # Exclude default admin's activity from dashboard
-    default_admin = User.query.filter_by(email=DEFAULT_ADMIN_EMAIL).first()
+    default_admin = User.query.filter(func.lower(User.email) == DEFAULT_ADMIN_EMAIL).first()
     log_query = ActivityLog.query
     if default_admin:
         log_query = log_query.filter(ActivityLog.user_id != default_admin.id)
@@ -112,7 +113,7 @@ def users_list():
         query = query.filter_by(role=role_filter)
 
     # Exclude the default admin from the user list
-    query = query.filter(User.email != DEFAULT_ADMIN_EMAIL)
+    query = query.filter(func.lower(User.email) != DEFAULT_ADMIN_EMAIL)
 
     users = query.order_by(User.created_at.desc()).all()
     all_roles = Role.query.order_by(Role.code).all()
@@ -133,7 +134,7 @@ def user_create():
 
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip()
+        email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         role = request.form.get('role', 'DI')
         area_id = request.form.get('area_id', '') or None
@@ -148,7 +149,7 @@ def user_create():
         if not password or len(password) < 8:
             flash('La contrasena debe tener al menos 8 caracteres.', 'error')
             return redirect(url_for('admin.user_create'))
-        if User.query.filter_by(email=email).first():
+        if User.query.filter(func.lower(User.email) == email).first():
             flash('Ya existe un usuario con ese correo.', 'error')
             return redirect(url_for('admin.user_create'))
 
@@ -192,7 +193,7 @@ def user_edit(user_id):
 
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip()
+        email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         role = request.form.get('role', user.role)
         area_id = request.form.get('area_id', '') or None
@@ -211,7 +212,7 @@ def user_edit(user_id):
             changes.append(f'nombre: {user.username} -> {username}')
             user.username = username
         if user.email != email and email:
-            existing = User.query.filter_by(email=email).first()
+            existing = User.query.filter(func.lower(User.email) == email).first()
             if existing and existing.id != user.id:
                 flash('Ya existe un usuario con ese correo.', 'error')
                 return redirect(url_for('admin.user_edit', user_id=user_id))
@@ -317,7 +318,7 @@ def activity_log():
     query = ActivityLog.query
 
     # Always exclude default admin's activity
-    default_admin = User.query.filter_by(email=DEFAULT_ADMIN_EMAIL).first()
+    default_admin = User.query.filter(func.lower(User.email) == DEFAULT_ADMIN_EMAIL).first()
     if default_admin:
         query = query.filter(ActivityLog.user_id != default_admin.id)
 
@@ -349,7 +350,7 @@ def activity_log():
             .paginate(page=page, per_page=per_page, error_out=False))
 
     # Exclude default admin from the user filter dropdown
-    users = User.query.filter(User.email != DEFAULT_ADMIN_EMAIL).order_by(User.username).all()
+    users = User.query.filter(func.lower(User.email) != DEFAULT_ADMIN_EMAIL).order_by(User.username).all()
     return render_template('admin_activity.html',
                            logs=logs,
                            users=users,
@@ -428,7 +429,7 @@ def user_kick(user_id):
 @admin_required
 def user_impersonate(user_id):
     """Login as another user (main admin only)."""
-    if current_user.email != DEFAULT_ADMIN_EMAIL:
+    if (current_user.email or '').strip().lower() != DEFAULT_ADMIN_EMAIL:
         flash('Solo el administrador principal puede usar esta funcion.', 'error')
         return redirect(url_for('admin.users_list'))
     target = User.query.get_or_404(user_id)

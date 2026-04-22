@@ -1,19 +1,34 @@
+import os
+import re
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from sqlalchemy import func
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
-import re
 from models import User
 from extensions import db, login_manager, limiter
 
 auth = Blueprint('auth', __name__)
 
 
+def _client_ip():
+    xff = request.headers.get('X-Forwarded-For', '')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.remote_addr or 'unknown'
+
+
+def login_rate_limit_key():
+    email = (request.form.get('email') or '').strip().lower()
+    ip = _client_ip()
+    return f"{email}:{ip}" if email else ip
+
+
 @auth.route('/register', methods=['GET', 'POST'])
-@limiter.limit("10 per hour")
+@limiter.limit(os.getenv('REGISTER_RATE_LIMIT', '10 per hour'), methods=['POST'])
 def register():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip()
+        email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
 
         # Input validation (S6)
@@ -29,7 +44,8 @@ def register():
             flash('La contraseña debe tener al menos 8 caracteres.', category='error')
             return redirect(url_for('auth.register'))
 
-        if User.query.filter_by(email=email).first():
+        existing_email_user = User.query.filter(func.lower(User.email) == email).first()
+        if existing_email_user:
             flash('El correo ya está registrado. Inicia sesión.', category='error')
             return redirect(url_for('auth.login'))
 
@@ -49,13 +65,22 @@ def register():
     return render_template('register.html')
 
 @auth.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")  # Rate limiting (S5)
+@limiter.limit(
+    f"{os.getenv('LOGIN_RATE_LIMIT_PER_MINUTE', '10')} per minute",
+    key_func=login_rate_limit_key,
+    methods=['POST']
+)
+@limiter.limit(
+    f"{os.getenv('LOGIN_RATE_LIMIT_PER_HOUR', '50')} per hour",
+    key_func=login_rate_limit_key,
+    methods=['POST']
+)
 def login():
     if request.method == 'POST':
-        email = request.form.get('email', '').strip()
+        email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
 
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter(func.lower(User.email) == email).first()
         if not user or not check_password_hash(user.password, password):
             flash('Credenciales incorrectas', category='error')
             return redirect(url_for('auth.login'))

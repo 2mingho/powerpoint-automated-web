@@ -1,3 +1,4 @@
+import os
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
@@ -17,8 +18,11 @@ login_manager.login_message_category = "warning"
 csrf = CSRFProtect()
 
 # Rate Limiting (global, initialized in app.py via limiter.init_app)
+_global_limit = os.getenv("GLOBAL_RATE_LIMIT", "").strip()
+_default_limits = [_global_limit] if _global_limit else []
+
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["200 per day", "60 per hour"],
-    storage_uri="memory://",
+    default_limits=_default_limits,
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URI") or os.getenv("REDIS_URL") or "memory://",
 )

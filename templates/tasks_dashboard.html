@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Dashboard Tareas | Data Intel{% endblock %}
+{% block title %}Dashboard Tareas | Newlink{% endblock %}
 {% block page_name %}Dashboard de Tareas{% endblock %}
 
 {% block content %}
@@ -119,7 +119,7 @@
   </div>
 </div>
 
-<div class="task-modal-overlay" id="bulkModalOverlay" style="display:none;">
+<div class="task-modal-overlay modal-hidden" id="bulkModalOverlay">
   <div class="task-modal" role="dialog" aria-labelledby="bulkModalTitle">
     <div class="task-modal-header">
       <h2 id="bulkModalTitle">Edición masiva de tareas</h2>
@@ -128,7 +128,7 @@
     <div class="task-modal-body">
       <p class="tasks-subtitle">Solo se aplicarán los campos que completes.</p>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Estado</label>
         <select class="form-select" id="bulkStatus">
           <option value="">No cambiar</option>
@@ -138,14 +138,14 @@
         </select>
       </div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Asignar a</label>
         <select class="form-select" id="bulkAssignee">
           <option value="">No cambiar</option>
         </select>
       </div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Fecha de Entrega</label>
         <input type="date" class="form-input" id="bulkDueDate">
       </div>
