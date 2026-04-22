@@ -6,15 +6,15 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <!-- PASO 1: CONFIGURACION Y CARGA -->
-<div class="card view-start" id="upload-card" style="margin-bottom: 24px;">
+<div class="card section-card view-start" id="upload-card">
     <div class="card-title"><i class="fa-solid fa-gear"></i> 1. Configuracion y Archivo
         <div class="tooltip">
             <i class="fa-solid fa-circle-question"></i>
-            <span class="tooltip-text">Carga cualquier archivo CSV y obten estadisticas completas en segundos.</span>
+            <span class="tooltip-text">Carga un archivo CSV y obten estadisticas completas, distribuciones y hallazgos clave.</span>
         </div>
     </div>
 
-    <div class="form-row" style="margin-bottom: 20px;">
+    <div class="form-row mb-20">
         <div class="form-group">
             <label class="form-label" for="encoding">Codificacion</label>
             <select id="encoding" class="form-select">
@@ -40,26 +40,26 @@
         <i class="fa-solid fa-cloud-arrow-up"></i>
         <div class="upload-zone-title">Haz clic o arrastra el archivo CSV</div>
         <div class="upload-zone-hint" id="file-name-display">No se ha seleccionado ningun archivo</div>
-        <input type="file" id="csv_file" accept=".csv" style="display: none;" />
+        <input type="file" id="csv_file" accept=".csv" class="is-hidden" />
     </div>
 
-    <button id="btnAnalyze" onclick="analyzeFile()" class="btn btn-primary btn-block btn-lg" style="margin-top: 20px;">
+    <button id="btnAnalyze" onclick="analyzeFile()" class="btn btn-primary btn-block btn-lg mt-20">
         <i class="fa-solid fa-bolt"></i> Analizar Archivo
     </button>
 </div>
 
 <!-- PASO 2: RESULTADOS -->
-<div id="results-section" style="display: none;">
+<div id="results-section" class="is-hidden">
 <!-- Interpretacion (AI Insights) -->
-    <div class="card" style="margin-bottom: 24px;" id="insights-card">
+    <div class="card section-card" id="insights-card">
         <div class="card-title">
-            <i class="fa-solid fa-lightbulb" style="color:var(--c-warning);"></i> Interpretacion del Archivo
+            <i class="fa-solid fa-lightbulb text-warning"></i> Interpretacion del Archivo
         </div>
-        <div id="insights-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+        <div id="insights-list" class="insights-list"></div>
     </div>
 
     <!-- KPI Cards -->
-    <div class="card" style="margin-bottom: 24px;">
+    <div class="card section-card">
         <div class="card-title">
             <i class="fa-solid fa-chart-line"></i> Resumen General
             <div class="tooltip">
@@ -71,7 +71,7 @@
     </div>
 
     <!-- Data Types Chart -->
-    <div class="card" style="margin-bottom: 24px;">
+    <div class="card section-card">
         <div class="card-title">
             <i class="fa-solid fa-shapes"></i> Tipos de Datos
             <div class="tooltip">
@@ -79,13 +79,13 @@
                 <span class="tooltip-text">Representacion visual de como se clasifican las columnas (Numeros, Texto o Fechas).</span>
             </div>
         </div>
-        <div style="max-width: 400px; margin: 0 auto;">
+        <div class="chart-center-narrow">
             <canvas id="typesChart"></canvas>
         </div>
     </div>
 
     <!-- Missing Values Chart -->
-    <div class="card" style="margin-bottom: 24px;">
+    <div class="card section-card">
         <div class="card-title">
             <i class="fa-solid fa-chart-bar"></i> Valores Faltantes por Columna
             <div class="tooltip">
@@ -99,7 +99,7 @@
     </div>
 
     <!-- Numeric Stats Table -->
-    <div class="card" style="margin-bottom: 24px;">
+    <div class="card section-card">
         <div class="card-title">
             <i class="fa-solid fa-calculator"></i> Estadisticas Numericas
             <div class="tooltip">
@@ -107,13 +107,13 @@
                 <span class="tooltip-text">Medidas de tendencia central y dispersion.</span>
             </div>
         </div>
-        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+        <div class="table-scroll-y400">
             <table class="stats-table" id="numeric-stats-table"></table>
         </div>
     </div>
 
     <!-- Correlation Matrix -->
-    <div class="card" style="margin-bottom: 24px;" id="correlation-card">
+    <div class="card section-card" id="correlation-card">
         <div class="card-title">
             <i class="fa-solid fa-diagram-project"></i> Matriz de Correlacion
             <div class="tooltip">
@@ -121,13 +121,13 @@
                 <span class="tooltip-text">Muestra la relacion entre variables numericas. Valores cercanos a 1 o -1 indican una relacion fuerte.</span>
             </div>
         </div>
-        <div style="overflow-x: auto;">
+        <div class="table-wrap">
             <table class="stats-table correlation-table" id="correlation-table"></table>
         </div>
     </div>
 
     <!-- Distributions -->
-    <div class="card" style="margin-bottom: 24px;" id="distributions-card">
+    <div class="card section-card" id="distributions-card">
         <div class="card-title">
             <i class="fa-solid fa-chart-area"></i> Distribuciones Numericas
             <div class="tooltip">
@@ -139,7 +139,7 @@
     </div>
 
     <!-- Categorical Distributions -->
-    <div class="card" style="margin-bottom: 24px;" id="categorical-card">
+    <div class="card section-card" id="categorical-card">
         <div class="card-title">
             <i class="fa-solid fa-list-check"></i> Distribuciones Categoricas (Top 10)
             <div class="tooltip">
@@ -151,7 +151,7 @@
     </div>
 
     <!-- Actions -->
-    <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+    <div class="row-actions mt-24 justify-center wrap">
         <button onclick="resetForm()" class="btn btn-secondary">
             <i class="fa-solid fa-arrow-left"></i> Analizar Otro Archivo
         </button>
@@ -163,6 +163,31 @@
 
 <script>
 let charts = {};
+let analyzeController = null;
+let analyzeRunId = 0;
+let lastAnalyzeClickAt = 0;
+
+function destroyChart(key) {
+    if (charts[key] && charts[key].destroy) {
+        charts[key].destroy();
+    }
+    delete charts[key];
+}
+
+function destroyChartsByPrefix(prefix) {
+    Object.keys(charts).forEach((key) => {
+        if (key.startsWith(prefix)) {
+            destroyChart(key);
+        }
+    });
+}
+
+function resetMissingChartContainer() {
+    const container = document.getElementById('missing-chart-container');
+    if (!container) return null;
+    container.innerHTML = '<canvas id="missingChart"></canvas>';
+    return document.getElementById('missingChart');
+}
 
 function notify(type, message) {
     if (window.appNotify) {
@@ -180,7 +205,7 @@ const fileNameDisplay = document.getElementById('file-name-display');
 fileInput.onchange = (e) => {
     if (e.target.files.length > 0) {
         fileNameDisplay.innerText = e.target.files[0].name;
-        dropZone.style.borderColor = 'var(--c-primary)';
+        dropZone.classList.add('upload-zone-selected');
     }
 };
 
@@ -196,12 +221,23 @@ dropZone.addEventListener('drop', (e) => {
 });
 
 async function analyzeFile() {
+    const now = Date.now();
+    if (now - lastAnalyzeClickAt < 350) return;
+    lastAnalyzeClickAt = now;
+
     const file = fileInput.files[0];
     const encoding = document.getElementById('encoding').value;
     const separator = document.getElementById('separator').value;
     const btn = document.getElementById('btnAnalyze');
 
     if (!file) { notify('warning', 'Selecciona un archivo CSV primero.'); return; }
+
+    if (analyzeController) {
+        analyzeController.abort();
+    }
+
+    const runId = ++analyzeRunId;
+    analyzeController = new AbortController();
 
     try {
         btn.disabled = true;
@@ -213,35 +249,53 @@ async function analyzeFile() {
         formData.append('encoding', encoding);
         formData.append('separator', separator);
 
-        const response = await fetch('/analisis-csv', { method: 'POST', body: formData });
+        const response = await fetch('/analisis-csv', {
+            method: 'POST',
+            body: formData,
+            signal: analyzeController.signal,
+        });
         const result = await response.json();
+
+        if (runId !== analyzeRunId) return;
 
         if (result.success) { hideLoading(); displayResults(result); }
         else { hideLoading(); throw new Error(result.error || 'Error desconocido'); }
     } catch (error) {
+        if (runId !== analyzeRunId) return;
+        if (error && error.name === 'AbortError') {
+            hideLoading();
+            return;
+        }
         console.error(error);
         hideLoading();
         notify('error', 'Error: ' + error.message);
         btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Reintentar';
         btn.disabled = false;
+    } finally {
+        if (runId === analyzeRunId) {
+            analyzeController = null;
+        }
     }
 }
 
 function displayResults(data) {
-    document.getElementById('upload-card').style.display = 'none';
-    document.getElementById('results-section').style.display = 'block';
+    destroyChartsByPrefix('dist-');
+    destroyChartsByPrefix('cat-');
+
+    document.getElementById('upload-card').classList.add('is-hidden');
+    document.getElementById('results-section').classList.remove('is-hidden');
 
     // Render textual insights
     const insightsList = document.getElementById('insights-list');
     if (data.insights && data.insights.length > 0) {
         insightsList.innerHTML = data.insights.map(text =>
-            '<div style="display:flex; gap:10px; align-items:flex-start; padding:10px 14px; background:var(--c-bg); border-radius:var(--r-md); border:1px solid var(--c-border-light);">' +
-            '<i class="fa-solid fa-circle-info" style="color:var(--c-primary); margin-top:2px; flex-shrink:0;"></i>' +
-            '<span style="font-size:0.88rem; color:var(--c-text);">' + text + '</span></div>'
+            '<div class="insight-item">' +
+            '<i class="fa-solid fa-circle-info insight-icon"></i>' +
+            '<span class="insight-text">' + text + '</span></div>'
         ).join('');
-        document.getElementById('insights-card').style.display = 'block';
+        document.getElementById('insights-card').classList.remove('is-hidden');
     } else {
-        document.getElementById('insights-card').style.display = 'none';
+        document.getElementById('insights-card').classList.add('is-hidden');
     }
 
     const kpiContainer = document.getElementById('kpi-cards');
@@ -262,7 +316,7 @@ function displayResults(data) {
             <div class="kpi-label">Memoria</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon"><i class="fa-solid fa-circle-exclamation" style="color:var(--c-danger)"></i></div>
+            <div class="kpi-icon"><i class="fa-solid fa-circle-exclamation text-danger"></i></div>
             <div class="kpi-value">${data.missing.total_missing_percentage}%</div>
             <div class="kpi-label">Valores Faltantes</div>
         </div>
@@ -274,23 +328,23 @@ function displayResults(data) {
 
     if (data.correlation.matrix && data.correlation.matrix.length > 0) {
         renderCorrelationMatrix(data.correlation);
-        document.getElementById('correlation-card').style.display = 'block';
+        document.getElementById('correlation-card').classList.remove('is-hidden');
     } else {
-        document.getElementById('correlation-card').style.display = 'none';
+        document.getElementById('correlation-card').classList.add('is-hidden');
     }
 
     if (data.distributions.numeric && data.distributions.numeric.length > 0) {
         renderDistributions(data.distributions.numeric);
-        document.getElementById('distributions-card').style.display = 'block';
+        document.getElementById('distributions-card').classList.remove('is-hidden');
     } else {
-        document.getElementById('distributions-card').style.display = 'none';
+        document.getElementById('distributions-card').classList.add('is-hidden');
     }
 
     if (data.distributions.categorical && data.distributions.categorical.length > 0) {
         renderCategoricalDistributions(data.distributions.categorical);
-        document.getElementById('categorical-card').style.display = 'block';
+        document.getElementById('categorical-card').classList.remove('is-hidden');
     } else {
-        document.getElementById('categorical-card').style.display = 'none';
+        document.getElementById('categorical-card').classList.add('is-hidden');
     }
 
     document.getElementById('download-link').href = data.download_url;
@@ -298,7 +352,7 @@ function displayResults(data) {
 
 function renderTypesChart(general) {
     const ctx = document.getElementById('typesChart').getContext('2d');
-    if (charts.types) charts.types.destroy();
+    destroyChart('types');
     charts.types = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -320,16 +374,18 @@ function renderTypesChart(general) {
 }
 
 function renderMissingChart(missing) {
-    const ctx = document.getElementById('missingChart').getContext('2d');
+    const missingCanvas = resetMissingChartContainer();
+    if (!missingCanvas) return;
+    const ctx = missingCanvas.getContext('2d');
     const topMissing = missing.columns_with_missing.filter(col => col.missing_count > 0).slice(0, 15);
+    destroyChart('missing');
 
     if (topMissing.length === 0) {
         document.getElementById('missing-chart-container').innerHTML =
-            '<div class="flash-msg success" style="justify-content:center;"><i class="fa-solid fa-circle-check"></i> No hay valores faltantes en ninguna columna</div>';
+            '<div class="flash-msg success flash-center"><i class="fa-solid fa-circle-check"></i> No hay valores faltantes en ninguna columna</div>';
         return;
     }
 
-    if (charts.missing) charts.missing.destroy();
     charts.missing = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -348,7 +404,7 @@ function renderMissingChart(missing) {
 function renderNumericStatsTable(numeric) {
     const table = document.getElementById('numeric-stats-table');
     if (!numeric.stats || numeric.stats.length === 0) {
-        table.innerHTML = '<tr><td style="text-align:center;padding:24px;color:var(--c-text-secondary);">No hay columnas numericas</td></tr>';
+        table.innerHTML = '<tr><td class="empty-td">No hay columnas numericas</td></tr>';
         return;
     }
     let html = `<thead><tr><th>Columna</th><th>Conteo</th><th>Media</th><th>Mediana</th><th>Desv. Est.</th><th>Min</th><th>Max</th><th>Q25</th><th>Q75</th></tr></thead><tbody>`;
@@ -369,12 +425,16 @@ function renderCorrelationMatrix(correlation) {
         html += `<tr><th>${row.column}</th>`;
         columns.forEach(c => {
             const v = row.correlations[c];
-            html += `<td class="correlation-cell" style="background-color:${getCorrelationColor(v)}">${v}</td>`;
+            html += `<td class="correlation-cell" data-correlation="${v}">${v}</td>`;
         });
         html += '</tr>';
     });
     html += '</tbody>';
     table.innerHTML = html;
+    table.querySelectorAll('td[data-correlation]').forEach((cell) => {
+        const v = Number(cell.dataset.correlation || 0);
+        cell.style.backgroundColor = getCorrelationColor(v);
+    });
 }
 
 function getCorrelationColor(value) {
@@ -399,7 +459,7 @@ function renderDistributions(distributions) {
         const canvasId = `dist-chart-${idx}`;
         const div = document.createElement('div');
         div.className = 'chart-item';
-        div.innerHTML = `<h4 style="text-align:center;margin-bottom:10px;">${dist.column}</h4><canvas id="${canvasId}"></canvas>`;
+        div.innerHTML = `<h4 class="chart-item-title">${dist.column}</h4><canvas id="${canvasId}"></canvas>`;
         container.appendChild(div);
         const ctx = document.getElementById(canvasId).getContext('2d');
         charts[`dist-${idx}`] = new Chart(ctx, {
@@ -417,7 +477,7 @@ function renderCategoricalDistributions(distributions) {
         const canvasId = `cat-chart-${idx}`;
         const div = document.createElement('div');
         div.className = 'chart-item';
-        div.innerHTML = `<h4 style="text-align:center;margin-bottom:10px;">${dist.column}</h4><canvas id="${canvasId}"></canvas>`;
+        div.innerHTML = `<h4 class="chart-item-title">${dist.column}</h4><canvas id="${canvasId}"></canvas>`;
         container.appendChild(div);
         const ctx = document.getElementById(canvasId).getContext('2d');
         charts[`cat-${idx}`] = new Chart(ctx, {
@@ -429,14 +489,21 @@ function renderCategoricalDistributions(distributions) {
 }
 
 function resetForm() {
-    document.getElementById('upload-card').style.display = 'block';
-    document.getElementById('results-section').style.display = 'none';
+    if (analyzeController) {
+        analyzeController.abort();
+        analyzeController = null;
+    }
+
+    document.getElementById('upload-card').classList.remove('is-hidden');
+    document.getElementById('results-section').classList.add('is-hidden');
+    dropZone.classList.remove('upload-zone-selected');
     document.getElementById('btnAnalyze').disabled = false;
     document.getElementById('btnAnalyze').innerHTML = '<i class="fa-solid fa-bolt"></i> Analizar Archivo';
     fileInput.value = '';
     fileNameDisplay.innerText = 'No se ha seleccionado ningun archivo';
     Object.values(charts).forEach(c => { if (c && c.destroy) c.destroy(); });
     charts = {};
+    resetMissingChartContainer();
 }
 </script>
 {% endblock %}

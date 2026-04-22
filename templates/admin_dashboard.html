@@ -3,15 +3,11 @@
 {% block page_name %}Admin Panel{% endblock %}
 
 {% block content %}
-<div class="card-title view-start"><i class="fa-solid fa-chart-line"></i> Resumen del Panel
-  <div class="tooltip">
-    <i class="fa-solid fa-circle-question"></i>
-    <span class="tooltip-text">Gestion de usuarios, roles y actividad del sistema.</span>
-  </div>
-</div>
+
+<div class="admin-shell view-start">
 
 <!-- Stats Cards -->
-<div class="stat-grid" style="margin-bottom: 32px;">
+<div class="stat-grid mb-20">
   <div class="stat-card">
     <div class="stat-icon primary"><i class="fa-solid fa-users"></i></div>
     <div class="stat-info">
@@ -36,7 +32,7 @@
   </div>
   {% endfor %}
   <div class="stat-card">
-    <div class="stat-icon primary" style="background: rgba(100, 116, 139, 0.1); color: #64748b;"><i class="fa-solid fa-list-check"></i></div>
+    <div class="stat-icon info"><i class="fa-solid fa-list-check"></i></div>
     <div class="stat-info">
       <div class="stat-value">{{ total_logs }}</div>
       <div class="stat-label">Eventos Totales</div>
@@ -45,7 +41,13 @@
 </div>
 
 <!-- Quick Actions -->
-<div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 32px;">
+<div class="card-title"><i class="fa-solid fa-bolt"></i> Acciones Rapidas
+  <div class="tooltip">
+    <i class="fa-solid fa-circle-question"></i>
+    <span class="tooltip-text">Gestiona usuarios, roles, areas y revisa la actividad reciente del sistema.</span>
+  </div>
+</div>
+<div class="admin-toolbar">
   <a href="{{ url_for('admin.users_list') }}" class="btn btn-primary">
     <i class="fa-solid fa-users"></i> Gestionar Usuarios
   </a>
@@ -64,10 +66,10 @@
 </div>
 
 <!-- Recent Activity -->
-<div class="card">
+<section class="admin-panel admin-panel-tight">
   <div class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Actividad Reciente</div>
   {% if recent_logs %}
-  <div style="overflow-x: auto;">
+  <div class="table-wrap">
     <table class="data-table">
       <thead>
         <tr>
@@ -80,22 +82,33 @@
       <tbody>
         {% for log in recent_logs %}
         <tr>
-          <td style="white-space: nowrap;">{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '—' }}</td>
+          <td class="cell-nowrap">{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '—' }}</td>
           <td>{{ log.user.username if log.user else 'Desconocido' }}</td>
-          <td><span class="badge badge-primary">{{ log.action }}</span></td>
-          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ log.detail[:80] }}{{ '...' if log.detail|length > 80 else '' }}</td>
+          <td>
+            {% set action_class = 'badge-action-primary' %}
+            {% if log.action in ['login', 'logout', 'register'] %}
+              {% set action_class = 'badge-action-success' %}
+            {% elif log.action.startswith('admin_') %}
+              {% set action_class = 'badge-action-warning' %}
+            {% elif log.action == 'page_view' %}
+              {% set action_class = 'badge-action-neutral' %}
+            {% endif %}
+            <span class="badge {{ action_class }}">{{ log.action }}</span>
+          </td>
+          <td class="cell-truncate">{{ log.detail[:80] }}{{ '...' if log.detail|length > 80 else '' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  <div style="margin-top: 16px;">
+  <div class="mt-16">
     <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline btn-sm">
       Ver toda la actividad <i class="fa-solid fa-arrow-right"></i>
     </a>
   </div>
   {% else %}
-  <p style="text-align: center; padding: 24px; color: var(--c-text-secondary);">No hay actividad registrada aun.</p>
+  <p class="admin-empty">No hay actividad registrada aun.</p>
   {% endif %}
+</section>
 </div>
 {% endblock %}

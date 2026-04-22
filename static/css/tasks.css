@@ -357,6 +357,18 @@
   gap: var(--sp-md);
 }
 
+.form-group-tight {
+  margin-bottom: 0;
+}
+
+.modal-hidden {
+  display: none;
+}
+
+.modal-push-left {
+  margin-right: auto;
+}
+
 .task-form-message {
   display: none;
   border-radius: var(--r-md);
@@ -557,13 +569,6 @@
   margin: 4px 0 0;
 }
 
-.td-hero-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  flex-wrap: wrap;
-}
-
 /* Stat strip */
 .td-stats {
   display: grid;
@@ -711,6 +716,17 @@
   gap: var(--sp-sm);
 }
 
+.td-hero-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-wrap: wrap;
+}
+
+.td-hero-actions .td-btn-label {
+  white-space: nowrap;
+}
+
 .td-import-report {
   background: var(--c-white);
   border: 1px solid var(--c-border);
@@ -746,6 +762,10 @@
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.td-import-report-actions .btn {
+  white-space: nowrap;
 }
 
 .td-preview-page {
@@ -798,6 +818,28 @@
 
 .td-preview-table td.is-key {
   background: var(--c-primary-light);
+}
+
+.td-preview-details-row td {
+  background: var(--c-white);
+}
+
+.td-preview-details-cell {
+  padding: 10px 12px !important;
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.td-preview-details-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+  color: var(--c-text-secondary);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.td-preview-details-body {
+  width: 100%;
 }
 
 .td-preview-input {
@@ -1527,19 +1569,32 @@
      DASHBOARD MOBILE — iOS-Style
      ═══════════════════════════════════════════════════════ */
 
-  /* HERO & ANALYTICS */
-  .td-hero h1 {
-    font-size: 1.5rem;
-    font-weight: 800;
+  .td-layout {
+    gap: var(--sp-md);
+  }
+
+  .td-hero {
+    justify-content: stretch;
+    margin-bottom: 0;
   }
 
   .td-hero-actions {
     width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-sm);
   }
 
   .td-hero-actions .btn {
-    flex: 1;
-    min-width: 140px;
+    width: 100%;
+    min-height: 42px;
+    justify-content: center;
+  }
+
+  /* ANALYTICS */
+  .td-hero h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
   }
 
   .td-analytics {
@@ -1623,6 +1678,17 @@
     gap: var(--sp-sm);
   }
 
+  .td-bulk-count {
+    width: 100%;
+    order: 3;
+  }
+
+  .td-bulk-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
   .td-import-report {
     margin: 0 calc(-1 * var(--sp-md));
     border-left: none;
@@ -1633,32 +1699,33 @@
 
   .td-import-report-head {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
   .td-import-report-actions {
-    width: 100%;
     justify-content: flex-start;
   }
 
   .td-import-report-actions .btn {
-    min-height: 34px;
-    padding: 6px 10px;
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .td-preview-page {
+    width: 100%;
+    text-align: center;
+    order: 99;
   }
 
   .td-preview-table {
-    min-width: 1350px;
+    min-width: 1200px;
   }
 
-  .td-bulk-count {
-    width: 100%;
-    order: 3;
+  .td-preview-details-cell {
+    padding: 8px 10px !important;
   }
 
-  .td-bulk-actions {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-end;
+  .td-preview-details-label {
+    font-size: 0.68rem;
   }
 
   /* Task cards — full-width grouped list style */
@@ -1733,6 +1800,14 @@
 @media (max-width: 390px) {
   .tasks-header h1 {
     font-size: 1.4rem;
+  }
+
+  .td-hero-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .td-import-report-actions .btn {
+    flex: 1 1 100%;
   }
 
   .td-stat {

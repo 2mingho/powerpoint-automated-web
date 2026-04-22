@@ -3,18 +3,21 @@
 {% block page_name %}Registro de Actividad{% endblock %}
 
 {% block content %}
+
+<div class="admin-shell view-start">
+
 <!-- Filters -->
-<div class="card view-start" style="margin-bottom: 24px; padding: 16px;">
+<section class="admin-panel">
   <div class="card-title"><i class="fa-solid fa-filter"></i> Filtros de Actividad
     <div class="tooltip">
       <i class="fa-solid fa-circle-question"></i>
-      <span class="tooltip-text">Historial de acciones realizadas en el sistema.</span>
+      <span class="tooltip-text">Consulta historial de acciones del sistema por usuario, rango de fechas y tipo de accion.</span>
     </div>
   </div>
-  <form method="GET" action="{{ url_for('admin.activity_log') }}" class="filter-bar" style="margin-bottom: 0; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
-    <div class="form-group" style="margin-bottom: 0;">
-      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 4px;">Usuario</label>
-      <select name="user_id" class="form-select" style="width: auto; min-width: 180px;">
+  <form method="GET" action="{{ url_for('admin.activity_log') }}" class="filter-bar mb-0 admin-toolbar">
+    <div class="form-group mb-0">
+      <label class="form-label filter-label">Usuario</label>
+      <select name="user_id" class="form-select filter-select-wide">
         <option value="">Todos los usuarios</option>
         {% for u in users %}
         <option value="{{ u.id }}" {{ 'selected' if user_filter == u.id|string }}>{{ u.username }}</option>
@@ -22,43 +25,43 @@
       </select>
     </div>
     
-    <div class="form-group" style="margin-bottom: 0;">
-      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 4px;">Desde</label>
-      <input type="date" name="date_from" value="{{ date_from }}" class="form-input" style="padding: 7px 12px;">
+    <div class="form-group mb-0">
+      <label class="form-label filter-label">Desde</label>
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-input filter-input-compact">
     </div>
     
-    <div class="form-group" style="margin-bottom: 0;">
-      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 4px;">Hasta</label>
-      <input type="date" name="date_to" value="{{ date_to }}" class="form-input" style="padding: 7px 12px;">
+    <div class="form-group mb-0">
+      <label class="form-label filter-label">Hasta</label>
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-input filter-input-compact">
     </div>
 
-    <div class="form-group" style="flex: 1; min-width: 180px; margin-bottom: 0;">
-      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 4px;">Accion</label>
+    <div class="form-group mb-0 admin-grow-180">
+      <label class="form-label filter-label">Accion</label>
       <div class="input-icon-group">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="text" name="action" placeholder="Filtrar por accion..." value="{{ action_filter }}" class="form-input">
       </div>
     </div>
 
-    <div style="display: flex; gap: 8px;">
+    <div class="row-actions">
       <button type="submit" class="btn btn-primary btn-sm">
         <i class="fa-solid fa-filter"></i> Filtrar
       </button>
-      <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline btn-sm" title="Limpiar filtros" aria-label="Limpiar filtros de actividad">
+      <a href="{{ url_for('admin.activity_log') }}" class="btn btn-outline btn-sm" title="Limpiar filtros">
         <i class="fa-solid fa-xmark"></i>
       </a>
     </div>
     
-    <div style="margin-left: auto; font-size: 0.82rem; color: var(--c-text-secondary); padding-bottom: 8px;">
+    <div class="admin-toolbar-right">
       Total: <strong>{{ logs.total }}</strong> registros
     </div>
   </form>
-</div>
+</section>
 
 <!-- Activity Table -->
-<div class="card" style="padding: 0; overflow: hidden;">
+<section class="admin-panel admin-panel-tight">
   {% if logs.items %}
-  <div style="overflow-x: auto;">
+  <div class="table-wrap">
     <table class="data-table">
       <thead>
         <tr>
@@ -72,29 +75,29 @@
       <tbody>
         {% for log in logs.items %}
         <tr>
-          <td style="white-space: nowrap;">{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') if log.timestamp else '—' }}</td>
+          <td class="cell-nowrap">{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') if log.timestamp else '—' }}</td>
           <td>
             {% if log.user %}
               <a href="{{ url_for('admin.user_activity', user_id=log.user_id) }}">{{ log.user.username }}</a>
             {% else %}
-              <em style="color: var(--c-text-secondary);">Desconocido</em>
+              <em class="text-muted">Desconocido</em>
             {% endif %}
           </td>
           <td>
-            {% set action_color = 'var(--c-primary)' %}
+            {% set action_class = 'badge-action-primary' %}
             {% if log.action in ['login', 'logout', 'register'] %}
-              {% set action_color = '#22c55e' %} {# success green #}
+              {% set action_class = 'badge-action-success' %}
             {% elif log.action.startswith('admin_') %}
-              {% set action_color = '#f59e0b' %} {# warning orange #}
+              {% set action_class = 'badge-action-warning' %}
             {% elif log.action == 'page_view' %}
-              {% set action_color = '#94a3b8' %} {# secondary slate #}
+              {% set action_class = 'badge-action-neutral' %}
             {% endif %}
-            <span class="badge" style="background-color: {{ action_color }}; color: white;">{{ log.action }}</span>
+            <span class="badge {{ action_class }}">{{ log.action }}</span>
           </td>
-          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ log.detail }}">
+          <td class="cell-truncate" title="{{ log.detail }}">
             {{ log.detail if log.detail else '—' }}
           </td>
-          <td style="white-space: nowrap;">{{ log.ip_address or '—' }}</td>
+          <td class="cell-nowrap">{{ log.ip_address or '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -102,24 +105,25 @@
   </div>
 
   <!-- Pagination -->
-  <div class="pagination" style="padding: 12px;">
+  <div class="pagination p-12">
     {% if logs.has_prev %}
-    <a href="{{ url_for('admin.activity_log', page=logs.prev_num, user_id=user_filter, action=action_filter, date_from=date_from, date_to=date_to) }}" class="btn btn-outline btn-sm">
+    <a href="{{ url_for('admin.activity_log', page=logs.prev_num, user_id=user_filter, action=action_filter) }}" class="btn btn-outline btn-sm">
       <i class="fa-solid fa-chevron-left"></i> Anterior
     </a>
     {% endif %}
     <span class="page-info">Pagina {{ logs.page }} de {{ logs.pages }} ({{ logs.total }} registros)</span>
     {% if logs.has_next %}
-    <a href="{{ url_for('admin.activity_log', page=logs.next_num, user_id=user_filter, action=action_filter, date_from=date_from, date_to=date_to) }}" class="btn btn-outline btn-sm">
+    <a href="{{ url_for('admin.activity_log', page=logs.next_num, user_id=user_filter, action=action_filter) }}" class="btn btn-outline btn-sm">
       Siguiente <i class="fa-solid fa-chevron-right"></i>
     </a>
     {% endif %}
   </div>
   {% else %}
-  <div style="padding: 48px; text-align: center; color: var(--c-text-secondary);">
-    <i class="fa-solid fa-file-lines" style="font-size: 2rem; margin-bottom: 12px; color: var(--c-border);"></i>
+  <div class="admin-empty">
+    <i class="fa-solid fa-file-lines"></i>
     <p>No hay registros de actividad con los filtros seleccionados.</p>
   </div>
   {% endif %}
+</section>
 </div>
 {% endblock %}

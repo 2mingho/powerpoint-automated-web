@@ -9,18 +9,14 @@
 <div class="td-layout">
   <!-- Hero -->
   <div class="td-hero">
-    <div>
-      <h1>Dashboard de Tareas</h1>
-      <p>Vista general de todas las tareas del equipo</p>
-    </div>
     <div class="td-hero-actions">
       <button class="btn btn-secondary btn-sm" id="btnExportTasksCsv">
-        <i class="fa-solid fa-file-arrow-down"></i> Exportar CSV
+        <i class="fa-solid fa-file-arrow-down"></i> <span class="td-btn-label">Exportar</span>
       </button>
       <button class="btn btn-primary btn-sm" id="btnImportTasksCsv">
-        <i class="fa-solid fa-file-arrow-up"></i> Importar CSV
+        <i class="fa-solid fa-file-arrow-up"></i> <span class="td-btn-label">Importar</span>
       </button>
-      <input type="file" id="inputImportTasksCsv" accept=".csv,text/csv" style="display:none;">
+      <input type="file" id="inputImportTasksCsv" accept=".csv,text/csv" class="modal-hidden">
     </div>
   </div>
 
@@ -164,7 +160,6 @@
             <th>Tipo de Presupuesto</th>
             <th>Recurrencia</th>
             <th>Descripción</th>
-            <th>Detalles</th>
           </tr>
         </thead>
         <tbody id="tdCsvPreviewBody"></tbody>
@@ -179,7 +174,7 @@
   </div>
 </div>
 
-<div class="task-modal-overlay" id="bulkModalOverlay" style="display:none;">
+<div class="task-modal-overlay modal-hidden" id="bulkModalOverlay">
   <div class="task-modal" role="dialog" aria-labelledby="bulkModalTitle">
     <div class="task-modal-header">
       <h2 id="bulkModalTitle">Edición masiva de tareas</h2>
@@ -188,7 +183,7 @@
     <div class="task-modal-body">
       <p class="tasks-subtitle">Solo se aplicarán los campos que completes.</p>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Estado</label>
         <select class="form-select" id="bulkStatus">
           <option value="">No cambiar</option>
@@ -198,14 +193,14 @@
         </select>
       </div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Asignar a</label>
         <select class="form-select" id="bulkAssignee">
           <option value="">No cambiar</option>
         </select>
       </div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Fecha de Entrega</label>
         <input type="date" class="form-input" id="bulkDueDate">
       </div>
@@ -428,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const statusLabel = row.status === 'ok' ? 'OK' : (row.status === 'warning' ? 'Advertencia' : 'Error');
 
       return `
-        <tr>
+        <tr class="td-preview-main-row">
           <td>${escapeHtml(String(row.row_number || ''))}</td>
           <td><span class="td-preview-status ${issueBadgeClass(row.status)}">${statusLabel}</span></td>
           <td class="is-key"><input class="td-preview-input" data-row-index="${globalIndex}" data-field="title" value="${escapeAttr(fields.title)}"></td>
@@ -442,7 +437,12 @@ document.addEventListener('DOMContentLoaded', function() {
           <td><input class="td-preview-input" data-row-index="${globalIndex}" data-field="budget_type" value="${escapeAttr(fields.budget_type)}"></td>
           <td><input class="td-preview-input" data-row-index="${globalIndex}" data-field="recurrence" value="${escapeAttr(fields.recurrence)}"></td>
           <td><textarea class="td-preview-input td-preview-textarea" data-row-index="${globalIndex}" data-field="description">${escapeHtml(fields.description)}</textarea></td>
-          <td>${issueList}</td>
+        </tr>
+        <tr class="td-preview-details-row">
+          <td class="td-preview-details-cell" colspan="13">
+            <div class="td-preview-details-label">Detalles</div>
+            <div class="td-preview-details-body">${issueList}</div>
+          </td>
         </tr>
       `;
     }).join('');
@@ -877,10 +877,11 @@ document.addEventListener('DOMContentLoaded', function() {
       statusBadge.className = `td-preview-status ${issueBadgeClass(nextStatus)}`;
     }
 
-    const issuesCell = rowEl.lastElementChild;
-    if (issuesCell) {
+    const detailsRow = rowEl.nextElementSibling;
+    const detailsBody = detailsRow ? detailsRow.querySelector('.td-preview-details-body') : null;
+    if (detailsBody) {
       const rowIssues = csvPreviewRows[rowIndex].issues || [];
-      issuesCell.innerHTML = `<ul class="td-preview-issues">${rowIssues.map(issue => `<li>${escapeHtml(formatIssueText(issue))}</li>`).join('')}</ul>`;
+      detailsBody.innerHTML = `<ul class="td-preview-issues">${rowIssues.map(issue => `<li>${escapeHtml(formatIssueText(issue))}</li>`).join('')}</ul>`;
     }
   });
 
