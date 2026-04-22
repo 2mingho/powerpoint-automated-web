@@ -3,12 +3,13 @@
 {% block page_name %}{{ 'Editar' if user else 'Crear' }} Usuario{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>{{ 'Editar Usuario' if user else 'Crear Nuevo Usuario' }}</h1>
-  <p>{{ 'Actualiza los datos y permisos del usuario.' if user else 'Rellena los campos para registrar un nuevo usuario.' }}</p>
-</div>
-
-<div class="card" style="max-width: 700px;">
+<div class="card view-start" style="max-width: 700px;">
+  <div class="card-title"><i class="fa-solid fa-user-gear"></i> {{ 'Editar Usuario' if user else 'Crear Nuevo Usuario' }}
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">{{ 'Actualiza los datos y permisos del usuario.' if user else 'Rellena los campos para registrar un nuevo usuario.' }}</span>
+    </div>
+  </div>
   <form method="POST">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-row">

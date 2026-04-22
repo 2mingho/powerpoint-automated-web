@@ -1,16 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}Union de Archivos | Data Intel{% endblock %}
+{% block title %}Union de Archivos | Newlink{% endblock %}
 {% block page_name %}Union de Archivos{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>Union de Archivos</h1>
-  <p>Une multiples archivos tabulares en uno solo. Soporta CSV, Excel (.xlsx, .xls) con deteccion automatica de formato.</p>
-</div>
-
 <!-- PASO 1: SELECCION DE MODO -->
-<div class="card" style="margin-bottom: 24px;">
-  <div class="card-title"><i class="fa-solid fa-sliders"></i> 1. Seleccionar Modo</div>
+<div class="card view-start" style="margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-sliders"></i> 1. Seleccionar Modo
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Une multiples archivos tabulares en uno solo. Soporta CSV, Excel (.xlsx, .xls) con deteccion automatica de formato.</span>
+    </div>
+  </div>
   <div class="merge-mode-toggle">
     <button id="btn-mode-default" class="merge-mode-btn active" onclick="setMode('default')">
       <i class="fa-solid fa-layer-group"></i>

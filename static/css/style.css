@@ -1277,6 +1277,10 @@ body.app-prompt-open {
   margin: 0;
 }
 
+.view-start {
+  margin-top: 6px;
+}
+
 /* ─── FILTER BAR ─── */
 .filter-bar {
   display: flex;

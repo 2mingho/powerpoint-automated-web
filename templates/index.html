@@ -1,15 +1,16 @@
 <!-- templates/index.html -->
 {% extends 'base.html' %}
-{% block title %}Generar Reporte | Data Intel{% endblock %}
+{% block title %}Generar Reporte | Newlink{% endblock %}
 {% block page_name %}Generar Reporte{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>Generar Reporte</h1>
-  <p>Crea reportes de analisis automatizados desde archivos CSV.</p>
-</div>
-
-<div class="card">
+<div class="card view-start">
+  <div class="card-title"><i class="fa-solid fa-chart-bar"></i> 1. Configuracion del Reporte
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Crea reportes de analisis automatizados desde archivos CSV.</span>
+    </div>
+  </div>
   <form action="/upload_csv" method="POST" enctype="multipart/form-data" id="reportForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 

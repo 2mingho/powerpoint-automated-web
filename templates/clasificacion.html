@@ -1,18 +1,18 @@
 ﻿{% extends 'base.html' %}
-{% block title %}Clasificacion de Data | Data Intel{% endblock %}
+{% block title %}Clasificacion de Data | Newlink{% endblock %}
 {% block page_name %}Clasificacion{% endblock %}
 
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="page-header">
-  <h1>Clasificacion de Data</h1>
-  <p>Organiza tus menciones automaticamente definiendo categorias y tematicas con palabras clave.</p>
-</div>
-
 <!-- PASO 1: CARGA DE ARCHIVO -->
-<div class="card" style="margin-bottom: 24px;">
-  <div class="card-title"><i class="fa-solid fa-file-csv"></i> 1. Seleccionar Archivo</div>
+<div class="card view-start" style="margin-bottom: 24px;">
+  <div class="card-title"><i class="fa-solid fa-file-csv"></i> 1. Seleccionar Archivo
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Organiza tus menciones automaticamente definiendo categorias y tematicas con palabras clave.</span>
+    </div>
+  </div>
   <div class="upload-zone" id="drop-zone" onclick="document.getElementById('csv_file').click()">
     <i class="fa-solid fa-cloud-arrow-up"></i>
     <div class="upload-zone-title">Haz clic o arrastra tu archivo</div>

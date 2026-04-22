@@ -1,18 +1,18 @@
 {% extends 'base.html' %}
-{% block title %}Analisis Rapido CSV | Data Intel{% endblock %}
+{% block title %}Analisis Rapido CSV | Newlink{% endblock %}
 {% block page_name %}Analisis Rapido{% endblock %}
 
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="page-header">
-  <h1>Analisis Rapido CSV</h1>
-  <p>Carga cualquier archivo CSV y obten estadisticas completas en segundos.</p>
-</div>
-
 <!-- PASO 1: CONFIGURACION Y CARGA -->
-<div class="card" id="upload-card" style="margin-bottom: 24px;">
-    <div class="card-title"><i class="fa-solid fa-gear"></i> 1. Configuracion y Archivo</div>
+<div class="card view-start" id="upload-card" style="margin-bottom: 24px;">
+    <div class="card-title"><i class="fa-solid fa-gear"></i> 1. Configuracion y Archivo
+        <div class="tooltip">
+            <i class="fa-solid fa-circle-question"></i>
+            <span class="tooltip-text">Carga cualquier archivo CSV y obten estadisticas completas en segundos.</span>
+        </div>
+    </div>
 
     <div class="form-row" style="margin-bottom: 20px;">
         <div class="form-group">
