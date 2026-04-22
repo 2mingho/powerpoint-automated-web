@@ -24,7 +24,7 @@
 
   {% if has_tool_access('classification') %}
   <a href="{{ url_for('clasificacion') }}" class="tool-card">
-    <div class="tool-card-icon" style="background: var(--c-success-bg); color: var(--c-success);">
+    <div class="tool-card-icon success">
       <i class="fa-solid fa-tags"></i>
     </div>
     <h3>Clasificacion de Data</h3>
@@ -37,7 +37,7 @@
 
   {% if has_tool_access('file_merge') %}
   <a href="{{ url_for('union_archivos') }}" class="tool-card">
-    <div class="tool-card-icon" style="background: var(--c-warning-bg); color: var(--c-warning);">
+    <div class="tool-card-icon warning">
       <i class="fa-solid fa-link"></i>
     </div>
     <h3>Union de Archivos</h3>
@@ -50,7 +50,7 @@
 
   {% if has_tool_access('csv_analysis') %}
   <a href="{{ url_for('analisis_csv') }}" class="tool-card">
-    <div class="tool-card-icon" style="background: var(--c-accent-light); color: var(--c-warning);">
+    <div class="tool-card-icon info">
       <i class="fa-solid fa-bolt"></i>
     </div>
     <h3>Analisis Rapido CSV</h3>
@@ -61,9 +61,8 @@
   </a>
   {% endif %}
 
-  {% if has_tool_access('tasks') %}
   <a href="{{ url_for('tasks.tasks_page') }}" class="tool-card">
-    <div class="tool-card-icon" style="background: #ede9fe; color: #7c3aed;">
+    <div class="tool-card-icon tasks">
       <i class="fa-solid fa-calendar-check"></i>
     </div>
     <h3>Gestión de Tareas</h3>
@@ -72,6 +71,5 @@
       Abrir <i class="fa-solid fa-arrow-right"></i>
     </div>
   </a>
-  {% endif %}
 </div>
 {% endblock %}

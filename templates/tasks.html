@@ -6,10 +6,6 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 
 <div class="tasks-header">
-  <div>
-    <h1>Gestión de Tareas</h1>
-    <p class="tasks-subtitle">Calendario interactivo · Toca un día para crear una tarea</p>
-  </div>
   <div class="tasks-header-actions">
     <button class="btn btn-primary" id="btnNewTask" aria-label="Nueva tarea">
       <i class="fa-solid fa-plus"></i> <span class="btn-label-desktop">Nueva Tarea</span>
@@ -66,13 +62,13 @@
       <input type="hidden" id="taskId" value="">
       <div class="task-form-message" id="taskFormMessage" role="status" aria-live="polite"></div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Título *</label>
         <input type="text" class="form-input" id="taskTitle" placeholder="Título de la tarea" maxlength="255">
         <div class="field-error" id="taskTitleError"></div>
       </div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Cliente</label>
         <div class="autocomplete-wrap">
           <input type="text" class="form-input" id="taskClient" placeholder="Cliente" maxlength="100" autocomplete="off">
@@ -80,29 +76,29 @@
         </div>
       </div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Director o Gerencia</label>
         <input type="text" class="form-input" id="taskDirectorate" placeholder="Dirección o gerencia" maxlength="255">
       </div>
 
-      <div class="form-row" style="margin-bottom:0">
-        <div class="form-group" style="margin-bottom:0">
+      <div class="form-row mb-0">
+        <div class="form-group form-group-tight">
           <label class="form-label">Solicitado por</label>
           <input type="text" class="form-input" id="taskRequestedBy" placeholder="Persona solicitante" maxlength="255">
         </div>
-        <div class="form-group" style="margin-bottom:0">
+        <div class="form-group form-group-tight">
           <label class="form-label">Tipo de Presupuesto</label>
           <input type="text" class="form-input" id="taskBudgetType" placeholder="Tipo de presupuesto" maxlength="255">
         </div>
       </div>
 
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-label">Descripción</label>
         <textarea class="form-textarea" id="taskDesc" rows="3" placeholder="Descripción"></textarea>
       </div>
 
-      <div class="form-row" style="margin-bottom:0">
-        <div class="form-group" style="margin-bottom:0">
+      <div class="form-row mb-0">
+        <div class="form-group form-group-tight">
           <label class="form-label">Asignar a *</label>
           <select class="form-select" id="taskAssignee">
             {% for u in area_users %}
@@ -113,19 +109,19 @@
           </select>
           <div class="field-error" id="taskAssigneeError"></div>
         </div>
-        <div class="form-group" style="margin-bottom:0">
+        <div class="form-group form-group-tight">
           <label class="form-label">Fecha de Entrega *</label>
           <input type="date" class="form-input" id="taskDueDate">
           <div class="field-error" id="taskDueDateError"></div>
         </div>
       </div>
 
-      <div class="form-row" style="margin-bottom:0">
-        <div class="form-group" style="margin-bottom:0">
+      <div class="form-row mb-0">
+        <div class="form-group form-group-tight">
           <label class="form-label">Fecha de inicio</label>
           <input type="date" class="form-input" id="taskStartDate">
         </div>
-        <div class="form-group" style="margin-bottom:0">
+        <div class="form-group form-group-tight">
           <label class="form-label">Fecha de finalización</label>
           <input type="date" class="form-input" id="taskEndDate">
           <div class="field-error" id="taskEndDateError"></div>
@@ -133,7 +129,7 @@
       </div>
 
       <!-- Status (only in edit mode) -->
-      <div class="form-group" id="statusGroup" style="display:none; margin-bottom:0">
+      <div class="form-group form-group-tight modal-hidden" id="statusGroup">
         <label class="form-label">Estado</label>
         <div class="status-select-group">
           <div class="status-chip selected" data-status="Pendiente">Pendiente</div>
@@ -143,14 +139,14 @@
       </div>
 
       <!-- Recurrence -->
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group form-group-tight">
         <label class="form-check">
           <input type="checkbox" id="taskRecurrent"> Tarea recurrente
         </label>
       </div>
 
       <div class="recurrence-fields" id="recurrenceFields">
-        <div class="form-group" style="margin-bottom:0">
+        <div class="form-group form-group-tight">
           <label class="form-label">Frecuencia</label>
           <select class="form-select" id="taskRecurrenceType">
             <option value="Diaria">Diaria</option>
@@ -164,10 +160,10 @@
     </div>
 
     <div class="task-modal-footer">
-      <label class="form-check delete-series-check" id="deleteSeriesWrap" style="display:none; margin-right:auto;">
+      <label class="form-check delete-series-check modal-hidden modal-push-left" id="deleteSeriesWrap">
         <input type="checkbox" id="taskDeleteSeries"> Eliminar toda la serie
       </label>
-      <button class="btn btn-danger btn-sm" id="btnDeleteTask" style="display:none; margin-right:auto;">
+      <button class="btn btn-danger btn-sm modal-hidden modal-push-left" id="btnDeleteTask">
         <i class="fa-solid fa-trash"></i> Eliminar
       </button>
       <button class="btn btn-secondary" id="btnCancelTask">Cancelar</button>

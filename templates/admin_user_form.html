@@ -3,11 +3,13 @@
 {% block page_name %}{{ 'Editar' if user else 'Crear' }} Usuario{% endblock %}
 
 {% block content %}
-<div class="card view-start" style="max-width: 700px;">
+
+<div class="admin-shell view-start">
+<section class="admin-panel admin-form-panel">
   <div class="card-title"><i class="fa-solid fa-user-gear"></i> {{ 'Editar Usuario' if user else 'Crear Nuevo Usuario' }}
     <div class="tooltip">
       <i class="fa-solid fa-circle-question"></i>
-      <span class="tooltip-text">{{ 'Actualiza los datos y permisos del usuario.' if user else 'Rellena los campos para registrar un nuevo usuario.' }}</span>
+      <span class="tooltip-text">{{ 'Actualiza datos, permisos y herramientas permitidas del usuario.' if user else 'Completa los campos para registrar un nuevo usuario y asignar permisos.' }}</span>
     </div>
   </div>
   <form method="POST">
@@ -35,17 +37,14 @@
     <div class="form-row">
       <div class="form-group">
         <label class="form-label" for="role">Rol</label>
-        <select id="role" name="role" class="form-select" required>
-          {% if not user %}
-          <option value="" disabled selected>Selecciona un rol</option>
-          {% endif %}
-          <option value="admin" {{ 'selected' if user and user.role == 'admin' else '' }}>Admin</option>
+        <select id="role" name="role" class="form-select">
+          <option value="admin" {{ 'selected' if user and user.role == 'admin' }}>Admin</option>
           {% for role in roles %}
-          <option value="{{ role.code }}" {{ 'selected' if user and user.role == role.code else '' }}>{{ role.display_name }} ({{ role.code }})</option>
+          <option value="{{ role.code }}" {{ 'selected' if user and user.role == role.code }}>{{ role.display_name }} ({{ role.code }})</option>
           {% endfor %}
           {% if not roles %}
-          <option value="DI" {{ 'selected' if user and user.role == 'DI' else '' }}>DI</option>
-          <option value="MW" {{ 'selected' if user and user.role == 'MW' else '' }}>MW</option>
+          <option value="DI" {{ 'selected' if not user or user.role == 'DI' }}>DI</option>
+          <option value="MW" {{ 'selected' if user and user.role == 'MW' }}>MW</option>
           {% endif %}
         </select>
       </div>
@@ -74,8 +73,8 @@
       </div>
     </div>
 
-    <div style="display: flex; gap: 12px; margin-top: 24px;">
-      <button type="submit" class="btn btn-primary btn-lg" style="flex: 1;">
+    <div class="row-actions mt-24">
+      <button type="submit" class="btn btn-primary btn-lg form-btn-grow">
         <i class="fa-solid fa-check"></i> {{ 'Guardar cambios' if user else 'Crear usuario' }}
       </button>
       <a href="{{ url_for('admin.users_list') }}" class="btn btn-secondary btn-lg">
@@ -83,5 +82,6 @@
       </a>
     </div>
   </form>
+</section>
 </div>
 {% endblock %}
