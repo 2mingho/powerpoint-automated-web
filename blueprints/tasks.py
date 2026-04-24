@@ -729,8 +729,12 @@ def api_tasks_create():
     is_recurrent = bool(data.get('is_recurrent'))
     recurrence_type = data.get('recurrence_type', '')
     recurrence_end_str = (data.get('recurrence_end', '') or '').strip()
+    initial_status = (data.get('status') or '').strip() or 'Pendiente'
     if not recurrence_end_str and end_date_raw:
         recurrence_end_str = str(end_date_raw)
+
+    if initial_status not in Task.VALID_STATUSES:
+        return jsonify({'success': False, 'error': 'Estado inválido.'}), 400
 
     if not assignee_id:
         return jsonify({'success': False, 'error': 'Debes asignar la tarea a alguien.'}), 400
@@ -791,7 +795,7 @@ def api_tasks_create():
             title=title, description=description, client=client,
             start_date=start_date_value, end_date=end_date_value,
             directorate=directorate, requested_by=requested_by, budget_type=budget_type,
-            due_date=dates[0], status='Pendiente',
+            due_date=dates[0], status=initial_status,
             is_recurrent=True, recurrence_type=recurrence_type,
             area=area, creator_id=current_user.id, assignee_id=assignee.id,
         )
@@ -805,7 +809,7 @@ def api_tasks_create():
                 title=title, description=description, client=client,
                 start_date=start_date_value, end_date=end_date_value,
                 directorate=directorate, requested_by=requested_by, budget_type=budget_type,
-                due_date=d, status='Pendiente',
+                due_date=d, status=initial_status,
                 is_recurrent=True, recurrence_type=recurrence_type,
                 parent_task_id=parent.id,
                 area=area, creator_id=current_user.id, assignee_id=assignee.id,
@@ -817,7 +821,7 @@ def api_tasks_create():
             title=title, description=description, client=client,
             start_date=start_date_value, end_date=end_date_value,
             directorate=directorate, requested_by=requested_by, budget_type=budget_type,
-            due_date=due, status='Pendiente',
+            due_date=due, status=initial_status,
             is_recurrent=False,
             area=area, creator_id=current_user.id, assignee_id=assignee.id,
         )

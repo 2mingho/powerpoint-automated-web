@@ -619,12 +619,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const createdTask = Array.isArray(data.tasks) ? data.tasks[0] : null;
-        if (createdTask && copiedTask.status && copiedTask.status !== 'Pendiente') {
-          return updateTask(createdTask.id, { status: copiedTask.status }, null, { silent: true })
-            .catch(function () {
-              notify('warning', 'Tarea pegada, pero no se pudo conservar el estado.');
-              return null;
-            });
+        if (!createdTask) {
+          notify('warning', 'La tarea fue creada, pero no se pudo confirmar su registro.');
+          return null;
         }
 
         notify('success', 'Tarea pegada correctamente.');
@@ -825,7 +822,7 @@ document.addEventListener('DOMContentLoaded', function () {
     recurrentCb.checked = false;
     recFields.classList.remove('visible');
     deleteSeriesCb.checked = false;
-    deleteSeriesWrap.style.display = 'none';
+    deleteSeriesWrap.classList.add('modal-hidden');
     currentStatus = 'Pendiente';
 
     clearFormMessage();
@@ -855,20 +852,20 @@ document.addEventListener('DOMContentLoaded', function () {
         chip.classList.toggle('selected', chip.dataset.status === currentStatus);
       });
 
-      statusGroup.style.display = '';
-      btnDelete.style.display = '';
+      statusGroup.classList.remove('modal-hidden');
+      btnDelete.classList.remove('modal-hidden');
 
       recurrentCb.checked = false;
       recurrentCb.parentElement.style.display = 'none';
       recFields.classList.remove('visible');
 
       if (taskData.is_recurrent && !taskData.parent_task_id) {
-        deleteSeriesWrap.style.display = '';
+        deleteSeriesWrap.classList.remove('modal-hidden');
       }
     } else {
       modalTitle.textContent = 'Nueva Tarea';
-      statusGroup.style.display = 'none';
-      btnDelete.style.display = 'none';
+      statusGroup.classList.remove('modal-hidden');
+      btnDelete.classList.add('modal-hidden');
       recurrentCb.parentElement.style.display = '';
     }
 
@@ -985,7 +982,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const id = fId.value;
     if (!id) return;
 
-    const deleteSeries = deleteSeriesWrap.style.display !== 'none' && deleteSeriesCb.checked;
+    const deleteSeries = !deleteSeriesWrap.classList.contains('modal-hidden') && deleteSeriesCb.checked;
     deleteTaskById(id, { deleteSeries: deleteSeries });
   });
 

@@ -1554,6 +1554,24 @@
     justify-content: center;
   }
 
+  .status-chip.selected {
+    border-width: 2px;
+    font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06);
+  }
+
+  .status-chip.selected[data-status="Pendiente"] {
+    color: #92400e;
+  }
+
+  .status-chip.selected[data-status="En Progreso"] {
+    color: #1d4ed8;
+  }
+
+  .status-chip.selected[data-status="Completado"] {
+    color: #166534;
+  }
+
   /* Recurrence row */
   .recurrence-fields.visible {
     grid-template-columns: 1fr;
