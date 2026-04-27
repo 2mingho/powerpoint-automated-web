@@ -44,6 +44,30 @@
   <button class="btn btn-secondary btn-sm" id="btnClearTaskFilters" type="button">
     <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar filtros
   </button>
+
+</div>
+
+<div class="tasks-bulk-actions modal-hidden" id="tasksBulkActions">
+  <div class="tasks-bulk-count" id="tasksBulkCount">0 seleccionadas</div>
+  <button class="btn btn-secondary" id="btnBulkCopy" type="button" title="Copiar" disabled><i class="fa-regular fa-copy"></i></button>
+  <button class="btn btn-secondary" id="btnBulkMove" type="button" title="Mover" disabled><i class="fa-regular fa-calendar"></i></button>
+  <button class="btn btn-secondary" id="btnBulkPending" type="button" title="Pendiente" disabled><i class="fa-regular fa-clock"></i></button>
+  <button class="btn btn-secondary" id="btnBulkProgress" type="button" title="En progreso" disabled><i class="fa-solid fa-spinner"></i></button>
+  <button class="btn btn-secondary" id="btnBulkDone" type="button" title="Completado" disabled><i class="fa-solid fa-check"></i></button>
+  <button class="btn btn-secondary" id="btnBulkDelete" type="button" title="Eliminar" disabled><i class="fa-regular fa-trash-can"></i></button>
+  <button class="btn btn-secondary" id="btnBulkCancel" type="button" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>
+</div>
+
+<div class="tasks-month-picker modal-hidden" id="tasksMonthPicker">
+  <input type="month" class="form-input" id="tasksMonthInput" aria-label="Mes y año">
+  <button class="btn btn-secondary btn-sm" id="btnTasksMonthApply" type="button">Ir</button>
+  <button class="btn btn-secondary btn-sm" id="btnTasksMonthClose" type="button">Cerrar</button>
+</div>
+
+<div class="tasks-month-picker modal-hidden" id="tasksMovePicker">
+  <input type="date" class="form-input" id="tasksMoveDateInput" aria-label="Fecha destino">
+  <button class="btn btn-secondary btn-sm" id="btnTasksMoveApply" type="button">Mover</button>
+  <button class="btn btn-secondary btn-sm" id="btnTasksMoveClose" type="button">Cerrar</button>
 </div>
 
 <div class="tasks-calendar-wrap">

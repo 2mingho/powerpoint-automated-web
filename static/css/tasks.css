@@ -43,6 +43,64 @@
   white-space: nowrap;
 }
 
+.tasks-bulk-actions {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(14px, env(safe-area-inset-bottom, 14px));
+  z-index: 1600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 8px;
+  box-shadow: var(--shadow-md);
+  max-width: calc(100vw - 16px);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tasks-bulk-count {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--c-text-secondary);
+  margin-right: 6px;
+}
+
+.tasks-bulk-actions .btn {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tasks-month-picker {
+  position: fixed;
+  top: 86px;
+  right: 18px;
+  z-index: 2000;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  padding: 10px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  flex-wrap: wrap;
+}
+
+.tasks-month-picker .form-input {
+  min-width: 160px;
+}
+
 /* ─── CALENDAR WRAPPER ─── */
 .tasks-calendar-wrap {
   background: var(--c-white);
@@ -177,6 +235,38 @@
   box-shadow: var(--shadow-md);
 }
 
+.fc-event-task.task-selected {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.22);
+}
+
+.fc-event-task .task-select-checkbox {
+  display: none;
+}
+
+.task-selection-mode .fc-event-task {
+  position: relative;
+  padding-left: 22px;
+}
+
+.task-selection-mode .fc-event-task .task-select-checkbox {
+  display: block;
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+.task-selection-mode .fc-event-task.task-selected .task-select-checkbox {
+  background: currentColor;
+}
+
 .fc-event-task.status-pendiente {
   background: var(--c-warning-bg);
   color: var(--c-warning);
@@ -208,12 +298,13 @@
   z-index: 2500;
   min-width: 220px;
   max-width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
   background: var(--c-white);
   border: 1px solid var(--c-border);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-lg);
   display: none;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .task-context-menu.open {
@@ -1279,23 +1370,71 @@
 
   /* FAB-style "Nueva Tarea" button on mobile */
   .tasks-header-actions {
-    position: fixed;
-    bottom: 24px;
-    right: 20px;
-    z-index: 1500;
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-xs);
   }
 
   .tasks-header-actions .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .tasks-header-actions #btnNewTask {
+    position: fixed;
+    bottom: 24px;
+    right: 20px;
     width: 56px;
     height: 56px;
     border-radius: 50%;
     padding: 0;
     font-size: 1.2rem;
+    z-index: 1500;
     box-shadow: 0 6px 20px rgba(0,0,0,0.25);
   }
 
   .btn-label-desktop {
     display: none;
+  }
+
+  .tasks-bulk-actions {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(88px, env(safe-area-inset-bottom, 24px));
+    background: var(--c-white);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+    padding: 8px;
+    display: grid;
+    grid-template-columns: 1fr repeat(7, 38px);
+    gap: 6px;
+    align-items: center;
+    z-index: 1500;
+  }
+
+  .tasks-bulk-actions.modal-hidden {
+    display: none;
+  }
+
+  .tasks-bulk-count {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--c-text);
+  }
+
+  .tasks-month-picker {
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: max(144px, env(safe-area-inset-bottom, 24px));
+  }
+
+  .tasks-month-picker .form-input {
+    min-width: 0;
+    flex: 1;
   }
 
   /* ── TASKS PAGE: Calendar ── */

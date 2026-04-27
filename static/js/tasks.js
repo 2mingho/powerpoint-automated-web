@@ -23,6 +23,23 @@ document.addEventListener('DOMContentLoaded', function () {
   const filterClient = document.getElementById('tasksFilterClient');
   const filterArea = document.getElementById('tasksFilterArea');
   const btnClearFilters = document.getElementById('btnClearTaskFilters');
+  const bulkActions = document.getElementById('tasksBulkActions');
+  const bulkCount = document.getElementById('tasksBulkCount');
+  const btnBulkCopy = document.getElementById('btnBulkCopy');
+  const btnBulkMove = document.getElementById('btnBulkMove');
+  const btnBulkPending = document.getElementById('btnBulkPending');
+  const btnBulkProgress = document.getElementById('btnBulkProgress');
+  const btnBulkDone = document.getElementById('btnBulkDone');
+  const btnBulkDelete = document.getElementById('btnBulkDelete');
+  const btnBulkCancel = document.getElementById('btnBulkCancel');
+  const monthPicker = document.getElementById('tasksMonthPicker');
+  const monthInput = document.getElementById('tasksMonthInput');
+  const btnMonthApply = document.getElementById('btnTasksMonthApply');
+  const btnMonthClose = document.getElementById('btnTasksMonthClose');
+  const movePicker = document.getElementById('tasksMovePicker');
+  const moveDateInput = document.getElementById('tasksMoveDateInput');
+  const btnMoveApply = document.getElementById('btnTasksMoveApply');
+  const btnMoveClose = document.getElementById('btnTasksMoveClose');
 
   const fId = document.getElementById('taskId');
   const fTitle = document.getElementById('taskTitle');
@@ -47,7 +64,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const acList = document.getElementById('clientAutocomplete');
 
-  const COPY_STORAGE_KEY = 'tasksClipboard_v1';
+  const COPY_STORAGE_KEY = 'tasksClipboard_v2';
+  const MOBILE_VIEW_KEY = 'tasksMobileView_v1';
+  const DESKTOP_VIEW_KEY = 'tasksDesktopView_v1';
   const LONG_PRESS_DELAY = 480;
   const LONG_PRESS_MOVE_THRESHOLD = 12;
   const MOBILE_BREAKPOINT = 768;
@@ -77,7 +96,9 @@ document.addEventListener('DOMContentLoaded', function () {
   let calendar;
   let clientCache = [];
   let filterClientTimer = null;
-  let copiedTask = null;
+  let copiedBatch = null;
+  let selectionMode = false;
+  let selectedTaskIds = new Set();
   let suppressEventClick = false;
   let suppressDateClick = false;
 
@@ -85,6 +106,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let longPressStart = null;
   let longPressPayload = null;
   let longPressHandled = false;
+  let moveAnchorDate = '';
 
   const statusColorMap = {
     Pendiente: { bg: 'var(--c-warning-bg)', border: 'var(--c-warning)', text: 'var(--c-warning)' },
@@ -187,6 +209,39 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!value) return '';
     if (value.includes('T')) return value.split('T', 1)[0];
     return value;
+  }
+
+  function isMobileViewport() {
+    return window.innerWidth < MOBILE_BREAKPOINT;
+  }
+
+  function getViewPreferenceKey() {
+    return isMobileViewport() ? MOBILE_VIEW_KEY : DESKTOP_VIEW_KEY;
+  }
+
+  function getStartOfWeek(dateValue) {
+    const dateObj = dateValue instanceof Date ? new Date(dateValue.getTime()) : toDateValue(dateValue);
+    if (!dateObj) return null;
+    const weekday = dateObj.getDay();
+    const delta = weekday === 0 ? -6 : 1 - weekday;
+    dateObj.setDate(dateObj.getDate() + delta);
+    return dateObj;
+  }
+
+  function shiftIsoDate(isoDate, deltaDays) {
+    if (!isoDate) return '';
+    const d = toDateValue(isoDate);
+    if (!d) return '';
+    d.setDate(d.getDate() + deltaDays);
+    return formatLocalDate(d);
+  }
+
+  function dateDiffDays(a, b) {
+    const left = toDateValue(a);
+    const right = toDateValue(b);
+    if (!left || !right) return 0;
+    const ms = left.getTime() - right.getTime();
+    return Math.round(ms / 86400000);
   }
 
   function estimateRecurrenceCount(startStr, recurrenceType, endStr) {
@@ -310,6 +365,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (calendar) calendar.refetchEvents();
   }
 
+  function syncMonthInput(dateObj) {
+    if (!monthInput || !(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return;
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    monthInput.value = `${year}-${month}`;
+  }
+
   function applyMobileViewButtons() {
     const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
     const iconOnly = window.innerWidth <= ICON_ONLY_BREAKPOINT;
@@ -352,27 +414,45 @@ document.addEventListener('DOMContentLoaded', function () {
       const raw = localStorage.getItem(COPY_STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.title || !parsed.assignee_id) return;
-      copiedTask = parsed;
+      if (!parsed || !Array.isArray(parsed.items) || !parsed.items.length) return;
+      copiedBatch = parsed;
     } catch {
-      copiedTask = null;
+      copiedBatch = null;
     }
   }
 
-  function saveCopiedTask(taskData) {
-    copiedTask = {
+  function toClipboardItem(taskData) {
+    const dueDate = normalizeIsoDate(taskData.due_date);
+    const dueDateObj = toDateValue(dueDate);
+    if (!dueDate || !dueDateObj) return null;
+    const weekStart = getStartOfWeek(dueDateObj);
+    const weekdayOffset = dateDiffDays(dueDate, formatLocalDate(weekStart));
+    const startDate = normalizeIsoDate(taskData.start_date);
+    const endDate = normalizeIsoDate(taskData.end_date);
+
+    return {
       title: (taskData.title || '').trim(),
       client: (taskData.client || '').trim(),
       directorate: (taskData.directorate || '').trim(),
       requested_by: (taskData.requested_by || '').trim(),
       budget_type: (taskData.budget_type || '').trim(),
       description: (taskData.description || '').trim(),
-      start_date: normalizeIsoDate(taskData.start_date),
-      end_date: normalizeIsoDate(taskData.end_date),
       assignee_id: parseInt(taskData.assignee_id, 10),
-      status: taskData.status || 'Pendiente'
+      original_due_date: dueDate,
+      weekday_offset: weekdayOffset,
+      start_offset: startDate ? dateDiffDays(startDate, dueDate) : null,
+      end_offset: endDate ? dateDiffDays(endDate, dueDate) : null
     };
-    localStorage.setItem(COPY_STORAGE_KEY, JSON.stringify(copiedTask));
+  }
+
+  function saveCopiedBatch(mode, items) {
+    if (!Array.isArray(items) || !items.length) return;
+    copiedBatch = {
+      mode: mode,
+      items: items,
+      copied_at: Date.now()
+    };
+    localStorage.setItem(COPY_STORAGE_KEY, JSON.stringify(copiedBatch));
   }
 
   function renderAutocomplete() {
@@ -411,6 +491,71 @@ document.addEventListener('DOMContentLoaded', function () {
     contextMenu.classList.remove('open');
     contextMenu.style.visibility = 'hidden';
     contextMenuItemsEl.innerHTML = '';
+  }
+
+  function clampToViewport(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function placeFloatingElement(el, preferredLeft, preferredTop) {
+    if (!el) return;
+
+    const margin = 8;
+    el.style.left = '0px';
+    el.style.top = '0px';
+    const rect = el.getBoundingClientRect();
+
+    const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - rect.height - margin);
+    const left = clampToViewport(preferredLeft, margin, maxLeft);
+    const top = clampToViewport(preferredTop, margin, maxTop);
+
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }
+
+  function placeMonthPicker(anchorEl) {
+    if (!monthPicker || monthPicker.classList.contains('modal-hidden')) return;
+    const anchorRect = anchorEl ? anchorEl.getBoundingClientRect() : null;
+    const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    const viewportTop = window.visualViewport ? window.visualViewport.offsetTop : 0;
+    const preferredLeft = anchorRect ? anchorRect.left : (window.innerWidth / 2) - 120;
+    let preferredTop = anchorRect ? anchorRect.bottom + 8 : 72;
+
+    const pickerRect = monthPicker.getBoundingClientRect();
+    const estimatedBottom = preferredTop + pickerRect.height;
+    const safeBottom = viewportTop + viewportHeight - 8;
+    if (estimatedBottom > safeBottom) {
+      preferredTop = safeBottom - pickerRect.height;
+    }
+
+    monthPicker.style.right = 'auto';
+    monthPicker.style.bottom = 'auto';
+    placeFloatingElement(monthPicker, preferredLeft, preferredTop);
+  }
+
+  function placeMovePicker(anchorEl) {
+    if (!movePicker || movePicker.classList.contains('modal-hidden')) return;
+    const anchorRect = anchorEl ? anchorEl.getBoundingClientRect() : null;
+    const preferredLeft = anchorRect ? anchorRect.left : (window.innerWidth / 2) - 120;
+    const preferredTop = anchorRect ? anchorRect.top - 56 : 72;
+
+    movePicker.style.right = 'auto';
+    movePicker.style.bottom = 'auto';
+    placeFloatingElement(movePicker, preferredLeft, preferredTop);
+  }
+
+  function updateBulkActionsPosition() {
+    if (!bulkActions) return;
+
+    let keyboardOffset = 0;
+    if (window.visualViewport) {
+      const occupied = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
+      keyboardOffset = Math.max(0, occupied);
+    }
+
+    const baseBottom = 14;
+    bulkActions.style.bottom = `${baseBottom + keyboardOffset}px`;
   }
 
   function openContextMenu(clientX, clientY, items) {
@@ -476,6 +621,44 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 350);
   }
 
+  function updateSelectionUi() {
+    const count = selectedTaskIds.size;
+    const label = `${count} seleccionada(s)`;
+    if (bulkCount) bulkCount.textContent = label;
+
+    [btnBulkCopy, btnBulkMove, btnBulkPending, btnBulkProgress, btnBulkDone, btnBulkDelete].forEach(function (btn) {
+      if (btn) btn.disabled = count === 0;
+    });
+
+    if (bulkActions) {
+      bulkActions.classList.toggle('modal-hidden', !selectionMode);
+    }
+
+    calEl.classList.toggle('task-selection-mode', selectionMode);
+    updateBulkActionsPosition();
+  }
+
+  function setSelectionMode(enabled) {
+    selectionMode = !!enabled;
+    if (!selectionMode) {
+      selectedTaskIds = new Set();
+    }
+    updateSelectionUi();
+    refreshCalendar();
+  }
+
+  function toggleTaskSelection(taskId) {
+    const parsedId = parseInt(taskId, 10);
+    if (!parsedId) return;
+    if (selectedTaskIds.has(parsedId)) {
+      selectedTaskIds.delete(parsedId);
+    } else {
+      selectedTaskIds.add(parsedId);
+    }
+    updateSelectionUi();
+    refreshCalendar();
+  }
+
   function getDateFromTarget(target) {
     const dateNode = target.closest('[data-date]');
     if (!dateNode || !calEl.contains(dateNode)) return '';
@@ -494,6 +677,78 @@ document.addEventListener('DOMContentLoaded', function () {
       title: eventApi.title,
       due_date: formatLocalDate(eventApi.start)
     };
+  }
+
+  function getAllVisibleTaskData() {
+    if (!calendar) return [];
+    return calendar.getEvents().map(function (eventApi) {
+      return {
+        id: parseInt(eventApi.id, 10),
+        ...eventApi.extendedProps,
+        title: eventApi.title,
+        due_date: formatLocalDate(eventApi.start)
+      };
+    });
+  }
+
+  function copyTaskItems(items, mode, options) {
+    const opts = options || {};
+    const prepared = items
+      .map(toClipboardItem)
+      .filter(Boolean)
+      .filter(function (item) {
+        if (!opts.workdaysOnly) return true;
+        return item.weekday_offset >= 0 && item.weekday_offset <= 4;
+      });
+
+    if (!prepared.length) {
+      notify('warning', opts.workdaysOnly ? 'No hay tareas de lunes a viernes para copiar.' : 'No hay tareas para copiar.');
+      return;
+    }
+
+    saveCopiedBatch(mode || 'selected', prepared);
+    notify('success', `Tareas copiadas: ${prepared.length}.`);
+  }
+
+  function copySelectedTasks() {
+    const selected = getAllVisibleTaskData().filter(function (task) {
+      return selectedTaskIds.has(task.id);
+    });
+    copyTaskItems(selected, 'selected');
+  }
+
+  function getVisibleSelectedEvents() {
+    if (!calendar) return [];
+    const view = calendar.view;
+    const start = view && view.activeStart ? view.activeStart.getTime() : Number.NEGATIVE_INFINITY;
+    const end = view && view.activeEnd ? view.activeEnd.getTime() : Number.POSITIVE_INFINITY;
+
+    return calendar.getEvents().filter(function (eventApi) {
+      const id = parseInt(eventApi.id, 10);
+      if (!selectedTaskIds.has(id)) return false;
+      const ts = eventApi.start ? eventApi.start.getTime() : 0;
+      return ts >= start && ts < end;
+    });
+  }
+
+  function copyWorkWeek(dateStr) {
+    const weekStart = getStartOfWeek(dateStr);
+    if (!weekStart) return;
+    const weekStartIso = formatLocalDate(weekStart);
+    const weekEndIso = shiftIsoDate(weekStartIso, 4);
+
+    const inWeek = getAllVisibleTaskData().filter(function (task) {
+      return task.due_date >= weekStartIso && task.due_date <= weekEndIso;
+    });
+
+    copyTaskItems(inWeek, 'workweek', { workdaysOnly: true });
+  }
+
+  function copyDay(dateStr) {
+    const daily = getAllVisibleTaskData().filter(function (task) {
+      return task.due_date === dateStr;
+    });
+    copyTaskItems(daily, 'day');
   }
 
   function updateTask(taskId, payload, revertFn, options) {
@@ -523,6 +778,107 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         throw err;
       });
+  }
+
+  function bulkUpdateStatus(statusValue) {
+    const taskIds = Array.from(selectedTaskIds);
+    if (!taskIds.length) return Promise.resolve();
+
+    return requestJson('/api/tasks/bulk-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_ids: taskIds, status: statusValue })
+    }).then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudo actualizar en lote.');
+      notify('success', `Se actualizaron ${data.updated || 0} tarea(s).`);
+      setSelectionMode(false);
+      refreshCalendar();
+    }).catch(function (err) {
+      notify('error', err.message || 'Error de conexion.');
+    });
+  }
+
+  function bulkMoveByDateMap(dateMap) {
+    return requestJson('/api/tasks/bulk-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ due_date_map: dateMap })
+    }).then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudo mover en lote.');
+      notify('success', `Se movieron ${data.updated || 0} tarea(s).`);
+      refreshCalendar();
+      return data;
+    });
+  }
+
+  function bulkMoveSelectedByDelta(deltaDays) {
+    if (!deltaDays) return Promise.resolve();
+    const visibleSelected = getVisibleSelectedEvents();
+    if (!visibleSelected.length) {
+      notify('warning', 'No hay tareas seleccionadas visibles para mover.');
+      return Promise.resolve();
+    }
+
+    const dateMap = {};
+    visibleSelected.forEach(function (eventApi) {
+      const currentDate = formatLocalDate(eventApi.start);
+      dateMap[eventApi.id] = shiftIsoDate(currentDate, deltaDays);
+    });
+
+    return bulkMoveByDateMap(dateMap).catch(function (err) {
+      notify('error', err.message || 'Error de conexion.');
+    });
+  }
+
+  function bulkMoveSelectedToDate() {
+    const visibleSelected = getVisibleSelectedEvents();
+    if (!visibleSelected.length) {
+      notify('warning', 'No hay tareas seleccionadas visibles para mover.');
+      return;
+    }
+
+    let anchor = visibleSelected[0];
+    visibleSelected.forEach(function (eventApi) {
+      if (eventApi.start && anchor.start && eventApi.start < anchor.start) {
+        anchor = eventApi;
+      }
+    });
+
+    moveAnchorDate = formatLocalDate(anchor.start);
+    if (moveDateInput) moveDateInput.value = moveAnchorDate;
+    if (movePicker) {
+      movePicker.classList.remove('modal-hidden');
+      placeMovePicker(btnBulkMove);
+    }
+  }
+
+  function bulkDeleteSelected() {
+    const taskIds = Array.from(selectedTaskIds);
+    if (!taskIds.length) return;
+
+    confirmAction({
+      title: 'Eliminar tareas seleccionadas',
+      message: `Se eliminaran ${taskIds.length} tareas seleccionadas. Esta accion no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      danger: true
+    }).then(function (confirmed) {
+      if (!confirmed) return;
+      requestJson('/api/tasks/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_ids: taskIds })
+      }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudieron eliminar las tareas.');
+          return;
+        }
+        notify('success', `Se eliminaron ${data.deleted || 0} tarea(s).`);
+        setSelectionMode(false);
+        refreshCalendar();
+      }).catch(function () {
+        notify('error', 'Error de conexion.');
+      });
+    });
   }
 
   function deleteTaskById(taskId, options) {
@@ -584,47 +940,75 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function createTaskFromClipboard(dateStr) {
-    if (!copiedTask) return;
-    if (!copiedTask.assignee_id) {
-      notify('warning', 'La tarea copiada no tiene un responsable valido.');
+    if (!copiedBatch || !Array.isArray(copiedBatch.items) || !copiedBatch.items.length) {
+      notify('warning', 'No hay tareas copiadas para pegar.');
       return;
     }
 
-    const payload = {
-      title: copiedTask.title,
-      client: copiedTask.client || '',
-      directorate: copiedTask.directorate || '',
-      requested_by: copiedTask.requested_by || '',
-      budget_type: copiedTask.budget_type || '',
-      description: copiedTask.description || '',
-      start_date: copiedTask.start_date || '',
-      end_date: copiedTask.end_date || '',
-      assignee_id: parseInt(copiedTask.assignee_id, 10),
-      due_date: dateStr,
-      status: copiedTask.status || 'Pendiente',
-      is_recurrent: false,
-      recurrence_type: '',
-      recurrence_end: ''
-    };
+    const targetDate = toDateValue(dateStr);
+    if (!targetDate) {
+      notify('error', 'Fecha de destino inválida.');
+      return;
+    }
 
-    requestJson('/api/tasks', {
+    const isWorkWeekCopy = copiedBatch.mode === 'workweek';
+    const targetWeekStart = getStartOfWeek(targetDate);
+    const mondayIso = targetWeekStart ? formatLocalDate(targetWeekStart) : '';
+    const anchorSourceDate = copiedBatch.items[0] && copiedBatch.items[0].original_due_date
+      ? copiedBatch.items[0].original_due_date
+      : '';
+    const deltaDays = anchorSourceDate ? dateDiffDays(dateStr, anchorSourceDate) : 0;
+
+    const tasks = copiedBatch.items
+      .filter(function (item) { return item && item.assignee_id && item.title; })
+      .map(function (item) {
+        const sourceDueDate = item.original_due_date || anchorSourceDate || dateStr;
+        const dueDate = isWorkWeekCopy
+          ? shiftIsoDate(mondayIso, item.weekday_offset)
+          : shiftIsoDate(sourceDueDate, deltaDays);
+        return {
+          title: item.title,
+          client: item.client || '',
+          directorate: item.directorate || '',
+          requested_by: item.requested_by || '',
+          budget_type: item.budget_type || '',
+          description: item.description || '',
+          start_date: item.start_offset === null || item.start_offset === undefined ? '' : shiftIsoDate(dueDate, item.start_offset),
+          end_date: item.end_offset === null || item.end_offset === undefined ? '' : shiftIsoDate(dueDate, item.end_offset),
+          assignee_id: parseInt(item.assignee_id, 10),
+          due_date: dueDate,
+          status: 'Pendiente',
+          is_recurrent: false,
+          recurrence_type: '',
+          recurrence_end: ''
+        };
+      });
+
+    if (!tasks.length) {
+      notify('warning', 'No hay tareas validas para pegar.');
+      return;
+    }
+
+    const pasteModeLabel = isWorkWeekCopy ? 'semanal' : 'fecha exacta';
+
+    requestJson('/api/tasks/bulk-create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ tasks: tasks })
     })
       .then(function (data) {
         if (!data.success) {
-          notify('error', data.error || 'No se pudo pegar la tarea.');
+          notify('error', data.error || 'No se pudieron pegar las tareas.');
           return null;
         }
 
-        const createdTask = Array.isArray(data.tasks) ? data.tasks[0] : null;
-        if (!createdTask) {
-          notify('warning', 'La tarea fue creada, pero no se pudo confirmar su registro.');
-          return null;
+        const createdCount = data.created || 0;
+        const failedCount = data.failed || 0;
+        if (failedCount > 0) {
+          notify('warning', `Pegado parcial (${pasteModeLabel}): ${createdCount} creadas, ${failedCount} fallidas.`);
+        } else {
+          notify('success', `Tareas pegadas (${pasteModeLabel}): ${createdCount}.`);
         }
-
-        notify('success', 'Tarea pegada correctamente.');
         return null;
       })
       .then(function () {
@@ -659,8 +1043,15 @@ document.addEventListener('DOMContentLoaded', function () {
         label: 'Copiar',
         icon: 'fa-copy',
         action: function () {
-          saveCopiedTask(taskData);
-          notify('success', 'Tarea copiada.');
+          copyTaskItems([taskData], 'selected');
+        }
+      },
+      {
+        label: 'Seleccionar',
+        icon: 'fa-check-square',
+        action: function () {
+          setSelectionMode(true);
+          toggleTaskSelection(taskData.id);
         }
       },
       { type: 'separator' },
@@ -685,10 +1076,25 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       },
       {
-        label: 'Pegar tarea copiada',
+        label: 'Pegar tareas copiadas',
         icon: 'fa-paste',
-        disabled: !copiedTask,
+        disabled: !copiedBatch || !Array.isArray(copiedBatch.items) || !copiedBatch.items.length,
         action: function () { createTaskFromClipboard(dateStr); }
+      },
+      {
+        label: 'Copiar dia',
+        icon: 'fa-calendar-day',
+        action: function () { copyDay(dateStr); }
+      },
+      {
+        label: 'Copiar semana (L-V)',
+        icon: 'fa-calendar-week',
+        action: function () { copyWorkWeek(dateStr); }
+      },
+      {
+        label: 'Seleccionar',
+        icon: 'fa-check-square',
+        action: function () { setSelectionMode(true); }
       },
       { type: 'separator' },
       {
@@ -776,6 +1182,11 @@ document.addEventListener('DOMContentLoaded', function () {
       if (eventEl && calEl.contains(eventEl)) {
         const taskData = getTaskDataFromElement(eventEl);
         if (!taskData) return;
+        if (selectionMode) {
+          e.preventDefault();
+          toggleTaskSelection(taskData.id);
+          return;
+        }
         e.preventDefault();
         suppressCalendarClicks();
         openTaskContextMenu(e.clientX, e.clientY, taskData);
@@ -803,8 +1214,39 @@ document.addEventListener('DOMContentLoaded', function () {
       hideContextMenu();
     });
 
+    document.addEventListener('click', function (e) {
+      if (!monthPicker || monthPicker.classList.contains('modal-hidden')) return;
+      if (monthPicker.contains(e.target)) return;
+      if (e.target && e.target.classList && e.target.classList.contains('fc-toolbar-title')) return;
+      monthPicker.classList.add('modal-hidden');
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!movePicker || movePicker.classList.contains('modal-hidden')) return;
+      if (movePicker.contains(e.target)) return;
+      if (btnBulkMove && btnBulkMove.contains(e.target)) return;
+      movePicker.classList.add('modal-hidden');
+    });
+
     document.addEventListener('scroll', hideContextMenu, true);
     window.addEventListener('resize', hideContextMenu);
+    window.addEventListener('resize', function () {
+      placeMonthPicker(calEl.querySelector('.fc-toolbar-title'));
+      placeMovePicker(btnBulkMove);
+      updateBulkActionsPosition();
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function () {
+        placeMonthPicker(calEl.querySelector('.fc-toolbar-title'));
+        placeMovePicker(btnBulkMove);
+        updateBulkActionsPosition();
+      });
+      window.visualViewport.addEventListener('scroll', function () {
+        placeMonthPicker(calEl.querySelector('.fc-toolbar-title'));
+        placeMovePicker(btnBulkMove);
+        updateBulkActionsPosition();
+      });
+    }
   }
 
   function openModal(editMode, taskData) {
@@ -1003,8 +1445,53 @@ document.addEventListener('DOMContentLoaded', function () {
     refreshCalendar();
   });
 
+  if (btnBulkCancel) btnBulkCancel.addEventListener('click', function () { setSelectionMode(false); });
+  if (btnBulkCopy) btnBulkCopy.addEventListener('click', function () { copySelectedTasks(); setSelectionMode(false); });
+  if (btnBulkMove) btnBulkMove.addEventListener('click', bulkMoveSelectedToDate);
+  if (btnBulkPending) btnBulkPending.addEventListener('click', function () { bulkUpdateStatus('Pendiente'); });
+  if (btnBulkProgress) btnBulkProgress.addEventListener('click', function () { bulkUpdateStatus('En Progreso'); });
+  if (btnBulkDone) btnBulkDone.addEventListener('click', function () { bulkUpdateStatus('Completado'); });
+  if (btnBulkDelete) btnBulkDelete.addEventListener('click', bulkDeleteSelected);
+
+  if (btnMonthApply && monthInput) {
+    btnMonthApply.addEventListener('click', function () {
+      if (!monthInput.value) return;
+      calendar.gotoDate(`${monthInput.value}-01`);
+      if (monthPicker) monthPicker.classList.add('modal-hidden');
+    });
+  }
+
+  if (btnMonthClose && monthPicker) {
+    btnMonthClose.addEventListener('click', function () {
+      monthPicker.classList.add('modal-hidden');
+    });
+  }
+
+  if (btnMoveApply && moveDateInput) {
+    btnMoveApply.addEventListener('click', function () {
+      const targetDate = (moveDateInput.value || '').trim();
+      if (!targetDate || !toDateValue(targetDate)) {
+        notify('error', 'Fecha inválida. Usa formato YYYY-MM-DD.');
+        return;
+      }
+
+      const anchorDate = moveAnchorDate || targetDate;
+      const deltaDays = dateDiffDays(targetDate, anchorDate);
+      bulkMoveSelectedByDelta(deltaDays);
+      if (movePicker) movePicker.classList.add('modal-hidden');
+    });
+  }
+
+  if (btnMoveClose && movePicker) {
+    btnMoveClose.addEventListener('click', function () {
+      movePicker.classList.add('modal-hidden');
+    });
+  }
+
+  const preferredView = localStorage.getItem(getViewPreferenceKey()) || (isMobileViewport() ? 'dayGridWeek' : 'dayGridMonth');
+
   calendar = new FullCalendar.Calendar(calEl, {
-    initialView: 'dayGridMonth',
+    initialView: preferredView,
     locale: 'es',
     headerToolbar: {
       left: 'prev,next today',
@@ -1022,6 +1509,13 @@ document.addEventListener('DOMContentLoaded', function () {
     selectable: true,
     dayMaxEvents: 4,
     moreLinkText: 'mas',
+    eventOrder: function (a, b) {
+      const priority = { Pendiente: 1, 'En Progreso': 2, Completado: 3 };
+      const p1 = priority[a.extendedProps.status] || 99;
+      const p2 = priority[b.extendedProps.status] || 99;
+      if (p1 !== p2) return p1 - p2;
+      return String(a.title || '').localeCompare(String(b.title || ''), 'es');
+    },
 
     events: function (info, successCallback, failureCallback) {
       const params = new URLSearchParams({
@@ -1079,6 +1573,14 @@ document.addEventListener('DOMContentLoaded', function () {
       info.el.setAttribute('title', lines.join('\n'));
       info.el.setAttribute('aria-label', lines.join('. '));
       info.el.dataset.taskId = String(info.event.id);
+      if (!info.el.querySelector('.task-select-checkbox')) {
+        const marker = document.createElement('span');
+        marker.className = 'task-select-checkbox';
+        info.el.appendChild(marker);
+      }
+      if (selectedTaskIds.has(parseInt(info.event.id, 10))) {
+        info.el.classList.add('task-selected');
+      }
     },
 
     dateClick: function (info) {
@@ -1098,6 +1600,10 @@ document.addEventListener('DOMContentLoaded', function () {
         suppressEventClick = false;
         return;
       }
+      if (selectionMode) {
+        toggleTaskSelection(info.event.id);
+        return;
+      }
       openModal(true, info.event.extendedProps);
     },
 
@@ -1105,6 +1611,30 @@ document.addEventListener('DOMContentLoaded', function () {
       const taskId = info.event.id;
       const previousDate = formatLocalDate(info.oldEvent.start) || normalizeIsoDate(info.oldEvent.startStr);
       const nextDate = formatLocalDate(info.event.start) || normalizeIsoDate(info.event.startStr);
+
+      if (selectionMode && isMobileViewport()) {
+        info.revert();
+        notify('info', 'En móvil usa "Mover" en la barra de selección.');
+        return;
+      }
+
+      if (selectionMode) {
+        if (!selectedTaskIds.has(parseInt(taskId, 10))) {
+          info.revert();
+          notify('warning', 'Arrastra una tarea seleccionada para mover el grupo visible.');
+          return;
+        }
+
+        const deltaDays = dateDiffDays(nextDate, previousDate);
+        bulkMoveSelectedByDelta(deltaDays)
+          .then(function () {
+            showToast('Movimiento grupal aplicado.', 'success');
+          })
+          .catch(function () {
+            info.revert();
+          });
+        return;
+      }
 
       updateTask(taskId, { due_date: nextDate }, info.revert, { silent: true })
         .then(function () {
@@ -1129,14 +1659,36 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     },
 
-    datesSet: function () {
+    datesSet: function (info) {
       applyMobileViewButtons();
+      syncMonthInput(info.start || calendar.getDate());
+      localStorage.setItem(getViewPreferenceKey(), info.view.type);
+
+      const titleEl = calEl.querySelector('.fc-toolbar-title');
+      if (titleEl && !titleEl.dataset.monthPickerBound) {
+        titleEl.dataset.monthPickerBound = '1';
+        titleEl.style.cursor = 'pointer';
+        titleEl.title = 'Seleccionar mes y año';
+        titleEl.addEventListener('click', function () {
+          if (!monthPicker) return;
+          syncMonthInput(calendar.getDate());
+          monthPicker.classList.toggle('modal-hidden');
+          if (!monthPicker.classList.contains('modal-hidden')) {
+            placeMonthPicker(titleEl);
+          }
+        });
+      }
+
+      if (titleEl && monthPicker && !monthPicker.classList.contains('modal-hidden')) {
+        placeMonthPicker(titleEl);
+      }
+      if (movePicker && !movePicker.classList.contains('modal-hidden')) {
+        placeMovePicker(btnBulkMove);
+      }
     },
 
     windowResize: function () {
-      if (window.innerWidth < MOBILE_BREAKPOINT) {
-        calendar.changeView('listWeek');
-      }
+      updateSelectionUi();
       applyMobileViewButtons();
     }
   });
@@ -1144,11 +1696,9 @@ document.addEventListener('DOMContentLoaded', function () {
   calendar.render();
   wireContextMenuListeners();
   loadCopiedTask();
-
-  if (window.innerWidth < MOBILE_BREAKPOINT) {
-    calendar.changeView('listWeek');
-  }
-
+  updateSelectionUi();
+  updateBulkActionsPosition();
   applyMobileViewButtons();
+  syncMonthInput(calendar.getDate());
   loadClients();
 });
