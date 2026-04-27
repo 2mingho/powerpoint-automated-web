@@ -840,6 +840,187 @@ def api_tasks_create():
     })
 
 
+@tasks_bp.route('/api/tasks/bulk-create', methods=['POST'])
+@task_access_required
+def api_tasks_bulk_create():
+    """Create multiple non-recurrent tasks from a batch payload."""
+    data = request.get_json(force=True) or {}
+    raw_tasks = data.get('tasks')
+
+    if not isinstance(raw_tasks, list) or not raw_tasks:
+        return jsonify({'success': False, 'error': 'Debes enviar una lista de tareas.'}), 400
+    if len(raw_tasks) > 500:
+        return jsonify({'success': False, 'error': 'Puedes pegar hasta 500 tareas por lote.'}), 400
+
+    created_tasks = []
+    failures = []
+
+    for idx, item in enumerate(raw_tasks):
+        if not isinstance(item, dict):
+            failures.append({'index': idx, 'error': 'Formato inválido.'})
+            continue
+
+        title = (item.get('title') or '').strip()
+        due_date_raw = (item.get('due_date') or '').strip()
+        assignee_id = item.get('assignee_id')
+
+        if not title:
+            failures.append({'index': idx, 'error': 'El título es obligatorio.'})
+            continue
+
+        due_date_value = _parse_iso_or_mmddyyyy_date(due_date_raw)
+        if not due_date_value:
+            failures.append({'index': idx, 'error': 'Fecha de entrega inválida.'})
+            continue
+
+        start_date_raw = (item.get('start_date') or '').strip()
+        end_date_raw = (item.get('end_date') or '').strip()
+        start_date_value = _parse_iso_or_mmddyyyy_date(start_date_raw) if start_date_raw else None
+        end_date_value = _parse_iso_or_mmddyyyy_date(end_date_raw) if end_date_raw else None
+
+        if start_date_raw and not start_date_value:
+            failures.append({'index': idx, 'error': 'Fecha de inicio inválida.'})
+            continue
+        if end_date_raw and not end_date_value:
+            failures.append({'index': idx, 'error': 'Fecha de finalización inválida.'})
+            continue
+        if start_date_value and end_date_value and end_date_value < start_date_value:
+            failures.append({'index': idx, 'error': 'La fecha final no puede ser menor que la fecha de inicio.'})
+            continue
+
+        try:
+            assignee = User.query.get(int(assignee_id))
+        except (ValueError, TypeError):
+            assignee = None
+
+        if not assignee:
+            failures.append({'index': idx, 'error': 'El usuario asignado no existe.'})
+            continue
+        if not _assignee_in_current_unit(assignee):
+            failures.append({'index': idx, 'error': 'Solo puedes asignar tareas a usuarios de tu unidad.'})
+            continue
+
+        area = _task_area_key_for_user(assignee)
+        task = Task(
+            title=title,
+            description=(item.get('description') or '').strip(),
+            client=(item.get('client') or '').strip(),
+            start_date=start_date_value,
+            end_date=end_date_value,
+            directorate=(item.get('directorate') or '').strip(),
+            requested_by=(item.get('requested_by') or '').strip(),
+            budget_type=(item.get('budget_type') or '').strip(),
+            due_date=due_date_value,
+            status='Pendiente',
+            is_recurrent=False,
+            area=area,
+            creator_id=current_user.id,
+            assignee_id=assignee.id,
+        )
+        db.session.add(task)
+        created_tasks.append(task)
+
+    if created_tasks:
+        db.session.commit()
+
+        from blueprints.admin import log_activity
+        log_activity('task_bulk_create', f'Pegado masivo de tareas: {len(created_tasks)} creadas')
+    else:
+        db.session.rollback()
+
+    return jsonify({
+        'success': True,
+        'created': len(created_tasks),
+        'failed': len(failures),
+        'failures': failures,
+        'tasks': [t.to_dict() for t in created_tasks],
+    })
+
+
+@tasks_bp.route('/api/tasks/bulk-update', methods=['POST'])
+@task_access_required
+def api_tasks_bulk_update():
+    """Update status for selected task instances in current unit scope."""
+    data = request.get_json(force=True) or {}
+    status = (data.get('status') or '').strip()
+    due_date_map_raw = data.get('due_date_map') if isinstance(data.get('due_date_map'), dict) else None
+
+    task_ids = _parse_task_ids(data.get('task_ids'))
+    if due_date_map_raw:
+        task_ids = _parse_task_ids(list(due_date_map_raw.keys()))
+
+    if not task_ids:
+        return jsonify({'success': False, 'error': 'Debes seleccionar al menos una tarea.'}), 400
+    if len(task_ids) > 500:
+        return jsonify({'success': False, 'error': 'Puedes editar hasta 500 tareas por lote.'}), 400
+
+    updates_status = None
+    if status:
+        if status not in Task.VALID_STATUSES:
+            return jsonify({'success': False, 'error': 'Estado inválido.'}), 400
+        updates_status = status
+
+    due_date_map = {}
+    if due_date_map_raw:
+        for raw_id, raw_date in due_date_map_raw.items():
+            try:
+                task_id = int(raw_id)
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'error': 'ID de tarea inválido en movimiento.'}), 400
+            parsed_due = _parse_iso_or_mmddyyyy_date(raw_date)
+            if not parsed_due:
+                return jsonify({'success': False, 'error': 'Fecha inválida en movimiento masivo.'}), 400
+            due_date_map[task_id] = parsed_due
+
+    if not updates_status and not due_date_map:
+        return jsonify({'success': False, 'error': 'No hay cambios para aplicar.'}), 400
+
+    tasks = _apply_unit_scope(Task.query).filter(Task.id.in_(task_ids)).all()
+    if not tasks:
+        return jsonify({'success': False, 'error': 'No se encontraron tareas para editar.'}), 404
+
+    for task in tasks:
+        if updates_status:
+            task.status = updates_status
+        if due_date_map:
+            next_due = due_date_map.get(task.id)
+            if next_due:
+                task.due_date = next_due
+
+    db.session.commit()
+
+    from blueprints.admin import log_activity
+    log_activity('task_bulk_update_user', f'Actualización masiva (usuario) de {len(tasks)} tarea(s)')
+
+    return jsonify({'success': True, 'updated': len(tasks)})
+
+
+@tasks_bp.route('/api/tasks/bulk-delete', methods=['POST'])
+@task_access_required
+def api_tasks_bulk_delete():
+    """Delete selected task instances only (no series expansion)."""
+    data = request.get_json(force=True) or {}
+    task_ids = _parse_task_ids(data.get('task_ids'))
+    if not task_ids:
+        return jsonify({'success': False, 'error': 'Debes seleccionar al menos una tarea.'}), 400
+    if len(task_ids) > 500:
+        return jsonify({'success': False, 'error': 'Puedes eliminar hasta 500 tareas por lote.'}), 400
+
+    tasks = _apply_unit_scope(Task.query).filter(Task.id.in_(task_ids)).all()
+    if not tasks:
+        return jsonify({'success': False, 'error': 'No se encontraron tareas para eliminar.'}), 404
+
+    for task in tasks:
+        db.session.delete(task)
+
+    db.session.commit()
+
+    from blueprints.admin import log_activity
+    log_activity('task_bulk_delete_user', f'Eliminación masiva (usuario) de {len(tasks)} tarea(s)')
+
+    return jsonify({'success': True, 'deleted': len(tasks)})
+
+
 # ─────────────────────────────────────────────────────────────
 # API: Update task
 # ─────────────────────────────────────────────────────────────
