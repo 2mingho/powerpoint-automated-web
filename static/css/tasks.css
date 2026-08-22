@@ -398,12 +398,29 @@
   color: var(--c-text-secondary);
 }
 
+/* Rejilla de columnas iguales: cada control ocupaba 170px minimo aunque su
+   contenido fuera "Alta". Con el icono delante, el rotulo sobra y cada campo
+   puede quedarse en lo que mide de verdad. */
 .tasks-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-sm);
   margin-bottom: var(--sp-md);
   align-items: center;
+}
+
+.tasks-filters .campo-icono {
+  flex: 0 1 auto;
+}
+
+/* El cliente es texto libre y merece algo mas de sitio que un desplegable. */
+.tasks-filters .campo-icono:has(.form-input) {
+  flex: 1 1 160px;
+  max-width: 260px;
+}
+
+.tasks-filters #btnClearTaskFilters {
+  margin-left: auto;
 }
 
 .tasks-filters .form-input,
@@ -3461,16 +3478,96 @@
   outline-offset: -2px;
 }
 
-/* Un filtro activo dentro de un panel plegado es invisible: el contador lo
-   dice desde fuera. */
-.tasks-filters-count {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--c-primary-text);
-  background: var(--c-primary);
-  border-radius: var(--r-pill);
-  padding: 1px 7px;
+/* ─── Pastillas de filtro activo ───
+   Ocupan el hueco que quedaba vacio junto al titulo. Un contador solo decia
+   cuantos filtros habia; estas dicen cuales, y se quitan de una en una sin
+   abrir el panel. */
+.tasks-filters-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
+
+.tasks-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 190px;
+  padding: 2px 4px 2px 9px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--c-text);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-pill);
+}
+
+.tasks-filter-pill-texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tasks-filter-pill-quitar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-text-secondary);
+  font-family: inherit;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tasks-filter-pill-quitar:hover {
+  background: var(--c-prio-alta-bg);
+  color: var(--c-prio-alta);
+}
+
+.tasks-filter-pill-quitar:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+/* ─── Campo con icono ───
+   El icono identifica el campo, asi que el control puede prescindir del rotulo
+   y quedarse en lo que mide su contenido. Monocromatico a proposito: son
+   señales de estructura, no de estado, y el color esta reservado a este. */
+.campo-icono {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.campo-icono > i {
+  position: absolute;
+  left: 11px;
+  color: var(--c-text-secondary);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.campo-icono .form-select,
+.campo-icono .form-input {
+  padding-left: 31px;
+  width: 100%;
+}
+
+/* Un campo con valor se distingue de uno vacio sin recurrir al color. La clase
+   la pone el JS al recalcular los filtros, no un selector que adivine. */
+.campo-icono.tiene-valor > i { color: var(--c-text); }
+.campo-icono.tiene-valor .form-select,
+.campo-icono.tiene-valor .form-input { border-color: var(--c-border); }
 
 .tasks-panel--filters .tasks-filters {
   padding: 0 var(--sp-lg) var(--sp-md);
@@ -3559,3 +3656,32 @@
   background: var(--c-prio-alta-bg);
   border-radius: var(--r-lg);
 }
+
+/* ─── Filtros del dashboard, alineados con los de tareas ─── */
+.td-filters-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--c-text-secondary);
+}
+
+.td-filters-head > i { font-size: 0.75rem; }
+
+/* Las pastillas no son un rotulo: vuelven a caja alta normal. */
+.td-filters-head .tasks-filters-pills {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.td-filters .campo-icono { flex: 0 1 auto; }
+
+.td-filters .campo-icono .td-filter-select { padding-left: 31px; }
+
+.td-filters .td-filter-reset { margin-left: auto; }

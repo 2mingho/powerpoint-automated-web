@@ -415,14 +415,77 @@ document.addEventListener('DOMContentLoaded', function () {
   /* Un filtro activo dentro de un panel plegado es invisible: sin este
      contador la gente deja uno puesto, ve el calendario a medias y cree que
      faltan tareas. */
+  /* ─── Pastillas de filtro activo ───
+     Un filtro puesto dentro de un panel plegado es invisible y hace creer que
+     faltan tareas. Un contador decia cuantos habia; estas dicen cuales, y cada
+     una se quita sin abrir el panel. */
+
+  const CAMPOS_DE_FILTRO = [
+    { id: 'tasksFilterStatus', etiqueta: 'Estado' },
+    { id: 'tasksFilterPriority', etiqueta: 'Prioridad' },
+    { id: 'tasksFilterAssignee', etiqueta: 'Asignado' },
+    { id: 'tasksFilterClient', etiqueta: 'Cliente' },
+    { id: 'tasksFilterArea', etiqueta: 'Unidad' }
+  ];
+
+  function textoDelFiltro(campo) {
+    if (campo.tagName === 'SELECT') {
+      // El texto de la opcion, no su value: un id de usuario no dice nada.
+      const opcion = campo.options[campo.selectedIndex];
+      return opcion ? opcion.textContent.trim().replace(/\s+/g, ' ') : '';
+    }
+    return campo.value.trim();
+  }
+
   function actualizarContadorDeFiltros() {
-    const marca = document.getElementById('tasksFiltersCount');
-    if (!marca) return;
-    const activos = Object.values(getCalendarFilters()).filter(function (v) {
-      return String(v || '').trim() !== '';
-    }).length;
-    marca.textContent = String(activos);
-    marca.hidden = activos === 0;
+    const contenedor = document.getElementById('tasksFiltersPills');
+    if (!contenedor) return;
+
+    const pastillas = [];
+
+    CAMPOS_DE_FILTRO.forEach(function (def) {
+      const campo = document.getElementById(def.id);
+      if (!campo) return;
+
+      const activo = String(campo.value || '').trim() !== '';
+      const envoltorio = campo.closest('.campo-icono');
+      if (envoltorio) envoltorio.classList.toggle('tiene-valor', activo);
+      if (!activo) return;
+
+      pastillas.push(''
+        + '<span class="tasks-filter-pill">'
+        +   '<span class="tasks-filter-pill-texto">'
+        +     escapeHtml(def.etiqueta) + ': ' + escapeHtml(textoDelFiltro(campo))
+        +   '</span>'
+        +   '<button type="button" class="tasks-filter-pill-quitar" data-quitar-filtro="' + def.id + '"'
+        +     ' aria-label="Quitar filtro ' + escapeHtml(def.etiqueta) + '" title="Quitar">'
+        +     '<i class="fa-solid fa-xmark" aria-hidden="true"></i>'
+        +   '</button>'
+        + '</span>');
+    });
+
+    contenedor.innerHTML = pastillas.join('');
+  }
+
+  const pillsContenedor = document.getElementById('tasksFiltersPills');
+  if (pillsContenedor) {
+    pillsContenedor.addEventListener('click', function (evento) {
+      const boton = evento.target.closest('[data-quitar-filtro]');
+      if (!boton) return;
+
+      // Las pastillas viven dentro del <summary>: sin esto, quitar un filtro
+      // abriria o cerraria el panel de paso.
+      evento.preventDefault();
+      evento.stopPropagation();
+
+      const campo = document.getElementById(boton.dataset.quitarFiltro);
+      if (!campo) return;
+      campo.value = '';
+      // Los <select> escuchan 'change' y el campo de cliente escucha 'input':
+      // se emiten los dos para no depender de cual sea.
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+      campo.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   }
 
   function refreshCalendar() {
@@ -2259,35 +2322,10 @@ document.addEventListener('DOMContentLoaded', function () {
     noEventsText: 'No hay tareas en este rango.',
     moreLinkText: function (n) { return '+' + n + ' más'; },
     weekText: 'Sem',
-    // El paquete index.global de FullCalendar no incluye los locales, asi que
-    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
-    // en ingles ("No events to display", "all-day") en mitad de una interfaz
-    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
-    allDayText: 'Todo el día',
-    noEventsText: 'No hay tareas en este rango.',
-    moreLinkText: function (n) { return '+' + n + ' más'; },
-    weekText: 'Sem',
-    // El paquete index.global de FullCalendar no incluye los locales, asi que
-    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
-    // en ingles ("No events to display", "all-day") en mitad de una interfaz
-    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
-    allDayText: 'Todo el día',
-    noEventsText: 'No hay tareas en este rango.',
-    moreLinkText: function (n) { return '+' + n + ' más'; },
-    weekText: 'Sem',
-    // El paquete index.global de FullCalendar no incluye los locales, asi que
-    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
-    // en ingles ("No events to display", "all-day") en mitad de una interfaz
-    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
-    allDayText: 'Todo el día',
-    noEventsText: 'No hay tareas en este rango.',
-    moreLinkText: function (n) { return '+' + n + ' más'; },
-    weekText: 'Sem',
     height: 'auto',
     editable: true,
     selectable: true,
     dayMaxEvents: 4,
-    moreLinkText: 'mas',
     eventOrder: function (a, b) {
       const statusPriority = { Pendiente: 1, 'En Progreso': 2, 'Bloqueado': 3, 'En Revisión': 4, Completado: 5 };
       const taskPriority = { Alta: 1, Media: 2, Baja: 3 };
@@ -2731,6 +2769,7 @@ document.addEventListener('DOMContentLoaded', function () {
     cargarVistaHoy();
   }
 
+  actualizarContadorDeFiltros();
   initVistaHoy();
   openTaskFromQueryParam();
   loadOverdueCount();

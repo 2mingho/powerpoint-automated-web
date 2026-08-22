@@ -71,49 +71,72 @@
         abre cuando hace falta. La cabecera dice cuantos filtros hay puestos
         para que nadie deje uno activo sin darse cuenta.
       #}
+      {#
+        Barra de filtros. Los controles llevan un icono monocromatico delante
+        para poder prescindir del rotulo y ocupar menos: el icono identifica el
+        campo y el placeholder dice el resto.
+
+        Las pastillas ocupan el hueco que quedaba vacio junto al titulo, de modo
+        que con el panel plegado se ve QUE hay filtrado, no solo cuantos, y la
+        x de cada una lo quita sin abrir nada.
+      #}
       <details class="tasks-panel tasks-panel--filters" id="tasksFiltersPanel">
         <summary class="tasks-filters-head">
           <i class="fa-solid fa-filter" aria-hidden="true"></i>
           <span class="tasks-filters-title">Filtros</span>
-          <span class="tasks-filters-count" id="tasksFiltersCount" hidden>0</span>
+          <span class="tasks-filters-pills" id="tasksFiltersPills"></span>
         </summary>
 
         <div class="tasks-filters" id="tasksFilters">
-          <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
-            <option value="">Todos los estados</option>
-            <option value="Pendiente">Pendiente</option>
-            <option value="En Progreso">En Progreso</option>
-            <option value="Bloqueado">Bloqueado</option>
-            <option value="En Revisión">En Revisión</option>
-            <option value="Completado">Completado</option>
-          </select>
+          <div class="campo-icono">
+            <i class="fa-regular fa-circle-dot" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
+              <option value="">Estado</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="En Progreso">En Progreso</option>
+              <option value="Bloqueado">Bloqueado</option>
+              <option value="En Revisión">En Revisión</option>
+              <option value="Completado">Completado</option>
+            </select>
+          </div>
 
-          <select class="form-select" id="tasksFilterPriority" aria-label="Filtrar por prioridad">
-            <option value="">Todas las prioridades</option>
-            <option value="Alta">Alta</option>
-            <option value="Media">Media</option>
-            <option value="Baja">Baja</option>
-          </select>
+          <div class="campo-icono">
+            <i class="fa-solid fa-flag" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterPriority" aria-label="Filtrar por prioridad">
+              <option value="">Prioridad</option>
+              <option value="Alta">Alta</option>
+              <option value="Media">Media</option>
+              <option value="Baja">Baja</option>
+            </select>
+          </div>
 
-          <select class="form-select" id="tasksFilterAssignee" aria-label="Filtrar por asignado">
-            <option value="">Todos los asignados</option>
-            {% for u in area_users %}
-            <option value="{{ u.id }}">
-              {{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}
-            </option>
-            {% endfor %}
-          </select>
+          <div class="campo-icono">
+            <i class="fa-regular fa-user" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterAssignee" aria-label="Filtrar por asignado">
+              <option value="">Asignado</option>
+              {% for u in area_users %}
+              <option value="{{ u.id }}">
+                {{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-          <input type="search" class="form-input" id="tasksFilterClient" placeholder="Filtrar por cliente" maxlength="100" aria-label="Filtrar por cliente">
-
+          <div class="campo-icono">
+            <i class="fa-regular fa-building" aria-hidden="true"></i>
+            <input type="search" class="form-input" id="tasksFilterClient" placeholder="Cliente" maxlength="100" aria-label="Filtrar por cliente">
+          </div>
 
           {% if current_user.is_admin %}
-          <select class="form-select" id="tasksFilterArea" aria-label="Filtrar por unidad">
-            <option value="">Todas las unidades</option>
-            {% for area_name in area_options %}
-            <option value="{{ area_name }}">{{ area_name }}</option>
-            {% endfor %}
-          </select>
+          <div class="campo-icono">
+            <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterArea" aria-label="Filtrar por unidad">
+              <option value="">Unidad</option>
+              {% for area_name in area_options %}
+              <option value="{{ area_name }}">{{ area_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
           {% endif %}
 
           <button class="btn btn-secondary btn-sm" id="btnClearTaskFilters" type="button">

@@ -104,28 +104,49 @@
   </div>
 
   <!-- Filters -->
+  {# Mismos iconos monocromaticos y mismas pastillas que en la barra de tareas:
+     eran dos formas distintas de filtrar lo mismo en la misma aplicacion. #}
   <div class="td-filters" id="tdFilters">
-    <label>Filtros</label>
+    <div class="td-filters-head">
+      <i class="fa-solid fa-filter" aria-hidden="true"></i>
+      <span>Filtros</span>
+      <span class="tasks-filters-pills" id="tdFiltersPills"></span>
+    </div>
 
-    <select class="td-filter-select" id="filterStatus">
-      <option value="">Estado</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-circle-dot" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterStatus" aria-label="Filtrar por estado">
+        <option value="">Estado</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterClient">
-      <option value="">Cliente</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-building" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterClient" aria-label="Filtrar por cliente">
+        <option value="">Cliente</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterAssignee">
-      <option value="">Asignado a</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-user" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterAssignee" aria-label="Filtrar por asignado">
+        <option value="">Asignado</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterCreator">
-      <option value="">Creado por</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterCreator" aria-label="Filtrar por creador">
+        <option value="">Creado por</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterArea" {{ 'style=display:none' if scope == 'area' }}>
-      <option value="">Área</option>
-    </select>
+    <div class="campo-icono" {{ 'style=display:none' if scope == 'area' }}>
+      <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterArea" aria-label="Filtrar por unidad">
+        <option value="">Unidad</option>
+      </select>
+    </div>
 
     <button class="td-filter-reset" id="btnResetFilters">
       <i class="fa-solid fa-rotate-left"></i> Limpiar
@@ -779,6 +800,66 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const headline = document.getElementById('tdHeadline');
 
+  /* ─── Pastillas de filtro activo ───
+     Mismo comportamiento que en la barra de tareas: dicen que hay filtrado, no
+     solo cuantos filtros hay, y cada una se quita por separado. */
+
+  const CAMPOS_DE_FILTRO = [
+    { campo: selStatus, etiqueta: 'Estado' },
+    { campo: selClient, etiqueta: 'Cliente' },
+    { campo: selAssignee, etiqueta: 'Asignado' },
+    { campo: selCreator, etiqueta: 'Creado por' },
+    { campo: selArea, etiqueta: 'Unidad' }
+  ];
+
+  function pintarPastillasDeFiltro() {
+    const contenedor = document.getElementById('tdFiltersPills');
+    if (!contenedor) return;
+
+    const pastillas = [];
+
+    CAMPOS_DE_FILTRO.forEach(function (def, indice) {
+      const campo = def.campo;
+      if (!campo) return;
+
+      const activo = String(campo.value || '').trim() !== '';
+      const envoltorio = campo.closest('.campo-icono');
+      if (envoltorio) envoltorio.classList.toggle('tiene-valor', activo);
+      if (!activo) return;
+
+      const opcion = campo.options[campo.selectedIndex];
+      const texto = opcion ? opcion.textContent.trim().replace(/\s+/g, ' ') : campo.value;
+
+      pastillas.push(''
+        + '<span class="tasks-filter-pill">'
+        +   '<span class="tasks-filter-pill-texto">'
+        +     escapeHtml(def.etiqueta) + ': ' + escapeHtml(texto)
+        +   '</span>'
+        +   '<button type="button" class="tasks-filter-pill-quitar" data-quitar-filtro="' + indice + '"'
+        +     ' aria-label="Quitar filtro ' + escapeHtml(def.etiqueta) + '" title="Quitar">'
+        +     '<i class="fa-solid fa-xmark" aria-hidden="true"></i>'
+        +   '</button>'
+        + '</span>');
+    });
+
+    contenedor.innerHTML = pastillas.join('');
+  }
+
+  const tdPills = document.getElementById('tdFiltersPills');
+  if (tdPills) {
+    tdPills.addEventListener('click', function (evento) {
+      const boton = evento.target.closest('[data-quitar-filtro]');
+      if (!boton) return;
+      const def = CAMPOS_DE_FILTRO[Number(boton.dataset.quitarFiltro)];
+      if (!def || !def.campo) return;
+      def.campo.value = '';
+      // Los indicadores de cabecera fijan estado y asignado: si se quita su
+      // filtro a mano, el indicador debe dejar de figurar como activo.
+      kpiFiltro = '';
+      loadTasks();
+    });
+  }
+
   function pintarIndicadores(stats) {
     if (!headline || !stats) return;
     document.getElementById('kpiOverdue').textContent = stats.vencidas ?? 0;
@@ -862,6 +943,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('statActive').textContent = data.stats.en_progreso;
         document.getElementById('statDone').textContent = data.stats.completado;
         pintarIndicadores(data.stats);
+        pintarPastillasDeFiltro();
 
         // Render Charts
         updateCharts(data.stats, data.tasks);
