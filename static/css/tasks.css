@@ -3252,3 +3252,93 @@
     flex-wrap: wrap;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   INDICADORES DE CABECERA DEL DASHBOARD (RED-7)
+   Cuatro numeros antes de la tabla, cada uno un enlace a la tabla ya
+   filtrada. El color acompana al numero pero no lo sustituye: la etiqueta
+   dice siempre de que se trata.
+   ═══════════════════════════════════════════════════════ */
+
+.td-headline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-md);
+  margin-bottom: var(--sp-lg);
+}
+
+.td-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-md) var(--sp-lg);
+  text-align: left;
+  background: var(--c-white);
+  border: 1px solid var(--c-border-light);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--r-lg);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.td-kpi:hover {
+  border-color: var(--c-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.td-kpi:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+.td-kpi--alerta { border-left-color: var(--c-prio-alta); }
+.td-kpi--aviso  { border-left-color: var(--c-prio-media); }
+.td-kpi--bien   { border-left-color: var(--c-success); }
+
+.td-kpi-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.td-kpi--alerta .td-kpi-value { color: var(--c-prio-alta); }
+
+.td-kpi-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.td-kpi-hint {
+  font-size: 0.74rem;
+  color: var(--c-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Un indicador en cero no lleva a ninguna parte. */
+.td-kpi.is-empty {
+  cursor: default;
+  opacity: 0.55;
+}
+.td-kpi.is-empty:hover {
+  border-color: var(--c-border-light);
+  box-shadow: none;
+}
+.td-kpi.is-empty .td-kpi-hint { visibility: hidden; }
+
+.td-kpi.is-active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-light);
+}
+
+.td-kpi.is-active .td-kpi-hint::after {
+  content: " · activo";
+  font-weight: 700;
+}

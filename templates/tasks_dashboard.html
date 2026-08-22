@@ -20,6 +20,36 @@
     </div>
   </div>
 
+  {#
+    Indicadores de cabecera (RED-7). El dashboard abria con la distribucion
+    por estado y dos graficos: informacion, pero no una respuesta. Estos
+    cuatro numeros responden lo que un director busca en los primeros cinco
+    segundos, y cada uno lleva a la tabla ya filtrada, de modo que los filtros
+    pasan a ser el segundo paso en vez del primero.
+  #}
+  <div class="td-headline" id="tdHeadline">
+    <button type="button" class="td-kpi td-kpi--alerta" data-kpi="vencidas">
+      <span class="td-kpi-value" id="kpiOverdue">—</span>
+      <span class="td-kpi-label">Vencidas</span>
+      <span class="td-kpi-hint">Ver en la tabla</span>
+    </button>
+    <button type="button" class="td-kpi td-kpi--aviso" data-kpi="bloqueadas">
+      <span class="td-kpi-value" id="kpiBlocked">—</span>
+      <span class="td-kpi-label">Bloqueadas</span>
+      <span class="td-kpi-hint">Ver en la tabla</span>
+    </button>
+    <button type="button" class="td-kpi td-kpi--bien" data-kpi="completadas">
+      <span class="td-kpi-value" id="kpiDoneWeek">—</span>
+      <span class="td-kpi-label">Completadas esta semana</span>
+      <span class="td-kpi-hint">Ver en la tabla</span>
+    </button>
+    <button type="button" class="td-kpi" data-kpi="carga">
+      <span class="td-kpi-value" id="kpiLoad">—</span>
+      <span class="td-kpi-label">Carga máxima</span>
+      <span class="td-kpi-hint" id="kpiLoadHint">—</span>
+    </button>
+  </div>
+
   <!-- Analytics Section -->
   <div class="td-analytics">
     <!-- Summary -->
@@ -293,8 +323,14 @@ document.addEventListener('DOMContentLoaded', function() {
     return response.json().catch(() => ({}));
   }
 
+  // Filtros que no viven en un <select>: los enciende un indicador de
+  // cabecera y se apagan con "Limpiar" como cualquier otro.
+  let kpiFiltro = '';
+
   function buildTaskFilterParams() {
     const params = new URLSearchParams();
+    if (kpiFiltro === 'vencidas') params.set('overdue', '1');
+    if (kpiFiltro === 'completadas') params.set('completed_this_week', '1');
     if (selStatus.value) params.set('status', selStatus.value);
     if (selClient.value) params.set('client', selClient.value);
     if (selAssignee.value) params.set('assignee_id', selAssignee.value);
@@ -732,6 +768,70 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ─── Load tasks ───
+  /* ─── Indicadores de cabecera (RED-7) ─── */
+
+  const headline = document.getElementById('tdHeadline');
+
+  function pintarIndicadores(stats) {
+    if (!headline || !stats) return;
+    document.getElementById('kpiOverdue').textContent = stats.vencidas ?? 0;
+    document.getElementById('kpiBlocked').textContent = stats.bloqueadas ?? 0;
+    document.getElementById('kpiDoneWeek').textContent = stats.completadas_semana ?? 0;
+    document.getElementById('kpiLoad').textContent = stats.carga_max ?? 0;
+
+    const pista = document.getElementById('kpiLoadHint');
+    if (pista) {
+      pista.textContent = stats.carga_max_nombre
+        ? stats.carga_max_nombre + ' · ver sus tareas'
+        : 'Sin tareas asignadas';
+    }
+
+    // Un indicador en cero no lleva a ninguna parte: apagarlo evita el clic
+    // que solo devuelve una tabla vacia.
+    headline.querySelectorAll('.td-kpi').forEach(function (boton) {
+      const valores = {
+        vencidas: stats.vencidas,
+        bloqueadas: stats.bloqueadas,
+        completadas: stats.completadas_semana,
+        carga: stats.carga_max
+      };
+      boton.classList.toggle('is-empty', !valores[boton.dataset.kpi]);
+      boton.classList.toggle('is-active', kpiFiltro === boton.dataset.kpi);
+    });
+
+    headline.dataset.cargaId = stats.carga_max_id ?? '';
+  }
+
+  if (headline) {
+    headline.addEventListener('click', function (evento) {
+      const boton = evento.target.closest('.td-kpi');
+      if (!boton || boton.classList.contains('is-empty')) return;
+
+      const kpi = boton.dataset.kpi;
+      const yaActivo = kpiFiltro === kpi
+        && (kpi !== 'bloqueadas' || selStatus.value === 'Bloqueado')
+        && (kpi !== 'carga' || selAssignee.value === headline.dataset.cargaId);
+
+      // Volver a pulsar el indicador activo quita su filtro: sin esto habria
+      // que ir a "Limpiar" para deshacer un clic.
+      limpiarFiltrosDeIndicador();
+      if (yaActivo) { kpiFiltro = ''; loadTasks(); return; }
+
+      kpiFiltro = kpi;
+      if (kpi === 'bloqueadas') { selStatus.value = 'Bloqueado'; kpiFiltro = kpi; }
+      if (kpi === 'carga' && headline.dataset.cargaId) {
+        selAssignee.value = headline.dataset.cargaId;
+      }
+      loadTasks();
+    });
+  }
+
+  function limpiarFiltrosDeIndicador() {
+    kpiFiltro = '';
+    selStatus.value = '';
+    selAssignee.value = '';
+  }
+
   function loadTasks() {
     const params = buildTaskFilterParams();
 
@@ -754,6 +854,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('statPending').textContent = data.stats.pendiente;
         document.getElementById('statActive').textContent = data.stats.en_progreso;
         document.getElementById('statDone').textContent = data.stats.completado;
+        pintarIndicadores(data.stats);
 
         // Render Charts
         updateCharts(data.stats, data.tasks);
@@ -829,6 +930,9 @@ document.addEventListener('DOMContentLoaded', function() {
   selPreset.addEventListener('change', loadTasks);
 
   btnReset.addEventListener('click', function() {
+    // Los indicadores de cabecera son filtros como los demas: "Limpiar" tiene
+    // que apagarlos tambien, o la tabla queda filtrada sin nada que lo diga.
+    kpiFiltro = '';
     selStatus.value = '';
     selClient.value = '';
     selAssignee.value = '';

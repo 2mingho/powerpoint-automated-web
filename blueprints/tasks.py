@@ -194,6 +194,67 @@ def _task_status_stats(base_query):
     }
 
 
+def _semana_actual_inicio():
+    """Lunes de la semana en curso, en la zona de negocio."""
+    hoy = today_local()
+    return hoy - timedelta(days=hoy.weekday())
+
+
+def _task_headline_stats(base_query):
+    """Los cuatro numeros con los que abre el dashboard (RED-7).
+
+    Todo se cuenta en el motor con COUNT y GROUP BY: traer las tareas a
+    memoria para contarlas seria el mismo N+1 que ya corregimos en FUN-04.
+    """
+    hoy = today_local()
+    inicio_semana = _semana_actual_inicio()
+
+    vencidas = base_query.filter(
+        Task.due_date < hoy,
+        Task.status != 'Completado',
+    ).count()
+
+    bloqueadas = base_query.filter(Task.status == 'Bloqueado').count()
+
+    # Aproximacion deliberada: no hay columna completed_at, asi que se usa la
+    # ultima modificacion de una tarea ya completada. Se desvia solo cuando
+    # alguien edita una tarea completada hace tiempo, e infla el numero, nunca
+    # lo reduce. Anadir completed_at es la correccion de fondo.
+    completadas_semana = base_query.filter(
+        Task.status == 'Completado',
+        Task.updated_at >= datetime.combine(inicio_semana, datetime.min.time()),
+    ).count()
+
+    # Carga: tareas abiertas por persona. A un director le interesa quien va
+    # mas cargado, no el reparto completo, que ya esta en el grafico de barras.
+    filas = base_query.filter(
+        Task.status != 'Completado',
+        Task.assignee_id.isnot(None),
+    ).with_entities(
+        Task.assignee_id, func.count(Task.id)
+    ).group_by(Task.assignee_id).all()
+
+    carga_max, carga_max_id = 0, None
+    for assignee_id, total in filas:
+        if total > carga_max:
+            carga_max, carga_max_id = total, assignee_id
+
+    carga_max_nombre = ''
+    if carga_max_id is not None:
+        usuario = db.session.get(User, carga_max_id)
+        carga_max_nombre = usuario.username if usuario else ''
+
+    return {
+        'vencidas': vencidas,
+        'bloqueadas': bloqueadas,
+        'completadas_semana': completadas_semana,
+        'carga_max': carga_max,
+        'carga_max_id': carga_max_id,
+        'carga_max_nombre': carga_max_nombre,
+        'personas_con_carga': len(filas),
+    }
+
+
 def _apply_unit_scope(query):
     """Apply unit isolation to task queries."""
     if current_user.is_admin:
@@ -2036,6 +2097,17 @@ def _apply_admin_task_filters(query, args):
     if area:
         query = query.filter_by(area=area)
 
+    # Filtros que alimentan los indicadores de cabecera (RED-7): un numero que
+    # no lleva a la tabla ya filtrada obliga a reconstruir el filtro a mano.
+    if args.get('overdue', '').strip() == '1':
+        query = query.filter(Task.due_date < today_local(), Task.status != 'Completado')
+
+    if args.get('completed_this_week', '').strip() == '1':
+        query = query.filter(
+            Task.status == 'Completado',
+            Task.updated_at >= datetime.combine(_semana_actual_inicio(), datetime.min.time()),
+        )
+
     return query
 
 
@@ -2073,6 +2145,7 @@ def api_admin_tasks():
 
     # Summary stats
     stats = _task_status_stats(Task.active_query())
+    stats.update(_task_headline_stats(Task.active_query()))
 
     return jsonify({
         'success': True,
@@ -2142,7 +2215,9 @@ def api_team_tasks():
 
     tasks = _with_task_relations(query).order_by(Task.due_date.desc()).limit(TASK_FEED_MAX_ROWS).all()
 
-    stats = _task_status_stats(Task.active_query().filter(Task.area_id.in_(unidades)))
+    stats_query = Task.active_query().filter(Task.area_id.in_(unidades))
+    stats = _task_status_stats(stats_query)
+    stats.update(_task_headline_stats(stats_query))
 
     return jsonify({
         'success': True,
