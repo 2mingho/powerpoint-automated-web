@@ -1445,3 +1445,38 @@ def test_task_is_overdue_respects_local_today(client):
     with app_module.app.app_context():
         task = db.session.get(Task, task_id)
         assert task.to_dict()['is_overdue'] is False
+
+
+# ─────────────────────────────────────────────────────────────
+# Proteccion de la base de produccion en arranques locales
+# ─────────────────────────────────────────────────────────────
+
+def _with_uri(uri, production):
+    """Evalua el predicado de arranque con una URI y un modo dados."""
+    original_uri = app_module.app.config['SQLALCHEMY_DATABASE_URI']
+    original_is_prod = app_module._is_production_mode
+    app_module.app.config['SQLALCHEMY_DATABASE_URI'] = uri
+    app_module._is_production_mode = lambda: production
+    try:
+        return app_module._startup_db_writes_allowed()
+    finally:
+        app_module.app.config['SQLALCHEMY_DATABASE_URI'] = original_uri
+        app_module._is_production_mode = original_is_prod
+
+
+def test_startup_never_writes_to_remote_db_from_a_dev_machine():
+    """
+    Exportar la DATABASE_URL de produccion en local no debe bastar para que el
+    arranque cree tablas, siembre el admin o ejecute la poda (que BORRA logs de
+    actividad, metadatos de reportes y tareas con borrado logico).
+    """
+    assert _with_uri('postgresql://u:p@ep-x.neon.tech/main', production=False) is False
+
+
+def test_startup_writes_allowed_on_local_sqlite():
+    assert _with_uri('sqlite:///instance/users.db', production=False) is True
+
+
+def test_startup_writes_allowed_in_production():
+    """En produccion el arranque si siembra el admin en el primer despliegue."""
+    assert _with_uri('postgresql://u:p@ep-x.neon.tech/main', production=True) is True
