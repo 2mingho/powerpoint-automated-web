@@ -118,6 +118,18 @@ def _unit_user_ids():
     return [u.id for u in _unit_user_query(active_only=False).all()]
 
 
+def _unidades_del_panel():
+    """Unidades que el panel de equipo debe mostrar, o None si no hay ninguna.
+
+    Sustituye a la pareja `if not current_user.area_id` + `filter_by(area_id=)`
+    que se repetia en los cinco puntos del panel. Devuelve el alcance de
+    supervision, no el ambito: aqui la pregunta es que superviso, y la unidad a
+    la que uno pertenece no da derecho a ver a sus companeros en el panel.
+    """
+    unidades = alcance_unidades(current_user)
+    return unidades or None
+
+
 def _task_in_current_unit(task):
     """Check if task belongs to current user's unit scope."""
     if current_user.is_admin:
@@ -1177,8 +1189,11 @@ def api_templates_instantiate(template_id):
     assignee = User.query.get(assignee_id)
     if not assignee or not assignee.is_active:
         return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
-    if not current_user.is_admin and assignee.area_id != current_user.area_id:
-        return jsonify({'success': False, 'error': 'El asignado debe pertenecer a tu unidad.'}), 400
+    # Misma regla que en el resto de asignaciones, en vez de una comparacion
+    # propia: quien lleva dos unidades puede instanciar hacia cualquiera de las
+    # dos, y un director hacia las de sus managers.
+    if not _assignee_in_current_unit(assignee):
+        return jsonify({'success': False, 'error': 'El asignado debe estar en tu ambito.'}), 400
 
     payload = template.get_payload()
     if not payload:
@@ -2101,15 +2116,16 @@ def api_team_tasks():
     """Team lead endpoint: tasks scoped to own area."""
     if not current_user.is_area_lead and not current_user.is_admin:
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
-    if not current_user.area_id:
-        return jsonify({'success': False, 'error': 'Tu usuario no tiene unidad asignada.'}), 400
+    unidades = _unidades_del_panel()
+    if unidades is None:
+        return jsonify({'success': False, 'error': 'No lideras ninguna unidad.'}), 400
 
-    query = Task.active_query().filter_by(area_id=current_user.area_id)
+    query = Task.active_query().filter(Task.area_id.in_(unidades))
     query = _apply_admin_task_filters(query, request.args)
 
     tasks = _with_task_relations(query).order_by(Task.due_date.desc()).limit(TASK_FEED_MAX_ROWS).all()
 
-    stats = _task_status_stats(Task.active_query().filter_by(area_id=current_user.area_id))
+    stats = _task_status_stats(Task.active_query().filter(Task.area_id.in_(unidades)))
 
     return jsonify({
         'success': True,
@@ -2124,16 +2140,17 @@ def api_team_tasks_filters():
     """Filter options scoped to current area."""
     if not current_user.is_area_lead and not current_user.is_admin:
         return jsonify({'success': False}), 403
-    if not current_user.area_id:
-        return jsonify({'success': False, 'error': 'Sin unidad.'}), 400
+    unidades = _unidades_del_panel()
+    if unidades is None:
+        return jsonify({'success': False, 'error': 'No lideras ninguna unidad.'}), 400
 
-    base_query = Task.active_query().filter_by(area_id=current_user.area_id)
+    base_query = Task.active_query().filter(Task.area_id.in_(unidades))
 
     clients = [r[0] for r in base_query.with_entities(Task.client).filter(
         Task.client.isnot(None), Task.client != ''
     ).distinct().order_by(Task.client).all()]
 
-    users = User.query.filter_by(is_active=True, area_id=current_user.area_id).order_by(User.username).all()
+    users = User.query.filter(User.is_active.is_(True), User.area_id.in_(unidades)).order_by(User.username).all()
 
     return jsonify({
         'clients': clients,
@@ -2158,11 +2175,12 @@ def api_team_tasks_export_csv():
     """Export filtered team tasks to CSV."""
     if not current_user.is_area_lead and not current_user.is_admin:
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
-    if not current_user.area_id:
-        return jsonify({'success': False, 'error': 'Sin unidad.'}), 400
+    unidades = _unidades_del_panel()
+    if unidades is None:
+        return jsonify({'success': False, 'error': 'No lideras ninguna unidad.'}), 400
 
     tasks = _apply_admin_task_filters(
-        Task.active_query().filter_by(area_id=current_user.area_id), request.args
+        Task.active_query().filter(Task.area_id.in_(unidades)), request.args
     ).order_by(Task.due_date.desc()).all()
 
     buffer = io.StringIO()
@@ -2356,8 +2374,8 @@ def api_team_tasks_import_csv_preview():
     """Validate CSV preview scoped to team users."""
     if not current_user.is_area_lead and not current_user.is_admin:
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
-    if not current_user.area_id:
-        return jsonify({'success': False, 'error': 'Sin unidad asignada.'}), 400
+    if _unidades_del_panel() is None:
+        return jsonify({'success': False, 'error': 'No lideras ninguna unidad.'}), 400
 
     csv_file = request.files.get('csv_file')
     if not csv_file or not csv_file.filename:
@@ -2387,8 +2405,8 @@ def api_team_tasks_import_csv_commit():
     """Import CSV rows scoped to team users."""
     if not current_user.is_area_lead and not current_user.is_admin:
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
-    if not current_user.area_id:
-        return jsonify({'success': False, 'error': 'Sin unidad asignada.'}), 400
+    if _unidades_del_panel() is None:
+        return jsonify({'success': False, 'error': 'No lideras ninguna unidad.'}), 400
 
     data = request.get_json(force=True) or {}
     payload_rows = data.get('rows')

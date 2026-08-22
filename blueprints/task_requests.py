@@ -3,7 +3,8 @@ from datetime import datetime, date
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
 from extensions import db
-from models import User, Area, Task, TaskWatcher, TaskRequest
+from models import User, Area, Task, TaskWatcher, TaskRequest, UnitLead
+from services.alcance import alcance_unidades, ambito_unidades
 from services.notifications import notify_user, notify_many
 from services.clock import today_local
 from blueprints.admin import log_activity
@@ -58,8 +59,10 @@ def api_task_requests_create():
     except (TypeError, ValueError):
         return jsonify({'success': False, 'error': 'Área destino no válida.'}), 400
 
-    if to_area_id == current_user.area_id:
-        return jsonify({'success': False, 'error': 'No puedes solicitar a tu propia unidad.'}), 400
+    # Quien lleva varias unidades no deberia solicitarse trabajo a si mismo en
+    # ninguna de ellas, ni un director a las de sus managers.
+    if to_area_id in ambito_unidades(current_user):
+        return jsonify({'success': False, 'error': 'No puedes solicitar a una unidad que ya llevas.'}), 400
 
     to_area = Area.query.get(to_area_id)
     if not to_area:
@@ -70,7 +73,11 @@ def api_task_requests_create():
         return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
 
     # Check destination area has at least one lead
-    dest_leads = User.query.filter_by(area_id=to_area_id, is_area_lead=True, is_active=True).count()
+    # El booleano is_area_lead solo sabia de la unidad a la que uno pertenece.
+    # Ahora el liderazgo es explicito: se pregunta a unit_leads.
+    dest_leads = db.session.query(UnitLead.user_id).join(
+        User, User.id == UnitLead.user_id
+    ).filter(UnitLead.area_id == to_area_id, User.is_active.is_(True)).count()
     if dest_leads == 0:
         return jsonify({'success': False, 'error': 'La unidad destino no tiene líder asignado.'}), 400
 
@@ -95,7 +102,9 @@ def api_task_requests_create():
     db.session.add(req)
 
     # Notify destination leads
-    dest_leads_list = User.query.filter_by(area_id=to_area_id, is_area_lead=True, is_active=True).all()
+    dest_leads_list = User.query.join(
+        UnitLead, UnitLead.user_id == User.id
+    ).filter(UnitLead.area_id == to_area_id, User.is_active.is_(True)).all()
     notify_many(
         [u.id for u in dest_leads_list],
         kind='request_received',
@@ -121,16 +130,17 @@ def api_task_requests_create():
 @task_requests_bp.route('/api/task-requests')
 @login_required
 def api_task_requests_list():
-    if not current_user.area_id:
+    unidades = ambito_unidades(current_user)
+    if not unidades:
         return jsonify({'success': True, 'requests': []})
 
     direction = request.args.get('direction', 'received')
     status_filter = request.args.get('status', '').strip()
 
     if direction == 'sent':
-        query = TaskRequest.query.filter_by(from_area_id=current_user.area_id)
+        query = TaskRequest.query.filter(TaskRequest.from_area_id.in_(unidades))
     else:
-        query = TaskRequest.query.filter_by(to_area_id=current_user.area_id)
+        query = TaskRequest.query.filter(TaskRequest.to_area_id.in_(unidades))
 
     if status_filter and status_filter in TaskRequest.VALID_STATUSES:
         query = query.filter_by(status=status_filter)
@@ -150,8 +160,10 @@ def api_task_requests_accept(request_id):
 
     # Only destination lead or admin
     if not current_user.is_admin:
-        if not (current_user.is_area_lead and current_user.area_id == req.to_area_id):
-            return jsonify({'success': False, 'error': 'Solo el líder de la unidad destino puede aceptar.'}), 403
+        # El alcance de supervision, no el ambito: pertenecer a la unidad
+        # destino no da derecho a aceptar trabajo en su nombre.
+        if req.to_area_id not in alcance_unidades(current_user):
+            return jsonify({'success': False, 'error': 'Solo quien lidera la unidad destino puede aceptar.'}), 403
 
     if req.status != 'Pendiente':
         return jsonify({'success': False, 'error': 'La solicitud ya fue resuelta.'}), 409
@@ -252,8 +264,10 @@ def api_task_requests_reject(request_id):
     req = TaskRequest.query.get_or_404(request_id)
 
     if not current_user.is_admin:
-        if not (current_user.is_area_lead and current_user.area_id == req.to_area_id):
-            return jsonify({'success': False, 'error': 'Solo el líder de la unidad destino puede rechazar.'}), 403
+        # El alcance de supervision, no el ambito: pertenecer a la unidad
+        # destino no da derecho a rechazar trabajo en su nombre.
+        if req.to_area_id not in alcance_unidades(current_user):
+            return jsonify({'success': False, 'error': 'Solo quien lidera la unidad destino puede rechazar.'}), 403
 
     if req.status != 'Pendiente':
         return jsonify({'success': False, 'error': 'La solicitud ya fue resuelta.'}), 409
