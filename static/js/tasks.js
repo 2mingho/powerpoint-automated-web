@@ -941,7 +941,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderTaskComments(comments) {
     if (!taskCommentsList) return;
     if (!Array.isArray(comments) || !comments.length) {
-      taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios.</div>';
+      taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios. Escribe aquí lo que haga falta recordar sobre esta tarea; queda con ella.</div>';
       return;
     }
     taskCommentsList.innerHTML = comments.map(function (comment) {
@@ -952,7 +952,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderTaskHistory(items) {
     if (!taskActivityList) return;
     if (!Array.isArray(items) || !items.length) {
-      taskActivityList.innerHTML = '<div class="task-comments-empty">Sin actividad.</div>';
+      taskActivityList.innerHTML = '<div class="task-comments-empty">Todavía sin cambios registrados. Aquí aparecerá quién tocó qué y cuándo.</div>';
       return;
     }
     taskActivityList.innerHTML = items.map(function (item) {
@@ -994,7 +994,7 @@ document.addEventListener('DOMContentLoaded', function () {
           const canRemove = !!taskData.can_edit || !!watcher.is_self;
           return `<span class="task-watcher-chip">${escapeHtml(watcher.username)}${watcher.unit ? ` · ${escapeHtml(watcher.unit)}` : ''}${canRemove ? ` <button type="button" class="task-watcher-remove" data-user-id="${Number(watcher.user_id)}">&times;</button>` : ''}</span>`;
         }).join('')
-      : '<div class="task-comments-empty">Sin observadores.</div>';
+      : '<div class="task-comments-empty">Nadie observa esta tarea. Añade a alguien de otra unidad para mantenerlo al tanto sin asignársela.</div>';
     if (taskWatcherUserSelect) taskWatcherUserSelect.disabled = !taskData.can_edit;
     if (btnAddWatcher) btnAddWatcher.disabled = !taskData.can_edit;
     if (btnLeaveWatching) btnLeaveWatching.classList.toggle('modal-hidden', !(taskData.is_watcher && !taskData.can_edit));
@@ -1003,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderChecklist(items) {
     if (!taskChecklistList) return;
     if (!Array.isArray(items) || !items.length) {
-      taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems.</div>';
+      taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems. Divide la tarea en pasos y podrás ver el avance sin cambiarle el estado.</div>';
       if (taskChecklistCount) taskChecklistCount.textContent = '0';
       return;
     }
@@ -1030,7 +1030,7 @@ document.addEventListener('DOMContentLoaded', function () {
     tasksWatchingList.innerHTML = '<div class="task-comments-empty">Cargando...</div>';
     requestJson('/api/tasks/watching').then(function (data) {
       if (!data.success || !Array.isArray(data.tasks) || !data.tasks.length) {
-        tasksWatchingList.innerHTML = '<div class="task-comments-empty">Sin tareas observadas.</div>';
+        tasksWatchingList.innerHTML = '<div class="task-comments-empty">No observas ninguna tarea. Observar una te avisa de sus cambios sin que sea tuya.</div>';
         return;
       }
       tasksWatchingList.innerHTML = data.tasks.map(function (task) {
@@ -1043,6 +1043,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function openTaskFromQueryParam() {
     const params = new URLSearchParams(window.location.search);
+
+    // La paleta de comandos manda ?nueva=1 cuando se pide "Nueva tarea" desde
+    // otra pagina: se llega aqui y se abre el formulario sin un clic extra.
+    if (params.get('nueva') === '1') {
+      openModal(false);
+      return;
+    }
+
     const taskId = params.get('task');
     if (!taskId) return;
 
@@ -1664,13 +1672,13 @@ document.addEventListener('DOMContentLoaded', function () {
     currentUpdatedAt = '';
     currentTaskDetail = null;
     if (taskCommentBody) taskCommentBody.value = '';
-    if (taskCommentsList) taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios.</div>';
-    if (taskActivityList) taskActivityList.innerHTML = '<div class="task-comments-empty">Sin actividad.</div>';
+    if (taskCommentsList) taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios. Escribe aquí lo que haga falta recordar sobre esta tarea; queda con ella.</div>';
+    if (taskActivityList) taskActivityList.innerHTML = '<div class="task-comments-empty">Todavía sin cambios registrados. Aquí aparecerá quién tocó qué y cuándo.</div>';
     if (taskCommentsCount) taskCommentsCount.textContent = '0';
-    if (taskChecklistList) taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems.</div>';
+    if (taskChecklistList) taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems. Divide la tarea en pasos y podrás ver el avance sin cambiarle el estado.</div>';
     if (taskChecklistCount) taskChecklistCount.textContent = '0';
     if (taskChecklistInput) taskChecklistInput.value = '';
-    if (taskWatchersChips) taskWatchersChips.innerHTML = '<div class="task-comments-empty">Sin observadores.</div>';
+    if (taskWatchersChips) taskWatchersChips.innerHTML = '<div class="task-comments-empty">Nadie observa esta tarea. Añade a alguien de otra unidad para mantenerlo al tanto sin asignársela.</div>';
     if (taskWatchersSection) taskWatchersSection.classList.add('modal-hidden');
     if (btnLeaveWatching) btnLeaveWatching.classList.add('modal-hidden');
     setActiveTaskTab('details');

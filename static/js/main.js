@@ -348,6 +348,185 @@ const initSidebarSpaces = () => {
   });
 };
 
+
+/* ─── PALETA DE COMANDOS (RED-6) ───
+   Una sola tecla que sirve en toda la aplicacion: buscar una tarea, crear
+   una, saltar a una herramienta o abrir el dashboard. Sustituye a aprenderse
+   donde vive cada cosa. */
+const initCommandPalette = () => {
+  const overlay = document.getElementById("cmdkOverlay");
+  const input = document.getElementById("cmdkInput");
+  const results = document.getElementById("cmdkResults");
+  if (!overlay || !input || !results) return;
+
+  let comandos = [];
+  let visibles = [];
+  let indice = 0;
+  let temporizador = null;
+
+  const esc = window.escapeHtml || function (v) { return String(v == null ? "" : v); };
+
+  // Los destinos salen del sidebar ya renderizado: respetan los permisos sin
+  // duplicar aqui la logica de has_tool_access.
+  const destinosDeNavegacion = () => {
+    const vistos = new Set();
+    return Array.from(document.querySelectorAll(".sidebar-item[href]"))
+      .filter((a) => {
+        const href = a.getAttribute("href");
+        if (!href || href === "#" || vistos.has(href)) return false;
+        // Cerrar sesion no es un destino: un Enter mal dado no debe echarte.
+        if (a.closest(".sidebar-footer")) return false;
+        vistos.add(href);
+        return true;
+      })
+      .map((a) => ({
+        grupo: "Ir a",
+        titulo: (a.querySelector("span")?.textContent || a.textContent || "").trim(),
+        icono: a.querySelector("i")?.className || "fa-solid fa-arrow-right",
+        accion: () => { window.location.href = a.getAttribute("href"); }
+      }));
+  };
+
+  const acciones = () => {
+    const lista = [];
+    const btnNueva = document.getElementById("btnNewTask");
+    const enlaceTareas = document.querySelector('.sidebar-item[href$="/tasks"]');
+
+    if (btnNueva) {
+      lista.push({
+        grupo: "Acciones", titulo: "Nueva tarea", icono: "fa-solid fa-plus",
+        accion: () => btnNueva.click()
+      });
+    } else if (enlaceTareas) {
+      // Fuera de la pagina de tareas, se llega y se abre alli.
+      lista.push({
+        grupo: "Acciones", titulo: "Nueva tarea", icono: "fa-solid fa-plus",
+        accion: () => { window.location.href = enlaceTareas.getAttribute("href") + "?nueva=1"; }
+      });
+    }
+
+    const btnTema = document.getElementById("themeToggle");
+    if (btnTema) {
+      lista.push({
+        grupo: "Acciones", titulo: "Cambiar tema claro / oscuro", icono: "fa-solid fa-circle-half-stroke",
+        accion: () => btnTema.click()
+      });
+    }
+    return lista;
+  };
+
+  const normalizar = (texto) => String(texto || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const pintar = () => {
+    if (!visibles.length) {
+      results.innerHTML = '<p class="cmdk-empty">Nada coincide. Prueba con el nombre de una tarea, un cliente o una herramienta.</p>';
+      return;
+    }
+
+    let grupoActual = "";
+    const filas = visibles.map((cmd, i) => {
+      let cabecera = "";
+      if (cmd.grupo !== grupoActual) {
+        grupoActual = cmd.grupo;
+        cabecera = '<p class="cmdk-group">' + esc(cmd.grupo) + "</p>";
+      }
+      return cabecera
+        + '<div class="cmdk-item' + (i === indice ? " is-active" : "") + '" role="option"'
+        + ' aria-selected="' + (i === indice ? "true" : "false") + '" data-i="' + i + '">'
+        + '<i class="' + esc(cmd.icono) + '" aria-hidden="true"></i>'
+        + '<span class="cmdk-item-title">' + esc(cmd.titulo) + "</span>"
+        + (cmd.detalle ? '<span class="cmdk-item-meta">' + esc(cmd.detalle) + "</span>" : "")
+        + "</div>";
+    });
+
+    results.innerHTML = filas.join("");
+    const activo = results.querySelector(".cmdk-item.is-active");
+    if (activo) activo.scrollIntoView({ block: "nearest" });
+  };
+
+  const filtrar = (consulta) => {
+    const q = normalizar(consulta);
+    const base = comandos.filter((c) => !q || normalizar(c.titulo + " " + (c.detalle || "")).includes(q));
+    visibles = base;
+    indice = 0;
+    pintar();
+  };
+
+  // Las tareas se buscan en el servidor; el resto de comandos son locales.
+  const buscarTareas = (consulta) => {
+    if (consulta.trim().length < 2) return;
+    fetch("/api/tasks?q=" + encodeURIComponent(consulta.trim()))
+      .then((r) => (r.ok ? r.json() : []))
+      .then((tareas) => {
+        if (!Array.isArray(tareas) || input.value.trim() !== consulta.trim()) return;
+        const deTareas = tareas.slice(0, 6).map((t) => ({
+          grupo: "Tareas",
+          titulo: t.title || "(sin titulo)",
+          detalle: [t.client, t.status].filter(Boolean).join(" · "),
+          icono: "fa-regular fa-circle-check",
+          accion: () => { window.location.href = "/tasks?task=" + t.id; }
+        }));
+        visibles = visibles.filter((c) => c.grupo !== "Tareas").concat(deTareas);
+        pintar();
+      })
+      .catch(() => {});
+  };
+
+  const abrir = () => {
+    comandos = acciones().concat(destinosDeNavegacion());
+    overlay.hidden = false;
+    input.value = "";
+    filtrar("");
+    input.focus();
+  };
+
+  const cerrar = () => {
+    overlay.hidden = true;
+    clearTimeout(temporizador);
+  };
+
+  const ejecutar = () => {
+    const cmd = visibles[indice];
+    if (!cmd) return;
+    cerrar();
+    cmd.accion();
+  };
+
+  input.addEventListener("input", () => {
+    filtrar(input.value);
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => buscarTareas(input.value), 220);
+  });
+
+  results.addEventListener("click", (e) => {
+    const fila = e.target.closest("[data-i]");
+    if (!fila) return;
+    indice = Number(fila.dataset.i);
+    ejecutar();
+  });
+
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) cerrar();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); indice = Math.min(indice + 1, visibles.length - 1); pintar(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); indice = Math.max(indice - 1, 0); pintar(); }
+    else if (e.key === "Enter") { e.preventDefault(); ejecutar(); }
+    else if (e.key === "Escape") { e.preventDefault(); cerrar(); }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      if (overlay.hidden) abrir(); else cerrar();
+    }
+  });
+};
+
 document.addEventListener("DOMContentLoaded", function () {
   // Init Theme
   initTheme();
@@ -362,6 +541,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Espacios del sidebar
   initSidebarSpaces();
+
+  // Paleta de comandos
+  initCommandPalette();
 
   // Sidebar Toggle
   const toggle = document.getElementById("sidebarToggle");

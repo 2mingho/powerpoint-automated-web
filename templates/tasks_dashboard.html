@@ -861,7 +861,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Render cards
         if (currentTasks.length === 0) {
-          grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-inbox"></i><p>No se encontraron tareas con estos filtros.</p></div>';
+          grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-inbox"></i><p>Ninguna tarea coincide con estos filtros. Prueba a limpiarlos o a pulsar uno de los indicadores de arriba.</p></div>';
           refreshSelectionUI();
           return;
         }
