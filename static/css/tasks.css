@@ -3147,3 +3147,108 @@
 /* .modal-hidden se declara antes que .task-modal-footer y ambas son de una
    sola clase: la ultima gana y el pie se quedaba visible. */
 .task-modal-footer.modal-hidden { display: none; }
+
+/* ═══════════════════════════════════════════════════════
+   PANEL LATERAL DEL DETALLE DE TAREA (RED-4)
+   El detalle era un modal centrado que tapaba el calendario y lo dejaba
+   inerte: cerrar significaba perder la posicion. Pasa a panel deslizante,
+   con el calendario o la lista visibles y operables detras.
+
+   Se apunta solo a #taskModalOverlay a proposito. La clase .task-modal-overlay
+   la comparten cinco modales, y los de confirmacion deben seguir siendo
+   dialogos centrados y bloqueantes: es justo lo que se espera de ellos.
+
+   Solo en escritorio. En movil el modal ya es una hoja inferior que funciona
+   bien y no tiene sentido convertir en panel.
+   ═══════════════════════════════════════════════════════ */
+
+@media (min-width: 769px) {
+  #taskModalOverlay {
+    justify-content: flex-end;
+    align-items: stretch;
+    background: transparent;
+    backdrop-filter: none;
+    animation: none;
+    /* Sin esto el panel seguiria bloqueando el calendario que hay detras,
+       que es justo lo que este cambio viene a resolver. */
+    pointer-events: none;
+  }
+
+  #taskModalOverlay .task-modal {
+    pointer-events: auto;
+    width: min(480px, 44vw);
+    max-width: none;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+    border-left: 1px solid var(--c-border);
+    box-shadow: -18px 0 48px rgba(16, 19, 23, 0.16);
+    animation: panelIn 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  [data-theme="dark"] #taskModalOverlay .task-modal {
+    box-shadow: -18px 0 48px rgba(0, 0, 0, 0.5);
+  }
+
+  @keyframes panelIn {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+  }
+
+  /* La cabecera y el pie quedan fijos; solo el contenido rueda. */
+  #taskModalOverlay .task-modal-header,
+  #taskModalOverlay .task-modal-footer { flex-shrink: 0; }
+
+  #taskModalOverlay .task-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  #taskModalOverlay .task-modal-handle { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #taskModalOverlay .task-modal { animation: none; }
+}
+
+/* ─── Ajustes del panel al ancho menor (RED-4) ───
+   El modal centrado tenia 540px y estos dos bloques cabian justos. En el
+   panel no, y el detalle salia con barra de desplazamiento horizontal. */
+@media (min-width: 769px) {
+  #taskModalOverlay .status-select-group {
+    flex-wrap: wrap;
+  }
+
+  #taskModalOverlay .status-chip {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    padding: 7px 10px;
+  }
+
+  #taskModalOverlay .task-modal-footer {
+    flex-wrap: wrap;
+    padding: var(--sp-md) var(--sp-lg);
+  }
+
+  #taskModalOverlay .task-modal-footer .btn {
+    white-space: nowrap;
+  }
+
+  #taskModalOverlay .task-modal-body,
+  #taskModalOverlay .task-modal-header,
+  #taskModalOverlay .task-modal-footer {
+    padding-left: var(--sp-lg);
+    padding-right: var(--sp-lg);
+  }
+
+  /* Las pestanas del detalle tampoco caben en una fila de 480px. */
+  #taskModalOverlay .task-modal-tabs {
+    flex-wrap: wrap;
+  }
+}
