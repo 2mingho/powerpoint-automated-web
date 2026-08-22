@@ -4,6 +4,18 @@ document.addEventListener('DOMContentLoaded', function () {
   const calEl = document.getElementById('tasksCalendar');
   if (!calEl) return;
 
+  // Escapes any user-supplied value before it reaches innerHTML.
+  // Falls back to a local copy because tasks.js is loaded from the content
+  // block, i.e. before main.js defines window.escapeHtml.
+  const escapeHtml = window.escapeHtml || function (value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   const overlay = document.getElementById('taskModalOverlay');
   const btnNew = document.getElementById('btnNewTask');
   const btnClose = document.getElementById('taskModalClose');
@@ -431,9 +443,9 @@ document.addEventListener('DOMContentLoaded', function () {
           else if (t.status === 'Completado') statusClass = 'st-completado';
           else if (t.status === 'Bloqueado') statusClass = 'st-bloqueado';
           else if (t.status === 'En Revisión') statusClass = 'st-revision';
-          return '<div class="task-comment-item" style="cursor:pointer" data-task-id="' + t.id + '">'
-            + '<div class="task-comment-meta"><span class="task-status-dot ' + statusClass + '">' + t.status + '</span> · ' + t.priority + ' · ' + (t.due_date || '') + '</div>'
-            + '<div class="task-comment-body"><strong>' + (t.title || '') + '</strong>' + (t.client ? ' — ' + t.client : '') + '</div>'
+          return '<div class="task-comment-item" style="cursor:pointer" data-task-id="' + Number(t.id) + '">'
+            + '<div class="task-comment-meta"><span class="task-status-dot ' + statusClass + '">' + escapeHtml(t.status) + '</span> · ' + escapeHtml(t.priority) + ' · ' + escapeHtml(t.due_date || '') + '</div>'
+            + '<div class="task-comment-body"><strong>' + escapeHtml(t.title || '') + '</strong>' + (t.client ? ' — ' + escapeHtml(t.client) : '') + '</div>'
             + '</div>';
         }).join('');
         tasksSearchResults.classList.remove('modal-hidden');
@@ -932,7 +944,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     taskCommentsList.innerHTML = comments.map(function (comment) {
-      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${comment.user_name || 'Usuario'}</strong> · ${comment.created_at || ''}</div><div class="task-comment-body">${comment.body || ''}</div></div>`;
+      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${escapeHtml(comment.user_name || 'Usuario')}</strong> · ${escapeHtml(comment.created_at || '')}</div><div class="task-comment-body">${escapeHtml(comment.body || '')}</div></div>`;
     }).join('');
   }
 
@@ -943,7 +955,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     taskActivityList.innerHTML = items.map(function (item) {
-      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${item.user_name || 'Sistema'}</strong> · ${item.timestamp || ''}</div><div class="task-comment-body">${item.detail || item.action || ''}</div></div>`;
+      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${escapeHtml(item.user_name || 'Sistema')}</strong> · ${escapeHtml(item.timestamp || '')}</div><div class="task-comment-body">${escapeHtml(item.detail || item.action || '')}</div></div>`;
     }).join('');
   }
 
@@ -979,7 +991,7 @@ document.addEventListener('DOMContentLoaded', function () {
     taskWatchersChips.innerHTML = watchers.length
       ? watchers.map(function (watcher) {
           const canRemove = !!taskData.can_edit || !!watcher.is_self;
-          return `<span class="task-watcher-chip">${watcher.username}${watcher.unit ? ` · ${watcher.unit}` : ''}${canRemove ? ` <button type="button" class="task-watcher-remove" data-user-id="${watcher.user_id}">&times;</button>` : ''}</span>`;
+          return `<span class="task-watcher-chip">${escapeHtml(watcher.username)}${watcher.unit ? ` · ${escapeHtml(watcher.unit)}` : ''}${canRemove ? ` <button type="button" class="task-watcher-remove" data-user-id="${Number(watcher.user_id)}">&times;</button>` : ''}</span>`;
         }).join('')
       : '<div class="task-comments-empty">Sin observadores.</div>';
     if (taskWatcherUserSelect) taskWatcherUserSelect.disabled = !taskData.can_edit;
@@ -995,9 +1007,9 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     taskChecklistList.innerHTML = items.map(function (item) {
-      return '<div class="task-checklist-item' + (item.is_completed ? ' is-completed' : '') + '" data-id="' + item.id + '">'
+      return '<div class="task-checklist-item' + (item.is_completed ? ' is-completed' : '') + '" data-id="' + Number(item.id) + '">'
         + '<input type="checkbox" class="task-checklist-cb" ' + (item.is_completed ? 'checked' : '') + '>'
-        + '<span class="task-checklist-body">' + (item.body || '') + '</span>'
+        + '<span class="task-checklist-body">' + escapeHtml(item.body || '') + '</span>'
         + '<button type="button" class="task-checklist-delete" title="Eliminar">&times;</button>'
         + '</div>';
     }).join('');
@@ -1021,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
       tasksWatchingList.innerHTML = data.tasks.map(function (task) {
-        return `<button type="button" class="task-watching-item" data-task-id="${task.id}"><strong>${task.title}</strong><span>${task.due_date || ''}</span></button>`;
+        return `<button type="button" class="task-watching-item" data-task-id="${Number(task.id)}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(task.due_date || '')}</span></button>`;
       }).join('');
     }).catch(function () {
       tasksWatchingList.innerHTML = '<div class="task-comments-empty">No se pudieron cargar.</div>';

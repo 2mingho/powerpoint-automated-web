@@ -1,3 +1,15 @@
+// ─── Global HTML escaping helper ───
+// Canonical escape for any user-supplied value injected via innerHTML.
+// Defined on window so every module shares one implementation.
+window.escapeHtml = function (value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
 // ─── Global CSRF Token Injection for fetch() ───
 // Intercepts all fetch() calls and adds X-CSRFToken header automatically
 (function() {

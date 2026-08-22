@@ -9,6 +9,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
   let panelLoaded = false;
 
+  // Notification titles and bodies carry user-authored task titles and
+  // comment text, so they must never reach innerHTML unescaped.
+  const escapeHtml = window.escapeHtml || function (value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   function setBadge(count) {
     const value = Number(count) || 0;
     badge.textContent = String(value);
@@ -23,12 +34,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     list.innerHTML = items.map(function (item) {
       const unreadClass = item.is_read ? '' : ' unread';
-      const body = item.body ? `<div class="notif-item-body">${item.body}</div>` : '';
+      const body = item.body ? `<div class="notif-item-body">${escapeHtml(item.body)}</div>` : '';
       return `
-        <button type="button" class="notif-item${unreadClass}" data-id="${item.id}" data-link="${item.link_url || ''}">
-          <div class="notif-item-title">${item.title || 'Notificación'}</div>
+        <button type="button" class="notif-item${unreadClass}" data-id="${Number(item.id)}" data-link="${escapeHtml(item.link_url || '')}">
+          <div class="notif-item-title">${escapeHtml(item.title || 'Notificación')}</div>
           ${body}
-          <div class="notif-item-time">${item.created_at || ''}</div>
+          <div class="notif-item-time">${escapeHtml(item.created_at || '')}</div>
         </button>
       `;
     }).join('');
