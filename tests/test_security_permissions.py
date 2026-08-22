@@ -1666,3 +1666,69 @@ def test_sidebar_hides_work_space_without_tasks_access(client):
     assert 'sidebar-spaces' not in cuerpo
     assert 'data-espacio="trabajo"' not in cuerpo
     assert 'Generar Reporte' in cuerpo
+
+
+# ─────────────────────────────────────────────────────────────
+# Rediseno: indicadores de cabecera del dashboard (RED-7)
+# ─────────────────────────────────────────────────────────────
+
+def test_headline_stats_count_overdue_and_blocked(client):
+    """Los indicadores cuentan lo que dicen contar.
+
+    'Vencidas' excluye las completadas: una tarea entregada tarde ya no es un
+    problema abierto y contarla inflaria el numero que dispara la accion.
+    """
+    from datetime import timedelta
+    from services.clock import today_local
+
+    with app_module.app.app_context():
+        user_id = _create_user(username='kpi-user', email='kpi-user@example.com',
+                               role='admin', tools=['tasks'])
+        ayer = today_local() - timedelta(days=1)
+
+        _create_task(title='Vencida y abierta', due_date=ayer,
+                     area='DI', creator_id=user_id, assignee_id=user_id)
+
+        completada_id = _create_task(title='Vencida pero completada', due_date=ayer,
+                                     area='DI', creator_id=user_id, assignee_id=user_id)
+        db.session.get(Task, completada_id).status = 'Completado'
+
+        bloqueada_id = _create_task(title='Bloqueada', due_date=today_local() + timedelta(days=5),
+                                    area='DI', creator_id=user_id, assignee_id=user_id)
+        db.session.get(Task, bloqueada_id).status = 'Bloqueado'
+        db.session.commit()
+
+    _login_as(client, user_id)
+    payload = client.get('/api/admin/tasks').get_json()
+
+    assert payload['success'] is True
+    assert payload['stats']['vencidas'] == 1
+    assert payload['stats']['bloqueadas'] == 1
+    assert payload['stats']['carga_max'] == 2  # las dos abiertas del mismo usuario
+    assert payload['stats']['carga_max_nombre'] == 'kpi-user'
+
+
+def test_overdue_filter_narrows_the_dashboard_table(client):
+    """Pulsar el indicador debe llevar a la tabla ya filtrada.
+
+    Sin este parametro el numero seria decorativo: habria que reconstruir el
+    filtro a mano, que es justo lo que RED-7 elimina.
+    """
+    from datetime import timedelta
+    from services.clock import today_local
+
+    with app_module.app.app_context():
+        user_id = _create_user(username='kpi-filtro', email='kpi-filtro@example.com',
+                               role='admin', tools=['tasks'])
+        _create_task(title='Ya vencio', due_date=today_local() - timedelta(days=3),
+                     area='DI', creator_id=user_id, assignee_id=user_id)
+        _create_task(title='Vence pronto', due_date=today_local() + timedelta(days=3),
+                     area='DI', creator_id=user_id, assignee_id=user_id)
+
+    _login_as(client, user_id)
+
+    todas = client.get('/api/admin/tasks').get_json()['tasks']
+    vencidas = client.get('/api/admin/tasks?overdue=1').get_json()['tasks']
+
+    assert len(todas) == 2
+    assert [t['title'] for t in vencidas] == ['Ya vencio']
