@@ -60,6 +60,20 @@
   --c-flash-warning-text: #92400e;
   --c-flash-info-text:    #1e1b4b;
 
+  /* ─── ESTADO vs MARCA (RED-5) ───
+     El amarillo de marca se reserva para identidad: logo, item activo del
+     sidebar, franja de acento. El estado nunca lo usa, para que la marca siga
+     siendo el unico punto brillante de la pantalla. La escala es deliberadamente
+     desaturada; el color acompana a la forma (franja, icono, texto), nunca es
+     el unico portador del significado. */
+  --c-prio-alta:   #8d4d4d;
+  --c-prio-media:  #8a7750;
+  --c-prio-baja:   #7d8794;
+  --c-info:        #4a6785;
+  --c-prio-alta-bg:  #f4eaea;
+  --c-prio-media-bg: #f3efe5;
+  --c-prio-baja-bg:  #eef0f3;
+
   /* Chart Colors */
   --c-chart-grid: rgba(0,0,0,0.05);
   --c-chart-text: #64748b;
@@ -84,6 +98,14 @@
   --c-text-secondary: #a4afbf;
   --c-border:     #2a3240;
   --c-border-light: #202734;
+
+  --c-prio-alta:   #b77d7d;
+  --c-prio-media:  #b7a274;
+  --c-prio-baja:   #8d97a6;
+  --c-info:        #8aa6c4;
+  --c-prio-alta-bg:  #2a1d1d;
+  --c-prio-media-bg: #2a2519;
+  --c-prio-baja-bg:  #1e242e;
 
   --shadow-sm:  0 1px 2px rgba(0,0,0,0.35);
   --shadow-md:  0 6px 16px rgba(0,0,0,0.42);
@@ -222,15 +244,37 @@ img { max-width: 100%; }
 }
 
 .sidebar-item.active {
-  background: #1a212d;
-  color: #f6f8fb;
+  position: relative;
+  background: var(--c-primary-light);
+  color: var(--c-text);
   font-weight: 600;
 }
 
-.sidebar-item.active:hover {
-  background: #1a212d;
+.sidebar-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--c-primary);
+}
+
+.sidebar-item.active i { color: var(--c-accent); }
+
+[data-theme="dark"] .sidebar-item.active {
   color: #f6f8fb;
-  opacity: 0.92;
+}
+
+[data-theme="dark"] .sidebar-item.active i { color: var(--c-primary); }
+
+.sidebar-item.active:hover {
+  background: var(--c-primary-light);
+  color: var(--c-text);
+}
+
+[data-theme="dark"] .sidebar-item.active:hover {
+  background: var(--c-primary-light);
+  color: #f6f8fb;
 }
 
 .sidebar-footer {
@@ -248,6 +292,89 @@ img { max-width: 100%; }
   background: var(--c-danger-bg);
   color: var(--c-danger);
 }
+
+
+/* ─── CONMUTADOR DE ESPACIOS (RED-1) ─── */
+.sidebar-spaces {
+  display: flex;
+  gap: 2px;
+  margin: var(--sp-md) var(--sp-sm) var(--sp-sm);
+  padding: 3px;
+  background: var(--c-bg);
+  border-radius: var(--r-lg);
+}
+
+[data-theme="dark"] .sidebar-spaces {
+  background: #0b0e13;
+}
+
+.sidebar-space-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-sm);
+  padding: 7px var(--sp-sm);
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--c-text-secondary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.sidebar-space-btn i { font-size: 0.85rem; }
+
+.sidebar-space-btn:hover { color: var(--c-text); }
+
+.sidebar-space-btn[aria-selected="true"] {
+  background: var(--c-white);
+  color: var(--c-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-space-btn:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+/* Solo se pinta el espacio activo. Sin JS, el atributo data-espacio lo fija
+   el servidor a partir del endpoint, asi que la navegacion sigue siendo
+   correcta aunque el script no llegue a cargar. */
+.sidebar-nav[data-espacio="trabajo"] .sidebar-space[data-espacio="herramientas"],
+.sidebar-nav[data-espacio="herramientas"] .sidebar-space[data-espacio="trabajo"] {
+  display: none;
+}
+
+.sidebar-nav-tail {
+  margin-top: var(--sp-lg);
+  padding-top: var(--sp-md);
+  border-top: 1px solid var(--c-border-light);
+}
+
+/* ─── FRANJA DE PRIORIDAD (RED-5) ───
+   La prioridad se lee por posicion y grosor, no solo por color. */
+.prio-stripe {
+  position: relative;
+  padding-left: calc(var(--sp-md) + 3px);
+}
+
+.prio-stripe::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--c-prio-baja);
+}
+
+.prio-stripe.prio-alta::before  { background: var(--c-prio-alta); width: 4px; }
+.prio-stripe.prio-media::before { background: var(--c-prio-media); }
+.prio-stripe.prio-baja::before  { background: var(--c-prio-baja); }
 
 /* ─── TOPBAR ─── */
 .topbar {
@@ -336,6 +463,116 @@ img { max-width: 100%; }
 
 .topbar-user {
   position: relative;
+}
+
+.topbar-notifications {
+  position: relative;
+}
+
+.notif-toggle {
+  position: relative;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--c-danger);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notif-badge.hidden {
+  display: none;
+}
+
+.notif-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100vw - 24px));
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 1002;
+  overflow: hidden;
+}
+
+.topbar-notifications.open .notif-panel {
+  display: block;
+}
+
+.notif-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-sm);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.notif-read-all {
+  border: none;
+  background: transparent;
+  color: var(--c-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notif-panel-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.notif-item {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--c-border-light);
+  background: transparent;
+  text-align: left;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--c-text);
+}
+
+.notif-item:hover {
+  background: var(--c-bg);
+}
+
+.notif-item.unread {
+  background: var(--c-primary-light);
+}
+
+.notif-item-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.notif-item-body,
+.notif-item-time,
+.notif-empty {
+  font-size: 0.78rem;
+  color: var(--c-text-secondary);
+}
+
+.notif-item-time,
+.notif-empty {
+  margin-top: 4px;
+}
+
+.notif-empty {
+  padding: 14px;
 }
 
 .topbar-user-btn {
@@ -2504,6 +2741,13 @@ body.app-prompt-open {
   }
   .sidebar-item i { margin: 0; }
 
+  .sidebar .sidebar-space-btn span { display: none; }
+  .sidebar .sidebar-spaces {
+    flex-direction: column;
+    margin: var(--sp-sm) 6px;
+  }
+  .sidebar .sidebar-space-btn { padding: 9px 0; }
+
   .topbar { left: var(--sidebar-collapsed); }
   .main-content { margin-left: var(--sidebar-collapsed); }
 
@@ -2523,6 +2767,13 @@ body.app-prompt-open {
   .sidebar .sidebar-section-label {
     display: initial;
   }
+
+  .sidebar .sidebar-space-btn span { display: initial; }
+  .sidebar .sidebar-spaces {
+    flex-direction: row;
+    margin: var(--sp-md) var(--sp-sm) var(--sp-sm);
+  }
+  .sidebar .sidebar-space-btn { padding: 7px var(--sp-sm); }
 
   .sidebar-item {
     justify-content: flex-start;
@@ -2560,7 +2811,25 @@ body.app-prompt-open {
   .success-actions { flex-direction: column; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
 
-  .topbar-breadcrumb { display: none; }
+  /* El titulo de pagina se ocultaba en movil porque cada pagina repetia su
+     nombre en un <h1>. Ya no lo hacen, asi que esta es la unica senal de
+     donde esta uno: se queda, y lo que cede sitio es el nombre de usuario,
+     que el avatar ya representa. */
+  .topbar-breadcrumb {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+  }
+
+  .topbar-left { min-width: 0; flex: 1; }
+
+  .topbar-user-btn span,
+  .topbar-user-btn .fa-chevron-down { display: none; }
+
+  .topbar-right { flex-shrink: 0; }
 }
 
 @media (max-width: 480px) {
@@ -2588,4 +2857,169 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PALETA DE COMANDOS (RED-6)
+   ═══════════════════════════════════════════════════════ */
+
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh var(--sp-md) var(--sp-md);
+  background: rgba(16, 19, 23, 0.42);
+  backdrop-filter: blur(3px);
+}
+
+.cmdk-overlay[hidden] { display: none; }
+
+.cmdk {
+  width: 100%;
+  max-width: 560px;
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+
+/* Visible para lectores de pantalla, no para la vista: el campo ya se explica
+   solo con su marcador de posicion. */
+.cmdk-label {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cmdk-field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  padding: var(--sp-md) var(--sp-lg);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.cmdk-field > i { color: var(--c-text-secondary); }
+
+.cmdk-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.98rem;
+  color: var(--c-text);
+  min-width: 0;
+}
+
+.cmdk-input::placeholder { color: var(--c-text-secondary); }
+
+.cmdk-esc,
+.cmdk-foot kbd {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--c-text-secondary);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+}
+
+.cmdk-results {
+  overflow-y: auto;
+  padding: var(--sp-sm);
+  flex: 1;
+  min-height: 0;
+}
+
+.cmdk-group {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--c-text-secondary);
+  margin: var(--sp-sm) var(--sp-sm) var(--sp-xs);
+}
+
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  padding: 9px var(--sp-sm);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.cmdk-item > i {
+  width: 18px;
+  text-align: center;
+  color: var(--c-text-secondary);
+  flex-shrink: 0;
+}
+
+.cmdk-item.is-active {
+  background: var(--c-primary-light);
+}
+
+.cmdk-item.is-active > i { color: var(--c-accent); }
+
+.cmdk-item-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmdk-item-meta {
+  margin-left: auto;
+  font-size: 0.76rem;
+  color: var(--c-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-left: var(--sp-sm);
+}
+
+.cmdk-empty {
+  color: var(--c-text-secondary);
+  font-size: 0.88rem;
+  margin: 0;
+  padding: var(--sp-lg) var(--sp-md);
+}
+
+.cmdk-foot {
+  display: flex;
+  gap: var(--sp-lg);
+  padding: var(--sp-sm) var(--sp-lg);
+  border-top: 1px solid var(--c-border-light);
+  font-size: 0.74rem;
+  color: var(--c-text-secondary);
+}
+
+.cmdk-foot kbd { margin-right: 3px; }
+
+@media (max-width: 768px) {
+  .cmdk-overlay { padding-top: 6vh; }
+  .cmdk-foot { display: none; }
+}
+
+/* Fila de accion de pagina: sustituye a las cabeceras que repetian en un <h1>
+   el nombre que la barra superior ya muestra. */
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-sm);
+  margin-bottom: var(--sp-md);
 }

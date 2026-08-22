@@ -5,73 +5,214 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 
-<div class="tasks-header">
-  <div class="tasks-header-actions">
-    <button class="btn btn-primary" id="btnNewTask" aria-label="Nueva tarea">
-      <i class="fa-solid fa-plus"></i> <span class="btn-label-desktop">Nueva Tarea</span>
-    </button>
+<div class="tasks-shell" id="tasksShell" data-vista="hoy" data-hoy="{{ hoy }}"
+     data-initial-status="{{ initial_status }}" data-default-priority="{{ default_priority }}"
+     data-final-statuses='{{ final_statuses|tojson }}'>
+  {#
+    Barra unica de pagina. Antes habia un hero de 152px cuyo <h1> repetia
+    literalmente el nombre que la barra superior ya muestra, mas una linea de
+    eslogan; el contenido util empezaba en el pixel 340. Vistas a la izquierda,
+    acciones a la derecha, y se acabo.
+
+    "Observadas" era un panel que se desplegaba en la columna derecha, fuera de
+    la pantalla: se pulsaba y no pasaba nada visible. Pasa a ser una vista mas,
+    que es lo que siempre fue.
+  #}
+  <div class="tasks-bar">
+    <div class="tasks-views" role="tablist" aria-label="Vista de tareas">
+      <button type="button" class="tasks-view-btn" role="tab" data-vista="hoy" aria-selected="true" aria-controls="tasksTodayView">
+        <i class="fa-solid fa-list-check"></i> <span>Hoy</span>
+      </button>
+      <button type="button" class="tasks-view-btn" role="tab" data-vista="calendario" aria-selected="false" aria-controls="tasksCalendarPanel">
+        <i class="fa-regular fa-calendar"></i> <span>Calendario</span>
+      </button>
+      <button type="button" class="tasks-view-btn" role="tab" data-vista="observadas" aria-selected="false" aria-controls="tasksWatchingPanel">
+        <i class="fa-regular fa-eye"></i> <span>Observadas</span>
+      </button>
+    </div>
+
+    <div class="tasks-search-wrap">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" class="form-input" id="tasksSearch" placeholder="Buscar tareas" maxlength="100" aria-label="Buscar tareas">
+    </div>
+
+    <div class="tasks-bar-actions">
+      <span class="tasks-overdue-badge modal-hidden" id="tasksOverdueBadge" role="button" tabindex="0">0 vencidas</span>
+      <button class="btn btn-secondary btn-sm" id="btnRequestTask" type="button" data-abrir-solicitud aria-label="Solicitar a otra unidad">
+        <i class="fa-solid fa-arrow-right-arrow-left"></i> <span class="btn-label-desktop">Solicitar</span>
+      </button>
+      <button class="btn btn-primary btn-sm" id="btnNewTask" aria-label="Nueva tarea">
+        <i class="fa-solid fa-plus"></i> <span class="btn-label-desktop">Nueva tarea</span>
+      </button>
+    </div>
   </div>
-</div>
 
-<div class="tasks-filters" id="tasksFilters">
-  <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
-    <option value="">Todos los estados</option>
-    <option value="Pendiente">Pendiente</option>
-    <option value="En Progreso">En Progreso</option>
-    <option value="Completado">Completado</option>
-  </select>
+  <div class="tasks-search-results modal-hidden" id="tasksSearchResults"></div>
 
-  <select class="form-select" id="tasksFilterAssignee" aria-label="Filtrar por asignado">
-    <option value="">Todos los asignados</option>
-    {% for u in area_users %}
-    <option value="{{ u.id }}">
-      {{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}
-    </option>
-    {% endfor %}
-  </select>
+  <section class="tasks-grid">
+    <div class="tasks-main-column">
+      {# ─── Vista Hoy (RED-2) ─── #}
+      <section class="tasks-panel tasks-panel--today" id="tasksTodayView" aria-labelledby="tasksTodayTitle">
+        <div class="tasks-panel-tools">
+          <h2 id="tasksTodayTitle" class="visually-hidden">Tu trabajo</h2>
+          <button class="btn btn-secondary btn-sm" id="btnTodayRefresh" type="button">
+            <i class="fa-solid fa-rotate"></i> Actualizar
+          </button>
+        </div>
 
-  <input type="search" class="form-input" id="tasksFilterClient" placeholder="Filtrar por cliente" maxlength="100" aria-label="Filtrar por cliente">
+        <div class="today-groups" id="todayGroups" aria-busy="true">
+          <p class="today-loading">Cargando tu trabajo...</p>
+        </div>
+      </section>
 
-  {% if current_user.is_admin %}
-  <select class="form-select" id="tasksFilterArea" aria-label="Filtrar por unidad">
-    <option value="">Todas las unidades</option>
-    {% for area_name in area_options %}
-    <option value="{{ area_name }}">{{ area_name }}</option>
-    {% endfor %}
-  </select>
-  {% endif %}
+      {#
+        Los filtros ocupaban un panel entero con titulo, subtitulo y seis
+        controles siempre desplegados, empujando el calendario fuera de la
+        pantalla. Pasan a una barra plegada: el buscador y el aviso de vencidas
+        —lo unico que se usa a diario— quedan siempre a la vista; el resto se
+        abre cuando hace falta. La cabecera dice cuantos filtros hay puestos
+        para que nadie deje uno activo sin darse cuenta.
+      #}
+      {#
+        Barra de filtros. Los controles llevan un icono monocromatico delante
+        para poder prescindir del rotulo y ocupar menos: el icono identifica el
+        campo y el placeholder dice el resto.
 
-  <button class="btn btn-secondary btn-sm" id="btnClearTaskFilters" type="button">
-    <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar filtros
-  </button>
+        Las pastillas ocupan el hueco que quedaba vacio junto al titulo, de modo
+        que con el panel plegado se ve QUE hay filtrado, no solo cuantos, y la
+        x de cada una lo quita sin abrir nada.
+      #}
+      <details class="tasks-panel tasks-panel--filters" id="tasksFiltersPanel">
+        <summary class="tasks-filters-head">
+          <i class="fa-solid fa-filter" aria-hidden="true"></i>
+          <span class="tasks-filters-title">Filtros</span>
+          <span class="tasks-filters-pills" id="tasksFiltersPills"></span>
+        </summary>
 
-</div>
+        <div class="tasks-filters" id="tasksFilters">
+          <div class="campo-icono">
+            <i class="fa-regular fa-circle-dot" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
+              <option value="">Estado</option>
+              {% for status in task_statuses %}
+              <option value="{{ status }}">{{ status }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-<div class="tasks-bulk-actions modal-hidden" id="tasksBulkActions">
-  <div class="tasks-bulk-count" id="tasksBulkCount">0 seleccionadas</div>
-  <button class="btn btn-secondary" id="btnBulkCopy" type="button" title="Copiar" disabled><i class="fa-regular fa-copy"></i></button>
-  <button class="btn btn-secondary" id="btnBulkMove" type="button" title="Mover" disabled><i class="fa-regular fa-calendar"></i></button>
-  <button class="btn btn-secondary" id="btnBulkPending" type="button" title="Pendiente" disabled><i class="fa-regular fa-clock"></i></button>
-  <button class="btn btn-secondary" id="btnBulkProgress" type="button" title="En progreso" disabled><i class="fa-solid fa-spinner"></i></button>
-  <button class="btn btn-secondary" id="btnBulkDone" type="button" title="Completado" disabled><i class="fa-solid fa-check"></i></button>
-  <button class="btn btn-secondary" id="btnBulkDelete" type="button" title="Eliminar" disabled><i class="fa-regular fa-trash-can"></i></button>
-  <button class="btn btn-secondary" id="btnBulkCancel" type="button" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>
-</div>
+          <div class="campo-icono">
+            <i class="fa-solid fa-flag" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterPriority" aria-label="Filtrar por prioridad">
+              <option value="">Prioridad</option>
+              {% for priority in task_priorities %}
+              <option value="{{ priority }}">{{ priority }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-<div class="tasks-month-picker modal-hidden" id="tasksMonthPicker">
-  <input type="month" class="form-input" id="tasksMonthInput" aria-label="Mes y año">
-  <button class="btn btn-secondary btn-sm" id="btnTasksMonthApply" type="button">Ir</button>
-  <button class="btn btn-secondary btn-sm" id="btnTasksMonthClose" type="button">Cerrar</button>
-</div>
+          <div class="campo-icono">
+            <i class="fa-regular fa-user" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterAssignee" aria-label="Filtrar por asignado">
+              <option value="">Asignado</option>
+              {% for u in area_users %}
+              <option value="{{ u.id }}">
+                {{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-<div class="tasks-month-picker modal-hidden" id="tasksMovePicker">
-  <input type="date" class="form-input" id="tasksMoveDateInput" aria-label="Fecha destino">
-  <button class="btn btn-secondary btn-sm" id="btnTasksMoveApply" type="button">Mover</button>
-  <button class="btn btn-secondary btn-sm" id="btnTasksMoveClose" type="button">Cerrar</button>
-</div>
+          <div class="campo-icono">
+            <i class="fa-regular fa-building" aria-hidden="true"></i>
+            <input type="search" class="form-input" id="tasksFilterClient" placeholder="Cliente" maxlength="100" aria-label="Filtrar por cliente">
+          </div>
 
-<div class="tasks-calendar-wrap">
-  <div id="tasksCalendar"></div>
+          {% if current_user.is_admin %}
+          <div class="campo-icono">
+            <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+            <select class="form-select" id="tasksFilterArea" aria-label="Filtrar por unidad">
+              <option value="">Unidad</option>
+              {% for area_name in area_options %}
+              <option value="{{ area_name }}">{{ area_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+
+          <button class="btn btn-secondary btn-sm" id="btnClearTaskFilters" type="button">
+            <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar
+          </button>
+        </div>
+      </details>
+
+
+      <section class="tasks-panel tasks-panel--calendar" id="tasksCalendarPanel" aria-labelledby="tasksCalendarTitle">
+        <h2 id="tasksCalendarTitle" class="visually-hidden">Calendario de trabajo</h2>
+        <p class="tasks-panel-hint">Haz clic en una tarea para editarla. Usa selección múltiple para acciones masivas.</p>
+
+        <div class="tasks-calendar-wrap">
+          <div id="tasksCalendar"></div>
+        </div>
+      </section>
+    </div>
+
+      <section class="tasks-panel tasks-panel--watching" id="tasksWatchingPanel" aria-labelledby="tasksWatchingTitle">
+        <div class="tasks-section-head">
+          <div>
+            <h2 id="tasksWatchingTitle">Tareas que observo</h2>
+            <p>Trabajo que sigues sin que sea tuyo. Te avisamos de sus cambios.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btnWatchingRefresh" type="button">
+            <i class="fa-solid fa-rotate"></i> Actualizar
+          </button>
+        </div>
+        <div class="tasks-watching-list" id="tasksWatchingList">
+          <div class="task-comments-empty">No observas ninguna tarea. Observar una te avisa de sus cambios sin que sea tuya.</div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+      <section class="tasks-panel tasks-panel--watching modal-hidden" id="tasksWatchingPanel">
+        <div class="tasks-watching-header">
+          <div>
+            <h2>Tareas que observo</h2>
+            <p>Accede a trabajo seguido sin buscarlo otra vez.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btnWatchingRefresh" type="button">Actualizar</button>
+        </div>
+        <div class="tasks-watching-list" id="tasksWatchingList">
+          <div class="task-comments-empty">No observas ninguna tarea. Observar una te avisa de sus cambios sin que sea tuya.</div>
+        </div>
+      </section>
+    </aside>
+  </section>
+
+  <div class="tasks-bulk-actions modal-hidden" id="tasksBulkActions">
+    <div class="tasks-bulk-count" id="tasksBulkCount">0 seleccionadas</div>
+    <button class="btn btn-secondary" id="btnBulkCopy" type="button" title="Copiar" disabled><i class="fa-regular fa-copy"></i></button>
+    <button class="btn btn-secondary" id="btnBulkMove" type="button" title="Mover" disabled><i class="fa-regular fa-calendar"></i></button>
+    <select class="form-select tasks-bulk-status-select" id="bulkStatusQuick" aria-label="Cambiar estado masivo" disabled>
+      <option value="">Estado...</option>
+      {% for status in task_statuses %}
+      <option value="{{ status }}">{{ status }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-secondary" id="btnBulkDelete" type="button" title="Eliminar" disabled><i class="fa-regular fa-trash-can"></i></button>
+    <button class="btn btn-secondary" id="btnBulkCancel" type="button" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+
+  <div class="tasks-month-picker modal-hidden" id="tasksMonthPicker">
+    <input type="month" class="form-input" id="tasksMonthInput" aria-label="Mes y año">
+    <button class="btn btn-secondary btn-sm" id="btnTasksMonthApply" type="button">Ir</button>
+    <button class="btn btn-secondary btn-sm" id="btnTasksMonthClose" type="button">Cerrar</button>
+  </div>
+
+  <div class="tasks-month-picker modal-hidden" id="tasksMovePicker">
+    <input type="date" class="form-input" id="tasksMoveDateInput" aria-label="Fecha destino">
+    <button class="btn btn-secondary btn-sm" id="btnTasksMoveApply" type="button">Mover</button>
+    <button class="btn btn-secondary btn-sm" id="btnTasksMoveClose" type="button">Cerrar</button>
+  </div>
 </div>
 
 <!-- ═══ Task Modal ═══ -->
@@ -86,44 +227,41 @@
       <input type="hidden" id="taskId" value="">
       <div class="task-form-message" id="taskFormMessage" role="status" aria-live="polite"></div>
 
+      <div class="task-modal-tabs modal-hidden" id="taskModalTabs">
+        <button type="button" class="task-tab active" data-tab="details">Detalles</button>
+        <button type="button" class="task-tab" data-tab="checklist">Checklist <span class="task-tab-count" id="taskChecklistCount">0</span></button>
+        <button type="button" class="task-tab" data-tab="comments">Comentarios <span class="task-tab-count" id="taskCommentsCount">0</span></button>
+        <button type="button" class="task-tab" data-tab="activity">Actividad</button>
+      </div>
+
+      <div class="task-tab-panel active" id="taskTabDetails">
+
+      {#
+        Creacion en dos niveles (RED-3). Antes eran 14 campos en una sola
+        columna, todos con el mismo peso visual, y el primero que se veia al
+        editar era "Observadores". Ahora lo imprescindible queda arriba y el
+        resto se pliega en dos acordeones cerrados: el contexto administrativo
+        y la planificacion, relevante en menos de un tercio de las tareas.
+      #}
+
+      {# ─── Selector de plantillas: solo al crear, y solo si hay alguna ─── #}
+      <div class="task-template-picker modal-hidden" id="taskTemplatePicker">
+        <p class="task-template-lead">Empieza desde:</p>
+        <div class="task-template-cards" id="taskTemplateCards"></div>
+      </div>
+
+      <div id="taskFormFields">
+
+      {# ─── Nivel rapido ─── #}
       <div class="form-group form-group-tight">
-        <label class="form-label">Título *</label>
-        <input type="text" class="form-input" id="taskTitle" placeholder="Título de la tarea" maxlength="255">
+        <label class="form-label" for="taskTitle">Título *</label>
+        <input type="text" class="form-input" id="taskTitle" placeholder="¿Qué hay que hacer?" maxlength="255">
         <div class="field-error" id="taskTitleError"></div>
       </div>
 
-      <div class="form-group form-group-tight">
-        <label class="form-label">Cliente</label>
-        <div class="autocomplete-wrap">
-          <input type="text" class="form-input" id="taskClient" placeholder="Cliente" maxlength="100" autocomplete="off">
-          <div class="autocomplete-list" id="clientAutocomplete"></div>
-        </div>
-      </div>
-
-      <div class="form-group form-group-tight">
-        <label class="form-label">Director o Gerencia</label>
-        <input type="text" class="form-input" id="taskDirectorate" placeholder="Dirección o gerencia" maxlength="255">
-      </div>
-
       <div class="form-row mb-0">
         <div class="form-group form-group-tight">
-          <label class="form-label">Solicitado por</label>
-          <input type="text" class="form-input" id="taskRequestedBy" placeholder="Persona solicitante" maxlength="255">
-        </div>
-        <div class="form-group form-group-tight">
-          <label class="form-label">Tipo de Presupuesto</label>
-          <input type="text" class="form-input" id="taskBudgetType" placeholder="Tipo de presupuesto" maxlength="255">
-        </div>
-      </div>
-
-      <div class="form-group form-group-tight">
-        <label class="form-label">Descripción</label>
-        <textarea class="form-textarea" id="taskDesc" rows="3" placeholder="Descripción"></textarea>
-      </div>
-
-      <div class="form-row mb-0">
-        <div class="form-group form-group-tight">
-          <label class="form-label">Asignar a *</label>
+          <label class="form-label" for="taskAssignee">Asignar a *</label>
           <select class="form-select" id="taskAssignee">
             {% for u in area_users %}
             <option value="{{ u.id }}">
@@ -134,61 +272,167 @@
           <div class="field-error" id="taskAssigneeError"></div>
         </div>
         <div class="form-group form-group-tight">
-          <label class="form-label">Fecha de Entrega *</label>
+          <label class="form-label" for="taskDueDate">Fecha de Entrega *</label>
           <input type="date" class="form-input" id="taskDueDate">
           <div class="field-error" id="taskDueDateError"></div>
         </div>
       </div>
 
-      <div class="form-row mb-0">
-        <div class="form-group form-group-tight">
-          <label class="form-label">Fecha de inicio</label>
-          <input type="date" class="form-input" id="taskStartDate">
-        </div>
-        <div class="form-group form-group-tight">
-          <label class="form-label">Fecha de finalización</label>
-          <input type="date" class="form-input" id="taskEndDate">
-          <div class="field-error" id="taskEndDateError"></div>
-        </div>
+      <div class="form-group form-group-tight">
+        <label class="form-label" for="taskPriority">Prioridad</label>
+        <select class="form-select" id="taskPriority">
+          {% for priority in task_priorities %}
+          <option value="{{ priority }}"{% if priority == default_priority %} selected{% endif %}>{{ priority }}</option>
+          {% endfor %}
+        </select>
       </div>
 
-      <!-- Status (only in edit mode) -->
+      {# Estado: solo al editar #}
       <div class="form-group form-group-tight modal-hidden" id="statusGroup">
         <label class="form-label">Estado</label>
         <div class="status-select-group">
-          <div class="status-chip selected" data-status="Pendiente">Pendiente</div>
-          <div class="status-chip" data-status="En Progreso">En Progreso</div>
-          <div class="status-chip" data-status="Completado">Completado</div>
+          {% for status in task_statuses %}
+          <div class="status-chip{% if status == initial_status %} selected{% endif %}" data-status="{{ status }}">{{ status }}</div>
+          {% endfor %}
         </div>
       </div>
 
-      <!-- Recurrence -->
-      <div class="form-group form-group-tight">
-        <label class="form-check">
-          <input type="checkbox" id="taskRecurrent"> Tarea recurrente
-        </label>
+      {# ─── Acordeon: Encargo ─── #}
+      <details class="task-fieldset" id="taskGroupEncargo">
+        <summary class="task-fieldset-head">
+          <span class="task-fieldset-title">Encargo</span>
+          <span class="task-fieldset-hint">Cliente, dirección, presupuesto</span>
+        </summary>
+        <div class="task-fieldset-body">
+          <div class="form-group form-group-tight">
+            <label class="form-label" for="taskClient">Cliente</label>
+            <div class="autocomplete-wrap">
+              <input type="text" class="form-input" id="taskClient" placeholder="Cliente" maxlength="100" autocomplete="off">
+              <div class="autocomplete-list" id="clientAutocomplete"></div>
+            </div>
+          </div>
+
+          <div class="form-group form-group-tight">
+            <label class="form-label" for="taskDirectorate">Director o Gerencia</label>
+            <input type="text" class="form-input" id="taskDirectorate" placeholder="Dirección o gerencia" maxlength="255">
+          </div>
+
+          <div class="form-row mb-0">
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskRequestedBy">Solicitado por</label>
+              <input type="text" class="form-input" id="taskRequestedBy" placeholder="Persona solicitante" maxlength="255">
+            </div>
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskBudgetType">Tipo de Presupuesto</label>
+              <input type="text" class="form-input" id="taskBudgetType" placeholder="Tipo de presupuesto" maxlength="255">
+            </div>
+          </div>
+
+          <div class="form-group form-group-tight">
+            <label class="form-label" for="taskDesc">Descripción</label>
+            <textarea class="form-textarea" id="taskDesc" rows="3" placeholder="Descripción"></textarea>
+          </div>
+        </div>
+      </details>
+
+      {# ─── Acordeon: Planificacion ─── #}
+      <details class="task-fieldset" id="taskGroupPlanificacion">
+        <summary class="task-fieldset-head">
+          <span class="task-fieldset-title">Planificación</span>
+          <span class="task-fieldset-hint">Fechas, recurrencia, observadores</span>
+        </summary>
+        <div class="task-fieldset-body">
+          <div class="form-row mb-0">
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskStartDate">Fecha de inicio</label>
+              <input type="date" class="form-input" id="taskStartDate">
+            </div>
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskEndDate">Fecha de finalización</label>
+              <input type="date" class="form-input" id="taskEndDate">
+              <div class="field-error" id="taskEndDateError"></div>
+            </div>
+          </div>
+
+          <div class="form-group form-group-tight">
+            <label class="form-check">
+              <input type="checkbox" id="taskRecurrent"> Tarea recurrente
+            </label>
+          </div>
+
+          <div class="recurrence-fields" id="recurrenceFields">
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskRecurrenceType">Frecuencia</label>
+              <select class="form-select" id="taskRecurrenceType">
+                <option value="Diaria">Diaria</option>
+                <option value="Semanal" selected>Semanal</option>
+                <option value="Mensual">Mensual</option>
+              </select>
+            </div>
+            <div class="recurrence-preview">La recurrencia usa la fecha de finalización para crear solo días laborables.</div>
+            <div class="recurrence-preview" id="recurrencePreview"></div>
+          </div>
+
+          <div class="task-watchers-section modal-hidden" id="taskWatchersSection">
+            <label class="form-label">Observadores</label>
+            <div class="task-watchers-chips" id="taskWatchersChips"></div>
+            <div class="task-watchers-controls" id="taskWatchersControls">
+              <select class="form-select" id="taskWatcherUserSelect">
+                <option value="">Selecciona usuario...</option>
+                {% for u in area_users %}
+                <option value="{{ u.id }}">{{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}</option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-secondary btn-sm" id="btnAddWatcher" type="button">Agregar</button>
+            </div>
+            <button class="btn btn-secondary btn-sm modal-hidden" id="btnLeaveWatching" type="button">Dejar de observar</button>
+          </div>
+        </div>
+      </details>
+
+      </div>{# /taskFormFields #}
       </div>
 
-      <div class="recurrence-fields" id="recurrenceFields">
-        <div class="form-group form-group-tight">
-          <label class="form-label">Frecuencia</label>
-          <select class="form-select" id="taskRecurrenceType">
-            <option value="Diaria">Diaria</option>
-            <option value="Semanal" selected>Semanal</option>
-            <option value="Mensual">Mensual</option>
-          </select>
+      <div class="task-tab-panel" id="taskTabComments">
+        <div class="task-comments-list" id="taskCommentsList">
+          <div class="task-comments-empty">Sin comentarios. Escribe aquí lo que haga falta recordar sobre esta tarea; queda con ella.</div>
         </div>
-        <div class="recurrence-preview">La recurrencia usa la fecha de finalización para crear solo días laborables.</div>
-        <div class="recurrence-preview" id="recurrencePreview"></div>
+        <div class="task-comments-form">
+          <textarea class="form-textarea" id="taskCommentBody" rows="3" placeholder="Escribe un comentario. Usa @usuario para mencionar."></textarea>
+          <div class="task-comments-actions">
+            <button class="btn btn-primary btn-sm" id="btnTaskCommentSend" type="button">
+              <i class="fa-solid fa-paper-plane"></i> Enviar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-tab-panel" id="taskTabChecklist">
+        <div class="task-checklist-input-row">
+          <input type="text" class="form-input" id="taskChecklistInput" placeholder="Nuevo ítem..." maxlength="500">
+          <button class="btn btn-primary btn-sm" id="btnTaskChecklistAdd" type="button">Agregar</button>
+        </div>
+        <div class="task-checklist-list" id="taskChecklistList">
+          <div class="task-comments-empty">Sin ítems. Divide la tarea en pasos y podrás ver el avance sin cambiarle el estado.</div>
+        </div>
+      </div>
+
+      <div class="task-tab-panel" id="taskTabActivity">
+        <div class="task-activity-list" id="taskActivityList">
+          <div class="task-comments-empty">Todavía sin cambios registrados. Aquí aparecerá quién tocó qué y cuándo.</div>
+        </div>
       </div>
     </div>
 
-    <div class="task-modal-footer">
+    <div class="task-modal-footer" id="taskModalFooter">
       <label class="form-check delete-series-check modal-hidden modal-push-left" id="deleteSeriesWrap">
         <input type="checkbox" id="taskDeleteSeries"> Eliminar toda la serie
       </label>
       <button class="btn btn-danger btn-sm modal-hidden modal-push-left" id="btnDeleteTask">
         <i class="fa-solid fa-trash"></i> Eliminar
+      </button>
+      <button class="btn btn-secondary btn-sm modal-hidden" id="btnSaveAsTemplate" type="button">
+        <i class="fa-regular fa-bookmark"></i> Guardar como plantilla
       </button>
       <button class="btn btn-secondary" id="btnCancelTask">Cancelar</button>
       <button class="btn btn-primary" id="btnSaveTask">
@@ -198,10 +442,15 @@
   </div>
 </div>
 
+<!-- ═══ Request Task Modal ═══ -->
+{% include "_solicitud_modal.html" %}
+
 <!-- FullCalendar JS -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/muelle.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+<script src="{{ url_for('static', filename='js/task_request_form.js') }}"></script>
 {% endblock %}

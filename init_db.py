@@ -75,11 +75,28 @@ def ensure_schema(app):
                     db.session.rollback()
                     print(f"[migration] Warning adding reports.template_name: {e}")
 
+        if 'activity_logs' in tables:
+            activity_log_cols = {c['name'] for c in insp.get_columns('activity_logs')}
+            new_activity_log_cols = {
+                'entity_type': 'VARCHAR(30)',
+                'entity_id': 'INTEGER',
+            }
+            for col_name, col_type in new_activity_log_cols.items():
+                if col_name not in activity_log_cols:
+                    try:
+                        db.session.execute(text(f"ALTER TABLE activity_logs ADD COLUMN {col_name} {col_type}"))
+                        db.session.commit()
+                        print(f"[migration] Added activity_logs.{col_name}")
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"[migration] Warning adding activity_logs.{col_name}: {e}")
+
         if 'users' in tables:
             user_cols = {c['name'] for c in insp.get_columns('users')}
             new_user_cols = {
                 'session_token': 'VARCHAR(64)',
                 'force_logout': 'BOOLEAN DEFAULT 0',
+                'is_area_lead': 'BOOLEAN DEFAULT 0',
                 'area_id': 'INTEGER REFERENCES areas(id)',
             }
             for col_name, col_type in new_user_cols.items():
@@ -100,6 +117,12 @@ def ensure_schema(app):
                 'directorate': 'VARCHAR(255)',
                 'requested_by': 'VARCHAR(255)',
                 'budget_type': 'VARCHAR(255)',
+                'updated_at': 'DATETIME',
+                'deleted_at': 'DATETIME',
+                'deleted_by_id': 'INTEGER REFERENCES users(id)',
+                'priority': "VARCHAR(10) DEFAULT 'Media'",
+                'visibility': "VARCHAR(15) DEFAULT 'unit'",
+                'area_id': 'INTEGER REFERENCES areas(id)',
             }
             for col_name, col_type in new_task_cols.items():
                 if col_name not in task_cols:
@@ -110,6 +133,17 @@ def ensure_schema(app):
                     except Exception as e:
                         db.session.rollback()
                         print(f"[migration] Warning adding tasks.{col_name}: {e}")
+
+            if 'areas' in tables and 'area_id' in {c['name'] for c in inspect(db.engine).get_columns('tasks')}:
+                try:
+                    db.session.execute(text(
+                        "UPDATE tasks SET area_id = (SELECT id FROM areas WHERE areas.name = tasks.area) "
+                        "WHERE area_id IS NULL"
+                    ))
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"[migration] Warning backfilling tasks.area_id: {e}")
 
         seed_admin(app)
         print(f"[ok] Schema ensured on: {db.engine.url.render_as_string(hide_password=True)}")

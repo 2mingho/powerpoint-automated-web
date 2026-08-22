@@ -4,12 +4,10 @@
 {% block page_name %}Mis Reportes{% endblock %}
 
 {% block content %}
-<div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
-  <div>
-    <h1>Mis Reportes</h1>
-    <p>Reportes generados recientemente</p>
-  </div>
-  <a href="{{ url_for('index') }}" class="btn btn-primary">
+{# El <h1> repetia el nombre que ya da la barra superior, igual que en tareas
+   y en solicitudes. Queda la accion, que es lo unico que aportaba la fila. #}
+<div class="page-actions">
+  <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">
     <i class="fa-solid fa-plus"></i> Nuevo reporte
   </a>
 </div>

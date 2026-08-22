@@ -6,7 +6,37 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="td-layout">
+<div class="td-layout" data-final-statuses='{{ final_statuses|tojson }}'>
+  {#
+    Indicadores de cabecera (RED-7). El dashboard abria con la distribucion
+    por estado y dos graficos: informacion, pero no una respuesta. Estos
+    cuatro numeros responden lo que un director busca en los primeros cinco
+    segundos, y cada uno lleva a la tabla ya filtrada, de modo que los filtros
+    pasan a ser el segundo paso en vez del primero.
+  #}
+  <div class="td-headline" id="tdHeadline">
+    <button type="button" class="td-kpi td-kpi--alerta" data-kpi="vencidas">
+      <span class="td-kpi-value" id="kpiOverdue">—</span>
+      <span class="td-kpi-label">Vencidas</span>
+      <span class="td-kpi-hint">Ver en la tabla</span>
+    </button>
+    <button type="button" class="td-kpi td-kpi--aviso" data-kpi="bloqueadas">
+      <span class="td-kpi-value" id="kpiBlocked">—</span>
+      <span class="td-kpi-label">Bloqueadas</span>
+      <span class="td-kpi-hint">Ver en la tabla</span>
+    </button>
+    <button type="button" class="td-kpi td-kpi--bien" data-kpi="completadas">
+      <span class="td-kpi-value" id="kpiDoneWeek">—</span>
+      <span class="td-kpi-label">Completadas esta semana</span>
+      <span class="td-kpi-hint">Ver en la tabla</span>
+    </button>
+    <button type="button" class="td-kpi" data-kpi="carga">
+      <span class="td-kpi-value" id="kpiLoad">—</span>
+      <span class="td-kpi-label">Carga máxima</span>
+      <span class="td-kpi-hint" id="kpiLoadHint">—</span>
+    </button>
+  </div>
+
   <!-- Hero -->
   <div class="td-hero">
     <div class="td-hero-actions">
@@ -28,23 +58,7 @@
         <span class="td-stat-value" id="statTotal">—</span>
         <span class="td-stat-label">Total Tareas</span>
       </div>
-      <div class="td-summary-list">
-        <div class="td-sum-item">
-          <span class="dot st-pendiente"></span>
-          <span class="lbl">Pendientes</span>
-          <span class="val" id="statPending">0</span>
-        </div>
-        <div class="td-sum-item">
-          <span class="dot st-en-progreso"></span>
-          <span class="lbl">En Progreso</span>
-          <span class="val" id="statActive">0</span>
-        </div>
-        <div class="td-sum-item">
-          <span class="dot st-completado"></span>
-          <span class="lbl">Completadas</span>
-          <span class="val" id="statDone">0</span>
-        </div>
-      </div>
+      <div class="td-summary-list" id="statByStatus"></div>
     </div>
 
     <!-- Status Donut -->
@@ -74,28 +88,49 @@
   </div>
 
   <!-- Filters -->
+  {# Mismos iconos monocromaticos y mismas pastillas que en la barra de tareas:
+     eran dos formas distintas de filtrar lo mismo en la misma aplicacion. #}
   <div class="td-filters" id="tdFilters">
-    <label>Filtros</label>
+    <div class="td-filters-head">
+      <i class="fa-solid fa-filter" aria-hidden="true"></i>
+      <span>Filtros</span>
+      <span class="tasks-filters-pills" id="tdFiltersPills"></span>
+    </div>
 
-    <select class="td-filter-select" id="filterStatus">
-      <option value="">Estado</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-circle-dot" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterStatus" aria-label="Filtrar por estado">
+        <option value="">Estado</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterClient">
-      <option value="">Cliente</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-building" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterClient" aria-label="Filtrar por cliente">
+        <option value="">Cliente</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterAssignee">
-      <option value="">Asignado a</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-user" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterAssignee" aria-label="Filtrar por asignado">
+        <option value="">Asignado</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterCreator">
-      <option value="">Creado por</option>
-    </select>
+    <div class="campo-icono">
+      <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterCreator" aria-label="Filtrar por creador">
+        <option value="">Creado por</option>
+      </select>
+    </div>
 
-    <select class="td-filter-select" id="filterArea">
-      <option value="">Área</option>
-    </select>
+    <div class="campo-icono" {{ 'style=display:none' if scope == 'area' }}>
+      <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+      <select class="td-filter-select" id="filterArea" aria-label="Filtrar por unidad">
+        <option value="">Unidad</option>
+      </select>
+    </div>
 
     <button class="td-filter-reset" id="btnResetFilters">
       <i class="fa-solid fa-rotate-left"></i> Limpiar
@@ -187,9 +222,9 @@
         <label class="form-label">Estado</label>
         <select class="form-select" id="bulkStatus">
           <option value="">No cambiar</option>
-          <option value="Pendiente">Pendiente</option>
-          <option value="En Progreso">En Progreso</option>
-          <option value="Completado">Completado</option>
+          {% for status in task_statuses %}
+          <option value="{{ status }}">{{ status }}</option>
+          {% endfor %}
         </select>
       </div>
 
@@ -217,6 +252,8 @@
 
 {% block scripts %}
 <script>
+const API_BASE = {{ ('/api/team' if scope == 'area' else '/api/admin') | tojson }};
+const IS_TEAM_SCOPE = {{ 'true' if scope == 'area' else 'false' }};
 document.addEventListener('DOMContentLoaded', function() {
   const grid = document.getElementById('tdGrid');
   const selStatus = document.getElementById('filterStatus');
@@ -291,8 +328,14 @@ document.addEventListener('DOMContentLoaded', function() {
     return response.json().catch(() => ({}));
   }
 
+  // Filtros que no viven en un <select>: los enciende un indicador de
+  // cabecera y se apagan con "Limpiar" como cualquier otro.
+  let kpiFiltro = '';
+
   function buildTaskFilterParams() {
     const params = new URLSearchParams();
+    if (kpiFiltro === 'vencidas') params.set('overdue', '1');
+    if (kpiFiltro === 'completadas') params.set('completed_this_week', '1');
     if (selStatus.value) params.set('status', selStatus.value);
     if (selClient.value) params.set('client', selClient.value);
     if (selAssignee.value) params.set('assignee_id', selAssignee.value);
@@ -515,7 +558,7 @@ document.addEventListener('DOMContentLoaded', function() {
     btnImportCsv.disabled = true;
     btnImportCsv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analizando...';
 
-    fetch('/api/admin/tasks/import-csv/preview', {
+    fetch(API_BASE + '/tasks/import-csv/preview', {
       method: 'POST',
       body: formData
     })
@@ -617,7 +660,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ─── Load filter options ───
-  fetch('/api/admin/tasks/filters')
+  fetch(API_BASE + '/tasks/filters')
     .then(parseJsonResponse)
     .then(data => {
       if (!data || !data.statuses) return;
@@ -644,7 +687,7 @@ document.addEventListener('DOMContentLoaded', function() {
         selCreator.appendChild(o2);
       });
       populateBulkAssignee(allUsers);
-      data.areas.forEach(a => {
+      (data.areas || []).forEach(a => {
         const o = document.createElement('option');
         o.value = a; o.textContent = a;
         selArea.appendChild(o);
@@ -658,18 +701,31 @@ document.addEventListener('DOMContentLoaded', function() {
   function updateCharts(stats, tasks) {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const textColor = isDark ? '#a0aec0' : '#718096';
+
+    // Los graficos usaban los colores por defecto de Chart.js —naranja #f59e0b,
+    // azul #2563eb, verde #10b981— que no pertenecen al sistema y compiten con
+    // el amarillo de marca. Se leen los tokens del CSS para que sigan al tema
+    // claro/oscuro sin duplicar la paleta aqui.
+    const token = (nombre) => getComputedStyle(document.documentElement)
+      .getPropertyValue(nombre).trim();
     const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
 
     // 1. Status Donut
     if (chartStatus) chartStatus.destroy();
     const ctxStatus = document.getElementById('chartStatus').getContext('2d');
+    const porEstado = stats.por_estado || {};
+    const etiquetasEstado = Object.keys(porEstado);
+    const coloresEstado = [
+      token('--c-prio-media'), token('--c-info') || token('--c-text-secondary'),
+      token('--c-danger'), token('--c-success'), token('--c-text-secondary')
+    ];
     chartStatus = new Chart(ctxStatus, {
       type: 'doughnut',
       data: {
-        labels: ['Pendiente', 'En Progreso', 'Completada'],
+        labels: etiquetasEstado,
         datasets: [{
-          data: [stats.pendiente, stats.en_progreso, stats.completado],
-          backgroundColor: ['#f59e0b', '#2563eb', '#10b981'],
+          data: etiquetasEstado.map(nombre => porEstado[nombre]),
+          backgroundColor: etiquetasEstado.map((_, i) => coloresEstado[i % coloresEstado.length]),
           borderWidth: 0,
           hoverOffset: 4
         }]
@@ -709,7 +765,7 @@ document.addEventListener('DOMContentLoaded', function() {
         datasets: [{
           label: 'Tareas',
           data: sortedData,
-          backgroundColor: '#3b82f6',
+          backgroundColor: token('--c-info'),
           borderRadius: 6,
           maxBarThickness: 32
         }]
@@ -730,10 +786,146 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ─── Load tasks ───
+  /* ─── Indicadores de cabecera (RED-7) ─── */
+
+  const headline = document.getElementById('tdHeadline');
+
+  /* ─── Pastillas de filtro activo ───
+     Mismo comportamiento que en la barra de tareas: dicen que hay filtrado, no
+     solo cuantos filtros hay, y cada una se quita por separado. */
+
+  const CAMPOS_DE_FILTRO = [
+    { campo: selStatus, etiqueta: 'Estado' },
+    { campo: selClient, etiqueta: 'Cliente' },
+    { campo: selAssignee, etiqueta: 'Asignado' },
+    { campo: selCreator, etiqueta: 'Creado por' },
+    { campo: selArea, etiqueta: 'Unidad' }
+  ];
+
+  function pintarPastillasDeFiltro() {
+    const contenedor = document.getElementById('tdFiltersPills');
+    if (!contenedor) return;
+
+    const pastillas = [];
+
+    CAMPOS_DE_FILTRO.forEach(function (def, indice) {
+      const campo = def.campo;
+      if (!campo) return;
+
+      const activo = String(campo.value || '').trim() !== '';
+      const envoltorio = campo.closest('.campo-icono');
+      if (envoltorio) envoltorio.classList.toggle('tiene-valor', activo);
+      if (!activo) return;
+
+      const opcion = campo.options[campo.selectedIndex];
+      const texto = opcion ? opcion.textContent.trim().replace(/\s+/g, ' ') : campo.value;
+
+      pastillas.push(''
+        + '<span class="tasks-filter-pill">'
+        +   '<span class="tasks-filter-pill-texto">'
+        +     escapeHtml(def.etiqueta) + ': ' + escapeHtml(texto)
+        +   '</span>'
+        +   '<button type="button" class="tasks-filter-pill-quitar" data-quitar-filtro="' + indice + '"'
+        +     ' aria-label="Quitar filtro ' + escapeHtml(def.etiqueta) + '" title="Quitar">'
+        +     '<i class="fa-solid fa-xmark" aria-hidden="true"></i>'
+        +   '</button>'
+        + '</span>');
+    });
+
+    contenedor.innerHTML = pastillas.join('');
+  }
+
+  const tdPills = document.getElementById('tdFiltersPills');
+  if (tdPills) {
+    tdPills.addEventListener('click', function (evento) {
+      const boton = evento.target.closest('[data-quitar-filtro]');
+      if (!boton) return;
+      const def = CAMPOS_DE_FILTRO[Number(boton.dataset.quitarFiltro)];
+      if (!def || !def.campo) return;
+      def.campo.value = '';
+      // Los indicadores de cabecera fijan estado y asignado: si se quita su
+      // filtro a mano, el indicador debe dejar de figurar como activo.
+      kpiFiltro = '';
+      loadTasks();
+    });
+  }
+
+  function pintarIndicadores(stats) {
+    if (!headline || !stats) return;
+    document.getElementById('kpiOverdue').textContent = stats.vencidas ?? 0;
+    document.getElementById('kpiBlocked').textContent = stats.bloqueadas ?? 0;
+    document.getElementById('kpiDoneWeek').textContent = stats.completadas_semana ?? 0;
+    document.getElementById('kpiLoad').textContent = stats.carga_max ?? 0;
+
+    const pista = document.getElementById('kpiLoadHint');
+    if (pista) {
+      pista.textContent = stats.carga_max_nombre
+        ? stats.carga_max_nombre + ' · ver sus tareas'
+        : 'Sin tareas asignadas';
+    }
+
+    // Un indicador en cero no lleva a ninguna parte: apagarlo evita el clic
+    // que solo devuelve una tabla vacia.
+    headline.querySelectorAll('.td-kpi').forEach(function (boton) {
+      const valores = {
+        vencidas: stats.vencidas,
+        bloqueadas: stats.bloqueadas,
+        completadas: stats.completadas_semana,
+        carga: stats.carga_max
+      };
+      boton.classList.toggle('is-empty', !valores[boton.dataset.kpi]);
+      boton.classList.toggle('is-active', kpiFiltro === boton.dataset.kpi);
+    });
+
+    headline.dataset.cargaId = stats.carga_max_id ?? '';
+  }
+
+  function pintarResumenEstados(stats) {
+    const contenedor = document.getElementById('statByStatus');
+    if (!contenedor) return;
+    const porEstado = stats.por_estado || {};
+    contenedor.innerHTML = Object.entries(porEstado).map(([nombre, total]) => `
+      <div class="td-sum-item">
+        <span class="dot"></span>
+        <span class="lbl">${escapeHtml(nombre)}</span>
+        <span class="val">${total}</span>
+      </div>`).join('');
+  }
+
+  if (headline) {
+    headline.addEventListener('click', function (evento) {
+      const boton = evento.target.closest('.td-kpi');
+      if (!boton || boton.classList.contains('is-empty')) return;
+
+      const kpi = boton.dataset.kpi;
+      const yaActivo = kpiFiltro === kpi
+        && (kpi !== 'bloqueadas' || selStatus.value === 'Bloqueado')
+        && (kpi !== 'carga' || selAssignee.value === headline.dataset.cargaId);
+
+      // Volver a pulsar el indicador activo quita su filtro: sin esto habria
+      // que ir a "Limpiar" para deshacer un clic.
+      limpiarFiltrosDeIndicador();
+      if (yaActivo) { kpiFiltro = ''; loadTasks(); return; }
+
+      kpiFiltro = kpi;
+      if (kpi === 'bloqueadas') { selStatus.value = 'Bloqueado'; kpiFiltro = kpi; }
+      if (kpi === 'carga' && headline.dataset.cargaId) {
+        selAssignee.value = headline.dataset.cargaId;
+      }
+      loadTasks();
+    });
+  }
+
+  function limpiarFiltrosDeIndicador() {
+    kpiFiltro = '';
+    selStatus.value = '';
+    selAssignee.value = '';
+  }
+
   function loadTasks() {
     const params = buildTaskFilterParams();
 
-    fetch('/api/admin/tasks?' + params.toString())
+    fetch(API_BASE + '/tasks?' + params.toString())
       .then(parseJsonResponse)
       .then(data => {
         if (!data.success) {
@@ -749,27 +941,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update counts
         document.getElementById('statTotal').textContent = data.stats.total;
-        document.getElementById('statPending').textContent = data.stats.pendiente;
-        document.getElementById('statActive').textContent = data.stats.en_progreso;
-        document.getElementById('statDone').textContent = data.stats.completado;
+        pintarResumenEstados(data.stats);
+        pintarIndicadores(data.stats);
+        pintarPastillasDeFiltro();
 
         // Render Charts
         updateCharts(data.stats, data.tasks);
 
         // Render cards
         if (currentTasks.length === 0) {
-          grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-inbox"></i><p>No se encontraron tareas con estos filtros.</p></div>';
+          grid.innerHTML = '<div class="td-empty"><i class="fa-solid fa-inbox"></i><p>Ninguna tarea coincide con estos filtros. Prueba a limpiarlos o a pulsar uno de los indicadores de arriba.</p></div>';
           refreshSelectionUI();
           return;
         }
 
         grid.innerHTML = currentTasks.map(t => {
           const taskId = Number(t.id);
-          const statusClass = t.status === 'Pendiente'
-            ? 'st-pendiente'
-            : t.status === 'En Progreso'
-              ? 'st-en-progreso'
-              : 'st-completado';
+          const statusClass = t.status === 'Pendiente' ? 'st-pendiente'
+            : t.status === 'En Progreso' ? 'st-en-progreso'
+              : t.status === 'Completado' ? 'st-completado' : '';
 
           const dueDate = t.due_date
             ? new Date(t.due_date + 'T00:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -827,6 +1017,9 @@ document.addEventListener('DOMContentLoaded', function() {
   selPreset.addEventListener('change', loadTasks);
 
   btnReset.addEventListener('click', function() {
+    // Los indicadores de cabecera son filtros como los demas: "Limpiar" tiene
+    // que apagarlos tambien, o la tabla queda filtrada sin nada que lo diga.
+    kpiFiltro = '';
     selStatus.value = '';
     selClient.value = '';
     selAssignee.value = '';
@@ -838,7 +1031,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   btnExportCsv.addEventListener('click', function() {
     const params = buildTaskFilterParams();
-    const url = '/api/admin/tasks/export-csv' + (params.toString() ? `?${params.toString()}` : '');
+    const url = API_BASE + '/tasks/export-csv' + (params.toString() ? `?${params.toString()}` : '');
     window.location.href = url;
   });
 
@@ -935,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', function() {
     btnCommitCsvImport.disabled = true;
     btnCommitCsvImport.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Importando...';
 
-    fetch('/api/admin/tasks/import-csv/commit', {
+    fetch(API_BASE + '/tasks/import-csv/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rows: csvPreviewRows })

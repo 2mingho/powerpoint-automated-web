@@ -31,6 +31,18 @@
       <option value="{{ role.code }}" {{ 'selected' if role_filter == role.code }}>{{ role.display_name }}</option>
       {% endfor %}
     </select>
+    <select name="area" class="form-select admin-min-160">
+      <option value="">Todas las unidades</option>
+      <option value="sin" {{ 'selected' if area_filter == 'sin' }}>Sin unidad</option>
+      {% for area in all_areas %}
+      <option value="{{ area.id }}" {{ 'selected' if area_filter == area.id | string }}>{{ area.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="estado" class="form-select admin-min-160">
+      <option value="">Activos e inactivos</option>
+      <option value="activos" {{ 'selected' if estado_filter == 'activos' }}>Solo activos</option>
+      <option value="inactivos" {{ 'selected' if estado_filter == 'inactivos' }}>Solo inactivos</option>
+    </select>
     <button type="submit" class="btn btn-primary btn-sm">
       <i class="fa-solid fa-filter"></i> Filtrar
     </button>
@@ -42,6 +54,14 @@
 
 <!-- Users Table -->
 <section class="admin-panel admin-panel-tight">
+  <p class="usr-recuento">
+    {% if total == 0 %}
+      Ningún usuario coincide con estos filtros.
+    {% else %}
+      {{ total }} usuario{{ '' if total == 1 else 's' }}
+      {%- if paginas > 1 %} · mostrando {{ (pagina - 1) * por_pagina + 1 }}–{{ [pagina * por_pagina, total] | min }}{% endif %}
+    {% endif %}
+  </p>
   {% if users %}
   <div class="table-wrap">
     <table class="data-table">
@@ -122,9 +142,28 @@
       </tbody>
     </table>
   </div>
-  <div class="p-12-16">
-    <p class="table-count mb-0">{{ users|length }} usuario(s) encontrado(s)</p>
-  </div>
+  {% if paginas > 1 %}
+  <nav class="usr-paginas" aria-label="Paginacion de usuarios">
+    {% set base = {'q': search, 'role': role_filter, 'area': area_filter, 'estado': estado_filter} %}
+    {% if pagina > 1 %}
+      <a href="{{ url_for('admin.users_list', p=pagina-1, **base) }}" class="btn btn-secondary btn-sm">
+        <i class="fa-solid fa-chevron-left"></i> Anterior
+      </a>
+    {% else %}
+      <span class="btn btn-secondary btn-sm usr-inerte"><i class="fa-solid fa-chevron-left"></i> Anterior</span>
+    {% endif %}
+
+    <span class="usr-pagina-actual">Página {{ pagina }} de {{ paginas }}</span>
+
+    {% if pagina < paginas %}
+      <a href="{{ url_for('admin.users_list', p=pagina+1, **base) }}" class="btn btn-secondary btn-sm">
+        Siguiente <i class="fa-solid fa-chevron-right"></i>
+      </a>
+    {% else %}
+      <span class="btn btn-secondary btn-sm usr-inerte">Siguiente <i class="fa-solid fa-chevron-right"></i></span>
+    {% endif %}
+  </nav>
+  {% endif %}
   {% else %}
   <div class="admin-empty">
     <i class="fa-solid fa-users-slash"></i>
@@ -159,4 +198,31 @@
     });
   });
 </script>
+
+<style>
+  .usr-recuento {
+    margin: 0 0 12px;
+    font-size: 0.82rem;
+    color: var(--c-text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .usr-paginas {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 14px 16px;
+  }
+
+  .usr-pagina-actual {
+    font-size: 0.82rem;
+    color: var(--c-text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Un boton que no lleva a ninguna parte no debe parecer pulsable. */
+  .usr-inerte { opacity: 0.45; pointer-events: none; }
+</style>
+
 {% endblock %}

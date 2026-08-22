@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% block title %}Estados y prioridades | Admin{% endblock %}
+{% block page_name %}Estados y prioridades{% endblock %}
+
+{% block content %}
+
+{#
+  El nombre de un estado es una etiqueta; "termina la tarea" es una condición.
+  Los vencimientos, la carga de cada persona y los indicadores dependen de esa
+  condición, no del texto — por eso se marca aparte y no se puede quedar sin
+  ninguna.
+#}
+
+{% macro fila_color(actual, colores, nombre_campo) %}
+<select name="{{ nombre_campo }}" class="form-select cat-color" aria-label="Color">
+  {% for c in colores %}
+  <option value="{{ c }}" {{ 'selected' if actual == c }}>{{ c }}</option>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+<div class="admin-shell view-start">
+
+<!-- ─── Estados ─── -->
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title">
+    <i class="fa-solid fa-list-check"></i> Estados de tarea
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">El orden es el del flujo de trabajo. «Termina» marca los estados en los que una tarea deja de contar como abierta.</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
+      <thead>
+        <tr>
+          <th style="width: 22%;">Nombre</th>
+          <th style="width: 8%;">Orden</th>
+          <th style="width: 14%;">Color</th>
+          <th style="width: 10%;">Inicial</th>
+          <th style="width: 10%;">Termina</th>
+          <th style="width: 10%;">En uso</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for estado, en_uso in estados %}
+        <tr>
+          <form method="POST" action="{{ url_for('admin.catalogo_estado_guardar') }}" id="est-{{ estado.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="id" value="{{ estado.id }}">
+            <td><input type="text" name="nombre" value="{{ estado.nombre }}" class="form-input" maxlength="30" required></td>
+            <td><input type="number" name="orden" value="{{ estado.orden }}" class="form-input cat-orden" step="10"></td>
+            <td>{{ fila_color(estado.color, colores, 'color') }}</td>
+            <td class="cat-centro"><input type="checkbox" name="es_inicial" {{ 'checked' if estado.es_inicial }}></td>
+            <td class="cat-centro"><input type="checkbox" name="es_final" {{ 'checked' if estado.es_final }}></td>
+          </form>
+          <td class="cat-num">
+            {% if en_uso %}{{ en_uso }} tarea{{ '' if en_uso == 1 else 's' }}{% else %}<span class="cat-libre">ninguna</span>{% endif %}
+          </td>
+          <td>
+            <div class="cat-acciones">
+              <button type="submit" form="est-{{ estado.id }}" class="btn btn-secondary btn-sm">
+                <i class="fa-solid fa-check"></i> Guardar
+              </button>
+              <form method="POST" action="{{ url_for('admin.catalogo_estado_eliminar', estado_id=estado.id) }}"
+                    onsubmit="return confirm('¿Eliminar el estado {{ estado.nombre }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm" {{ 'disabled' if en_uso }}
+                        title="{{ 'Hay tareas en este estado' if en_uso else 'Eliminar' }}">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+
+        <!-- Alta -->
+        <tr class="cat-nueva">
+          <form method="POST" action="{{ url_for('admin.catalogo_estado_guardar') }}" id="est-nuevo">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <td><input type="text" name="nombre" class="form-input" placeholder="Nuevo estado" maxlength="30" required></td>
+            <td><input type="number" name="orden" value="60" class="form-input cat-orden" step="10"></td>
+            <td>{{ fila_color('neutro', colores, 'color') }}</td>
+            <td class="cat-centro"><input type="checkbox" name="es_inicial"></td>
+            <td class="cat-centro"><input type="checkbox" name="es_final"></td>
+          </form>
+          <td></td>
+          <td>
+            <button type="submit" form="est-nuevo" class="btn btn-primary btn-sm">
+              <i class="fa-solid fa-plus"></i> Añadir
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ─── Prioridades ─── -->
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title">
+    <i class="fa-solid fa-flag"></i> Prioridades
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">El orden es la urgencia: cuanto mayor, más urgente. Se ordena por él y no por el nombre, para que añadir una cuarta no obligue a tocar nada.</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
+      <thead>
+        <tr>
+          <th style="width: 22%;">Nombre</th>
+          <th style="width: 10%;">Urgencia</th>
+          <th style="width: 14%;">Color</th>
+          <th style="width: 12%;">Por defecto</th>
+          <th style="width: 12%;">En uso</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for prioridad, en_uso in prioridades %}
+        <tr>
+          <form method="POST" action="{{ url_for('admin.catalogo_prioridad_guardar') }}" id="pri-{{ prioridad.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="id" value="{{ prioridad.id }}">
+            <td><input type="text" name="nombre" value="{{ prioridad.nombre }}" class="form-input" maxlength="30" required></td>
+            <td><input type="number" name="orden" value="{{ prioridad.orden }}" class="form-input cat-orden" step="10"></td>
+            <td>{{ fila_color(prioridad.color, colores, 'color') }}</td>
+            <td class="cat-centro"><input type="checkbox" name="es_defecto" {{ 'checked' if prioridad.es_defecto }}></td>
+          </form>
+          <td class="cat-num">
+            {% if en_uso %}{{ en_uso }} tarea{{ '' if en_uso == 1 else 's' }}{% else %}<span class="cat-libre">ninguna</span>{% endif %}
+          </td>
+          <td>
+            <div class="cat-acciones">
+              <button type="submit" form="pri-{{ prioridad.id }}" class="btn btn-secondary btn-sm">
+                <i class="fa-solid fa-check"></i> Guardar
+              </button>
+              <form method="POST" action="{{ url_for('admin.catalogo_prioridad_eliminar', prioridad_id=prioridad.id) }}"
+                    onsubmit="return confirm('¿Eliminar la prioridad {{ prioridad.nombre }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm" {{ 'disabled' if en_uso }}
+                        title="{{ 'Hay tareas con esta prioridad' if en_uso else 'Eliminar' }}">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+
+        <tr class="cat-nueva">
+          <form method="POST" action="{{ url_for('admin.catalogo_prioridad_guardar') }}" id="pri-nueva">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <td><input type="text" name="nombre" class="form-input" placeholder="Nueva prioridad" maxlength="30" required></td>
+            <td><input type="number" name="orden" value="40" class="form-input cat-orden" step="10"></td>
+            <td>{{ fila_color('neutro', colores, 'color') }}</td>
+            <td class="cat-centro"><input type="checkbox" name="es_defecto"></td>
+          </form>
+          <td></td>
+          <td>
+            <button type="submit" form="pri-nueva" class="btn btn-primary btn-sm">
+              <i class="fa-solid fa-plus"></i> Añadir
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="cat-nota">
+    Renombrar reescribe las tareas que lo usaban, así que ninguna se queda con un
+    valor que ya no existe. Eliminar solo se permite cuando no lo usa nadie.
+  </p>
+</section>
+
+</div>
+
+<style>
+  .cat-orden { max-width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
+  .cat-color { min-width: 110px; }
+  .cat-centro { text-align: center; }
+  .cat-num { font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+  .cat-libre { color: var(--c-text-secondary); font-style: italic; }
+
+  .cat-acciones { display: flex; align-items: center; gap: 8px; }
+  .cat-acciones form { display: contents; }
+
+  .cat-nueva { background: var(--c-bg); }
+
+  .cat-nota {
+    margin: 14px 0 0;
+    font-size: 0.8rem;
+    color: var(--c-text-secondary);
+    max-width: 72ch;
+  }
+</style>
+
+{% endblock %}

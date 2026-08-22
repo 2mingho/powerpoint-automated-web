@@ -4,12 +4,39 @@ document.addEventListener('DOMContentLoaded', function () {
   const calEl = document.getElementById('tasksCalendar');
   if (!calEl) return;
 
+  // Escapes any user-supplied value before it reaches innerHTML.
+  // Falls back to a local copy because tasks.js is loaded from the content
+  // block, i.e. before main.js defines window.escapeHtml.
+  const escapeHtml = window.escapeHtml || function (value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   const overlay = document.getElementById('taskModalOverlay');
   const btnNew = document.getElementById('btnNewTask');
   const btnClose = document.getElementById('taskModalClose');
   const btnCancel = document.getElementById('btnCancelTask');
   const btnSave = document.getElementById('btnSaveTask');
   const btnDelete = document.getElementById('btnDeleteTask');
+  const taskModalTabs = document.getElementById('taskModalTabs');
+  const taskCommentsCount = document.getElementById('taskCommentsCount');
+  const taskCommentsList = document.getElementById('taskCommentsList');
+  const taskActivityList = document.getElementById('taskActivityList');
+  const taskCommentBody = document.getElementById('taskCommentBody');
+  const btnTaskCommentSend = document.getElementById('btnTaskCommentSend');
+  const taskWatchersSection = document.getElementById('taskWatchersSection');
+  const taskWatchersChips = document.getElementById('taskWatchersChips');
+  const taskWatcherUserSelect = document.getElementById('taskWatcherUserSelect');
+  const btnAddWatcher = document.getElementById('btnAddWatcher');
+  const btnLeaveWatching = document.getElementById('btnLeaveWatching');
+  const taskChecklistCount = document.getElementById('taskChecklistCount');
+  const taskChecklistInput = document.getElementById('taskChecklistInput');
+  const btnChecklistAdd = document.getElementById('btnTaskChecklistAdd');
+  const taskChecklistList = document.getElementById('taskChecklistList');
   const modalTitle = document.getElementById('taskModalTitle');
   const statusGroup = document.getElementById('statusGroup');
   const recurrentCb = document.getElementById('taskRecurrent');
@@ -19,19 +46,30 @@ document.addEventListener('DOMContentLoaded', function () {
   const deleteSeriesCb = document.getElementById('taskDeleteSeries');
 
   const filterStatus = document.getElementById('tasksFilterStatus');
+  const filterPriority = document.getElementById('tasksFilterPriority');
   const filterAssignee = document.getElementById('tasksFilterAssignee');
   const filterClient = document.getElementById('tasksFilterClient');
   const filterArea = document.getElementById('tasksFilterArea');
+  const taskConfigEl = document.getElementById('tasksShell');
+  const INITIAL_STATUS = taskConfigEl.dataset.initialStatus;
+  const DEFAULT_PRIORITY = taskConfigEl.dataset.defaultPriority;
+  const FINAL_STATUSES = JSON.parse(taskConfigEl.dataset.finalStatuses || '[]');
+  const FINAL_STATUS = FINAL_STATUSES[0] || INITIAL_STATUS;
+  const tasksSearch = document.getElementById('tasksSearch');
+  const tasksSearchResults = document.getElementById('tasksSearchResults');
+  const tasksOverdueBadge = document.getElementById('tasksOverdueBadge');
   const btnClearFilters = document.getElementById('btnClearTaskFilters');
+  const btnWatchingTasks = document.getElementById('btnWatchingTasks');
+  const btnWatchingRefresh = document.getElementById('btnWatchingRefresh');
+  const tasksWatchingPanel = document.getElementById('tasksWatchingPanel');
+  const tasksWatchingList = document.getElementById('tasksWatchingList');
   const bulkActions = document.getElementById('tasksBulkActions');
   const bulkCount = document.getElementById('tasksBulkCount');
   const btnBulkCopy = document.getElementById('btnBulkCopy');
   const btnBulkMove = document.getElementById('btnBulkMove');
-  const btnBulkPending = document.getElementById('btnBulkPending');
-  const btnBulkProgress = document.getElementById('btnBulkProgress');
-  const btnBulkDone = document.getElementById('btnBulkDone');
   const btnBulkDelete = document.getElementById('btnBulkDelete');
   const btnBulkCancel = document.getElementById('btnBulkCancel');
+  const bulkStatusQuick = document.getElementById('bulkStatusQuick');
   const monthPicker = document.getElementById('tasksMonthPicker');
   const monthInput = document.getElementById('tasksMonthInput');
   const btnMonthApply = document.getElementById('btnTasksMonthApply');
@@ -50,9 +88,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const fDesc = document.getElementById('taskDesc');
   const fAssignee = document.getElementById('taskAssignee');
   const fDueDate = document.getElementById('taskDueDate');
+  const fPriority = document.getElementById('taskPriority');
   const fStartDate = document.getElementById('taskStartDate');
   const fEndDate = document.getElementById('taskEndDate');
   const fRecType = document.getElementById('taskRecurrenceType');
+  const btnSaveAsTemplate = document.getElementById('btnSaveAsTemplate');
 
   const formMessage = document.getElementById('taskFormMessage');
   const fieldErrors = {
@@ -92,7 +132,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   ];
 
-  let currentStatus = 'Pendiente';
+  let currentStatus = INITIAL_STATUS;
   let calendar;
   let clientCache = [];
   let filterClientTimer = null;
@@ -107,10 +147,14 @@ document.addEventListener('DOMContentLoaded', function () {
   let longPressPayload = null;
   let longPressHandled = false;
   let moveAnchorDate = '';
+  let currentUpdatedAt = '';
+  let currentTaskDetail = null;
 
   const statusColorMap = {
     Pendiente: { bg: 'var(--c-warning-bg)', border: 'var(--c-warning)', text: 'var(--c-warning)' },
     'En Progreso': { bg: '#dbeafe', border: '#2563eb', text: '#2563eb' },
+    Bloqueado: { bg: 'var(--c-danger-bg)', border: 'var(--c-danger)', text: 'var(--c-danger)' },
+    'En Revisión': { bg: '#eef2ff', border: '#4f46e5', text: '#4f46e5' },
     Completado: { bg: 'var(--c-success-bg)', border: 'var(--c-success)', text: 'var(--c-success)' }
   };
 
@@ -209,6 +253,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!value) return '';
     if (value.includes('T')) return value.split('T', 1)[0];
     return value;
+  }
+
+  function slugifyToken(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, '-');
   }
 
   function isMobileViewport() {
@@ -355,14 +407,157 @@ document.addEventListener('DOMContentLoaded', function () {
   function getCalendarFilters() {
     return {
       status: filterStatus.value,
+      priority: filterPriority ? filterPriority.value : '',
       assignee_id: filterAssignee.value,
       client: filterClient.value.trim(),
       area: filterArea ? filterArea.value : ''
     };
   }
 
+  /* Un filtro activo dentro de un panel plegado es invisible: sin este
+     contador la gente deja uno puesto, ve el calendario a medias y cree que
+     faltan tareas. */
+  /* ─── Pastillas de filtro activo ───
+     Un filtro puesto dentro de un panel plegado es invisible y hace creer que
+     faltan tareas. Un contador decia cuantos habia; estas dicen cuales, y cada
+     una se quita sin abrir el panel. */
+
+  const CAMPOS_DE_FILTRO = [
+    { id: 'tasksFilterStatus', etiqueta: 'Estado' },
+    { id: 'tasksFilterPriority', etiqueta: 'Prioridad' },
+    { id: 'tasksFilterAssignee', etiqueta: 'Asignado' },
+    { id: 'tasksFilterClient', etiqueta: 'Cliente' },
+    { id: 'tasksFilterArea', etiqueta: 'Unidad' }
+  ];
+
+  function textoDelFiltro(campo) {
+    if (campo.tagName === 'SELECT') {
+      // El texto de la opcion, no su value: un id de usuario no dice nada.
+      const opcion = campo.options[campo.selectedIndex];
+      return opcion ? opcion.textContent.trim().replace(/\s+/g, ' ') : '';
+    }
+    return campo.value.trim();
+  }
+
+  function actualizarContadorDeFiltros() {
+    const contenedor = document.getElementById('tasksFiltersPills');
+    if (!contenedor) return;
+
+    const pastillas = [];
+
+    CAMPOS_DE_FILTRO.forEach(function (def) {
+      const campo = document.getElementById(def.id);
+      if (!campo) return;
+
+      const activo = String(campo.value || '').trim() !== '';
+      const envoltorio = campo.closest('.campo-icono');
+      if (envoltorio) envoltorio.classList.toggle('tiene-valor', activo);
+      if (!activo) return;
+
+      pastillas.push(''
+        + '<span class="tasks-filter-pill">'
+        +   '<span class="tasks-filter-pill-texto">'
+        +     escapeHtml(def.etiqueta) + ': ' + escapeHtml(textoDelFiltro(campo))
+        +   '</span>'
+        +   '<button type="button" class="tasks-filter-pill-quitar" data-quitar-filtro="' + def.id + '"'
+        +     ' aria-label="Quitar filtro ' + escapeHtml(def.etiqueta) + '" title="Quitar">'
+        +     '<i class="fa-solid fa-xmark" aria-hidden="true"></i>'
+        +   '</button>'
+        + '</span>');
+    });
+
+    contenedor.innerHTML = pastillas.join('');
+  }
+
+  const pillsContenedor = document.getElementById('tasksFiltersPills');
+  if (pillsContenedor) {
+    pillsContenedor.addEventListener('click', function (evento) {
+      const boton = evento.target.closest('[data-quitar-filtro]');
+      if (!boton) return;
+
+      // Las pastillas viven dentro del <summary>: sin esto, quitar un filtro
+      // abriria o cerraria el panel de paso.
+      evento.preventDefault();
+      evento.stopPropagation();
+
+      const campo = document.getElementById(boton.dataset.quitarFiltro);
+      if (!campo) return;
+      campo.value = '';
+      // Los <select> escuchan 'change' y el campo de cliente escucha 'input':
+      // se emiten los dos para no depender de cual sea.
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+      campo.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
   function refreshCalendar() {
+    actualizarContadorDeFiltros();
     if (calendar) calendar.refetchEvents();
+    // La vista Hoy se alimenta de los mismos datos: si no se recarga aqui, las
+    // dos vistas se contradicen en cuanto se crea, mueve o completa una tarea.
+    if (typeof window.recargarVistaHoy === 'function') window.recargarVistaHoy();
+  }
+
+  let searchTimer = null;
+
+  function loadSearchResults(query) {
+    if (!tasksSearchResults) return;
+    var params = new URLSearchParams(getCalendarFilters());
+    params.set('q', query);
+    fetch('/api/tasks?' + params.toString())
+      .then(function (r) { return r.json(); })
+      .then(function (tasks) {
+        if (!Array.isArray(tasks)) { tasks = []; }
+        var calEl = document.getElementById('tasksCalendar');
+        if (tasks.length === 0) {
+          tasksSearchResults.innerHTML = '<div class="task-comments-empty">Sin resultados.</div>';
+          tasksSearchResults.classList.remove('modal-hidden');
+          if (calEl) calEl.style.display = 'none';
+          return;
+        }
+        tasksSearchResults.innerHTML = tasks.map(function (t) {
+          var statusDot = '';
+          var statusClass = '';
+          if (t.status === 'Pendiente') statusClass = 'st-pendiente';
+          else if (t.status === 'En Progreso') statusClass = 'st-en-progreso';
+          else if (t.status === 'Completado') statusClass = 'st-completado';
+          else if (t.status === 'Bloqueado') statusClass = 'st-bloqueado';
+          else if (t.status === 'En Revisión') statusClass = 'st-revision';
+          return '<div class="task-comment-item" style="cursor:pointer" data-task-id="' + Number(t.id) + '">'
+            + '<div class="task-comment-meta"><span class="task-status-dot ' + statusClass + '">' + escapeHtml(t.status) + '</span> · ' + escapeHtml(t.priority) + ' · ' + escapeHtml(t.due_date || '') + '</div>'
+            + '<div class="task-comment-body"><strong>' + escapeHtml(t.title || '') + '</strong>' + (t.client ? ' — ' + escapeHtml(t.client) : '') + '</div>'
+            + '</div>';
+        }).join('');
+        tasksSearchResults.classList.remove('modal-hidden');
+        if (calEl) calEl.style.display = 'none';
+      })
+      .catch(function () {});
+  }
+
+  function clearSearch() {
+    if (tasksSearch) tasksSearch.value = '';
+    if (tasksSearchResults) {
+      tasksSearchResults.classList.add('modal-hidden');
+      tasksSearchResults.innerHTML = '';
+    }
+    var calEl = document.getElementById('tasksCalendar');
+    if (calEl) calEl.style.display = '';
+  }
+
+  function loadOverdueCount() {
+    if (!tasksOverdueBadge) return;
+    var params = new URLSearchParams(getCalendarFilters());
+    params.set('overdue', '1');
+    params.set('start', '');
+    params.set('end', '');
+    fetch('/api/tasks?' + params.toString())
+      .then(function (r) { return r.json(); })
+      .then(function (tasks) {
+        var count = Array.isArray(tasks) ? tasks.length : 0;
+        tasksOverdueBadge.textContent = count + ' vencida' + (count !== 1 ? 's' : '');
+        tasksOverdueBadge.classList.toggle('modal-hidden', count === 0);
+      })
+      .catch(function () {});
   }
 
   function syncMonthInput(dateObj) {
@@ -437,6 +632,7 @@ document.addEventListener('DOMContentLoaded', function () {
       requested_by: (taskData.requested_by || '').trim(),
       budget_type: (taskData.budget_type || '').trim(),
       description: (taskData.description || '').trim(),
+      priority: (taskData.priority || DEFAULT_PRIORITY).trim(),
       assignee_id: parseInt(taskData.assignee_id, 10),
       original_due_date: dueDate,
       weekday_offset: weekdayOffset,
@@ -626,7 +822,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const label = `${count} seleccionada(s)`;
     if (bulkCount) bulkCount.textContent = label;
 
-    [btnBulkCopy, btnBulkMove, btnBulkPending, btnBulkProgress, btnBulkDone, btnBulkDelete].forEach(function (btn) {
+    [btnBulkCopy, btnBulkMove, btnBulkDelete, bulkStatusQuick].forEach(function (btn) {
       if (btn) btn.disabled = count === 0;
     });
 
@@ -760,6 +956,10 @@ document.addEventListener('DOMContentLoaded', function () {
     })
       .then(function (data) {
         if (!data.success) {
+          if (data.task && opts.onConflict) {
+            opts.onConflict(data);
+            throw new Error('__conflict__');
+          }
           if (typeof revertFn === 'function') revertFn();
           throw new Error(data.error || 'No se pudo actualizar la tarea.');
         }
@@ -772,12 +972,173 @@ document.addEventListener('DOMContentLoaded', function () {
         return data;
       })
       .catch(function (err) {
-        if (typeof revertFn === 'function') revertFn();
+        if (!(opts.skipRevertOnConflict && err && err.message === '__conflict__') && typeof revertFn === 'function') revertFn();
         if (!opts.silent) {
           notify('error', err.message || 'Error de conexion.');
         }
         throw err;
       });
+  }
+
+  function applyTaskToModal(taskData) {
+    if (!taskData) return;
+    currentTaskDetail = taskData;
+    fId.value = taskData.id || '';
+    fTitle.value = taskData.title || '';
+    fClient.value = taskData.client || '';
+    fDirectorate.value = taskData.directorate || '';
+    fRequestedBy.value = taskData.requested_by || '';
+    fBudgetType.value = taskData.budget_type || '';
+    fDesc.value = taskData.description || '';
+    fAssignee.value = taskData.assignee_id;
+    fDueDate.value = normalizeIsoDate(taskData.due_date);
+    fPriority.value = taskData.priority || DEFAULT_PRIORITY;
+    fStartDate.value = normalizeIsoDate(taskData.start_date);
+    fEndDate.value = normalizeIsoDate(taskData.end_date);
+    currentStatus = taskData.status || INITIAL_STATUS;
+    currentUpdatedAt = taskData.updated_at || '';
+    if (taskCommentsCount) taskCommentsCount.textContent = String(taskData.comments_count || 0);
+    renderWatchers(taskData);
+
+    document.querySelectorAll('.status-chip').forEach(function (chip) {
+      chip.classList.toggle('selected', chip.dataset.status === currentStatus);
+    });
+    updateRecurrencePreview();
+  }
+
+  function setActiveTaskTab(tabName) {
+    document.querySelectorAll('.task-tab').forEach(function (tab) {
+      tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.task-tab-panel').forEach(function (panel) {
+      panel.classList.remove('active');
+    });
+    const activePanel = document.getElementById(`taskTab${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}`);
+    if (activePanel) activePanel.classList.add('active');
+  }
+
+  function renderTaskComments(comments) {
+    if (!taskCommentsList) return;
+    if (!Array.isArray(comments) || !comments.length) {
+      taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios. Escribe aquí lo que haga falta recordar sobre esta tarea; queda con ella.</div>';
+      return;
+    }
+    taskCommentsList.innerHTML = comments.map(function (comment) {
+      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${escapeHtml(comment.user_name || 'Usuario')}</strong> · ${escapeHtml(comment.created_at || '')}</div><div class="task-comment-body">${escapeHtml(comment.body || '')}</div></div>`;
+    }).join('');
+  }
+
+  function renderTaskHistory(items) {
+    if (!taskActivityList) return;
+    if (!Array.isArray(items) || !items.length) {
+      taskActivityList.innerHTML = '<div class="task-comments-empty">Todavía sin cambios registrados. Aquí aparecerá quién tocó qué y cuándo.</div>';
+      return;
+    }
+    taskActivityList.innerHTML = items.map(function (item) {
+      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${escapeHtml(item.user_name || 'Sistema')}</strong> · ${escapeHtml(item.timestamp || '')}</div><div class="task-comment-body">${escapeHtml(item.detail || item.action || '')}</div></div>`;
+    }).join('');
+  }
+
+  function loadTaskComments(taskId) {
+    return requestJson(`/api/tasks/${taskId}/comments`).then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudieron cargar comentarios.');
+      renderTaskComments(data.comments || []);
+      if (taskCommentsCount) taskCommentsCount.textContent = String((data.comments || []).length);
+      return data;
+    });
+  }
+
+  function loadTaskHistory(taskId) {
+    return requestJson(`/api/tasks/${taskId}/history`).then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudo cargar actividad.');
+      renderTaskHistory(data.items || []);
+      return data;
+    });
+  }
+
+  function refreshTaskDetail(taskId) {
+    return requestJson(`/api/tasks/${taskId}`).then(function (data) {
+      if (!data.success || !data.task) throw new Error(data.error || 'No se pudo cargar detalle.');
+      applyTaskToModal(data.task);
+      return data.task;
+    });
+  }
+
+  function renderWatchers(taskData) {
+    if (!taskWatchersSection || !taskWatchersChips) return;
+    const watchers = Array.isArray(taskData && taskData.watchers) ? taskData.watchers : [];
+    taskWatchersSection.classList.toggle('modal-hidden', !taskData || !taskData.id);
+    taskWatchersChips.innerHTML = watchers.length
+      ? watchers.map(function (watcher) {
+          const canRemove = !!taskData.can_edit || !!watcher.is_self;
+          return `<span class="task-watcher-chip">${escapeHtml(watcher.username)}${watcher.unit ? ` · ${escapeHtml(watcher.unit)}` : ''}${canRemove ? ` <button type="button" class="task-watcher-remove" data-user-id="${Number(watcher.user_id)}">&times;</button>` : ''}</span>`;
+        }).join('')
+      : '<div class="task-comments-empty">Nadie observa esta tarea. Añade a alguien de otra unidad para mantenerlo al tanto sin asignársela.</div>';
+    if (taskWatcherUserSelect) taskWatcherUserSelect.disabled = !taskData.can_edit;
+    if (btnAddWatcher) btnAddWatcher.disabled = !taskData.can_edit;
+    if (btnLeaveWatching) btnLeaveWatching.classList.toggle('modal-hidden', !(taskData.is_watcher && !taskData.can_edit));
+  }
+
+  function renderChecklist(items) {
+    if (!taskChecklistList) return;
+    if (!Array.isArray(items) || !items.length) {
+      taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems. Divide la tarea en pasos y podrás ver el avance sin cambiarle el estado.</div>';
+      if (taskChecklistCount) taskChecklistCount.textContent = '0';
+      return;
+    }
+    taskChecklistList.innerHTML = items.map(function (item) {
+      return '<div class="task-checklist-item' + (item.is_completed ? ' is-completed' : '') + '" data-id="' + Number(item.id) + '">'
+        + '<input type="checkbox" class="task-checklist-cb" ' + (item.is_completed ? 'checked' : '') + '>'
+        + '<span class="task-checklist-body">' + escapeHtml(item.body || '') + '</span>'
+        + '<button type="button" class="task-checklist-delete" title="Eliminar">&times;</button>'
+        + '</div>';
+    }).join('');
+    if (taskChecklistCount) taskChecklistCount.textContent = String(items.length);
+  }
+
+  function loadChecklist(taskId) {
+    return requestJson('/api/tasks/' + taskId + '/checklist').then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudo cargar checklist.');
+      renderChecklist(data.items || []);
+      return data;
+    });
+  }
+
+  function loadWatchingTasks() {
+    if (!tasksWatchingList) return;
+    tasksWatchingList.innerHTML = '<div class="task-comments-empty">Cargando...</div>';
+    requestJson('/api/tasks/watching').then(function (data) {
+      if (!data.success || !Array.isArray(data.tasks) || !data.tasks.length) {
+        tasksWatchingList.innerHTML = '<div class="task-comments-empty">No observas ninguna tarea. Observar una te avisa de sus cambios sin que sea tuya.</div>';
+        return;
+      }
+      tasksWatchingList.innerHTML = data.tasks.map(function (task) {
+        return `<button type="button" class="task-watching-item" data-task-id="${Number(task.id)}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(task.due_date || '')}</span></button>`;
+      }).join('');
+    }).catch(function () {
+      tasksWatchingList.innerHTML = '<div class="task-comments-empty">No se pudieron cargar.</div>';
+    });
+  }
+
+  function openTaskFromQueryParam() {
+    const params = new URLSearchParams(window.location.search);
+
+    // La paleta de comandos manda ?nueva=1 cuando se pide "Nueva tarea" desde
+    // otra pagina: se llega aqui y se abre el formulario sin un clic extra.
+    if (params.get('nueva') === '1') {
+      openModal(false);
+      return;
+    }
+
+    const taskId = params.get('task');
+    if (!taskId) return;
+
+    requestJson(`/api/tasks/${taskId}`)
+      .then(function (data) {
+        if (!data.success || !data.task) return;
+        openModal(true, data.task);
+      })
+      .catch(function () {});
   }
 
   function bulkUpdateStatus(statusValue) {
@@ -973,11 +1334,12 @@ document.addEventListener('DOMContentLoaded', function () {
           requested_by: item.requested_by || '',
           budget_type: item.budget_type || '',
           description: item.description || '',
+          priority: item.priority || DEFAULT_PRIORITY,
           start_date: item.start_offset === null || item.start_offset === undefined ? '' : shiftIsoDate(dueDate, item.start_offset),
           end_date: item.end_offset === null || item.end_offset === undefined ? '' : shiftIsoDate(dueDate, item.end_offset),
           assignee_id: parseInt(item.assignee_id, 10),
           due_date: dueDate,
-          status: 'Pendiente',
+          status: INITIAL_STATUS,
           is_recurrent: false,
           recurrence_type: '',
           recurrence_end: ''
@@ -1021,7 +1383,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function openTaskContextMenu(x, y, taskData) {
-    const isCompleted = taskData.status === 'Completado';
+    const isCompleted = FINAL_STATUSES.includes(taskData.status);
 
     openContextMenu(x, y, [
       {
@@ -1034,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', function () {
         icon: 'fa-circle-check',
         disabled: isCompleted,
         action: function () {
-          updateTask(taskData.id, { status: 'Completado' }, null, {
+          updateTask(taskData.id, { status: FINAL_STATUS }, null, {
             successMessage: 'Tarea marcada como completada.'
           });
         }
@@ -1249,6 +1611,125 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  /* ─── Acordeones del formulario (RED-3) ───
+     Un acordeon cerrado que esconde datos es peor que un campo de mas: al
+     editar una tarea con cliente o fechas hay que abrirlo, o el usuario cree
+     que no tiene nada. */
+
+  const grupoEncargo = document.getElementById('taskGroupEncargo');
+  const grupoPlanificacion = document.getElementById('taskGroupPlanificacion');
+
+  const CAMPOS_POR_GRUPO = {
+    taskGroupEncargo: ['taskClient', 'taskDirectorate', 'taskRequestedBy', 'taskBudgetType', 'taskDesc'],
+    taskGroupPlanificacion: ['taskStartDate', 'taskEndDate']
+  };
+
+  function grupoTieneDatos(grupo) {
+    if (!grupo) return false;
+    return (CAMPOS_POR_GRUPO[grupo.id] || []).some(function (id) {
+      const campo = document.getElementById(id);
+      return campo && String(campo.value || '').trim() !== '';
+    });
+  }
+
+  function sincronizarGrupos(abrirSiHayDatos) {
+    [grupoEncargo, grupoPlanificacion].forEach(function (grupo) {
+      if (!grupo) return;
+      const conDatos = grupoTieneDatos(grupo);
+      grupo.classList.toggle('has-data', conDatos);
+      grupo.open = Boolean(abrirSiHayDatos && conDatos);
+    });
+  }
+
+  /* ─── Plantillas como puerta de entrada (RED-3) ───
+     La plantilla era un desplegable perdido entre catorce campos. Ahora es lo
+     primero que se ve al crear. Si el area no tiene ninguna, el paso se salta
+     entero: nadie deberia pagar un clic por una funcion que no usa. */
+
+  const templatePicker = document.getElementById('taskTemplatePicker');
+  const templateCards = document.getElementById('taskTemplateCards');
+  const formFields = document.getElementById('taskFormFields');
+  const modalFooter = document.getElementById('taskModalFooter');
+
+  function mostrarFormulario() {
+    if (templatePicker) templatePicker.classList.add('modal-hidden');
+    if (formFields) formFields.classList.remove('modal-hidden');
+    // El pie vuelve solo cuando hay algo que guardar.
+    if (modalFooter) modalFooter.classList.remove('modal-hidden');
+    if (fTitle) fTitle.focus();
+  }
+
+  function aplicarPlantilla(payload) {
+    if (fTitle) fTitle.value = payload.title || '';
+    if (fClient) fClient.value = payload.client || '';
+    if (fDesc) fDesc.value = payload.description || '';
+    if (fPriority) fPriority.value = payload.priority || DEFAULT_PRIORITY;
+    if (fBudgetType) fBudgetType.value = payload.budget_type || '';
+    sincronizarGrupos(true);
+  }
+
+  function pintarFichasDePlantilla(plantillas) {
+    if (!templateCards || !templatePicker || !formFields) return;
+
+    // Sin plantillas no hay eleccion que ofrecer: al formulario directo.
+    if (!plantillas.length) {
+      mostrarFormulario();
+      return;
+    }
+
+    const fichas = ['<button type="button" class="task-template-card task-template-card--blank" data-plantilla="">'
+      + '<i class="fa-solid fa-plus"></i>'
+      + '<span class="task-template-name">En blanco</span>'
+      + '<span class="task-template-meta">Empezar de cero</span>'
+      + '</button>'];
+
+    plantillas.forEach(function (t, indice) {
+      const payload = t.payload || {};
+      const detalle = [payload.client, payload.priority].filter(Boolean).join(' · ');
+      fichas.push('<button type="button" class="task-template-card" data-plantilla="' + indice + '">'
+        + '<i class="fa-regular fa-clone"></i>'
+        + '<span class="task-template-name">' + escapeHtml(t.name || 'Plantilla') + '</span>'
+        + '<span class="task-template-meta">' + escapeHtml(detalle || 'Sin detalles') + '</span>'
+        + '</button>');
+    });
+
+    templateCards.innerHTML = fichas.join('');
+    templateCards.dataset.plantillas = JSON.stringify(plantillas);
+    templatePicker.classList.remove('modal-hidden');
+    formFields.classList.add('modal-hidden');
+    // Un "Guardar" activo sobre un formulario que aun no se ve solo confunde.
+    if (modalFooter) modalFooter.classList.add('modal-hidden');
+    const primera = templateCards.querySelector('.task-template-card');
+    if (primera) primera.focus();
+  }
+
+  if (templateCards) {
+    templateCards.addEventListener('click', function (evento) {
+      const ficha = evento.target.closest('[data-plantilla]');
+      if (!ficha) return;
+      const indice = ficha.dataset.plantilla;
+      if (indice !== '') {
+        try {
+          const plantillas = JSON.parse(templateCards.dataset.plantillas || '[]');
+          const elegida = plantillas[Number(indice)];
+          if (elegida) aplicarPlantilla(elegida.payload || {});
+        } catch (e) { /* si falla, se abre en blanco */ }
+      }
+      mostrarFormulario();
+    });
+  }
+
+  function ofrecerPlantillas() {
+    if (!templatePicker) return;
+    requestJson('/api/tasks/templates').then(function (data) {
+      pintarFichasDePlantilla(
+        (data && data.success && Array.isArray(data.templates)) ? data.templates : []
+      );
+    }).catch(function () {
+      mostrarFormulario();
+    });
+  }
+
   function openModal(editMode, taskData) {
     fId.value = '';
     fTitle.value = '';
@@ -1258,6 +1739,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fBudgetType.value = '';
     fDesc.value = '';
     fDueDate.value = '';
+    fPriority.value = DEFAULT_PRIORITY;
     fStartDate.value = '';
     fEndDate.value = '';
     fRecType.value = 'Semanal';
@@ -1265,37 +1747,40 @@ document.addEventListener('DOMContentLoaded', function () {
     recFields.classList.remove('visible');
     deleteSeriesCb.checked = false;
     deleteSeriesWrap.classList.add('modal-hidden');
-    currentStatus = 'Pendiente';
+    currentStatus = INITIAL_STATUS;
+    currentUpdatedAt = '';
+    currentTaskDetail = null;
+    if (taskCommentBody) taskCommentBody.value = '';
+    if (taskCommentsList) taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios. Escribe aquí lo que haga falta recordar sobre esta tarea; queda con ella.</div>';
+    if (taskActivityList) taskActivityList.innerHTML = '<div class="task-comments-empty">Todavía sin cambios registrados. Aquí aparecerá quién tocó qué y cuándo.</div>';
+    if (taskCommentsCount) taskCommentsCount.textContent = '0';
+    if (taskChecklistList) taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems. Divide la tarea en pasos y podrás ver el avance sin cambiarle el estado.</div>';
+    if (taskChecklistCount) taskChecklistCount.textContent = '0';
+    if (taskChecklistInput) taskChecklistInput.value = '';
+    if (taskWatchersChips) taskWatchersChips.innerHTML = '<div class="task-comments-empty">Nadie observa esta tarea. Añade a alguien de otra unidad para mantenerlo al tanto sin asignársela.</div>';
+    if (taskWatchersSection) taskWatchersSection.classList.add('modal-hidden');
+    if (btnLeaveWatching) btnLeaveWatching.classList.add('modal-hidden');
+    setActiveTaskTab('details');
 
     clearFormMessage();
     clearFieldErrors();
     updateRecurrencePreview();
 
     document.querySelectorAll('.status-chip').forEach(function (chip) {
-      chip.classList.toggle('selected', chip.dataset.status === 'Pendiente');
+      chip.classList.toggle('selected', chip.dataset.status === INITIAL_STATUS);
     });
 
     if (editMode && taskData) {
       modalTitle.textContent = 'Editar Tarea';
-      fId.value = taskData.id;
-      fTitle.value = taskData.title || '';
-      fClient.value = taskData.client || '';
-      fDirectorate.value = taskData.directorate || '';
-      fRequestedBy.value = taskData.requested_by || '';
-      fBudgetType.value = taskData.budget_type || '';
-      fDesc.value = taskData.description || '';
-      fAssignee.value = taskData.assignee_id;
-      fDueDate.value = normalizeIsoDate(taskData.due_date);
-      fStartDate.value = normalizeIsoDate(taskData.start_date);
-      fEndDate.value = normalizeIsoDate(taskData.end_date);
-      currentStatus = taskData.status || 'Pendiente';
-
-      document.querySelectorAll('.status-chip').forEach(function (chip) {
-        chip.classList.toggle('selected', chip.dataset.status === currentStatus);
-      });
+      applyTaskToModal(taskData);
+      if (taskModalTabs) taskModalTabs.classList.remove('modal-hidden');
+      loadTaskComments(taskData.id).catch(function () {});
+      loadTaskHistory(taskData.id).catch(function () {});
+      loadChecklist(taskData.id).catch(function () {});
 
       statusGroup.classList.remove('modal-hidden');
       btnDelete.classList.remove('modal-hidden');
+      if (btnSaveAsTemplate) btnSaveAsTemplate.classList.remove('modal-hidden');
 
       recurrentCb.checked = false;
       recurrentCb.parentElement.style.display = 'none';
@@ -1304,20 +1789,158 @@ document.addEventListener('DOMContentLoaded', function () {
       if (taskData.is_recurrent && !taskData.parent_task_id) {
         deleteSeriesWrap.classList.remove('modal-hidden');
       }
+
+      // Editando siempre se ve el formulario, nunca el selector de plantillas.
+      mostrarFormulario();
+      sincronizarGrupos(true);
     } else {
       modalTitle.textContent = 'Nueva Tarea';
-      statusGroup.classList.remove('modal-hidden');
+      if (taskModalTabs) taskModalTabs.classList.add('modal-hidden');
+      statusGroup.classList.add('modal-hidden');
       btnDelete.classList.add('modal-hidden');
+      if (btnSaveAsTemplate) btnSaveAsTemplate.classList.add('modal-hidden');
       recurrentCb.parentElement.style.display = '';
+      sincronizarGrupos(false);
+      ofrecerPlantillas();
     }
 
     hideContextMenu();
-    overlay.classList.add('open');
-    fTitle.focus();
+    abrirPanel();
+    // El foco lo pone mostrarFormulario(); al crear puede que primero se vea
+    // el selector de plantillas y llevar el foco al titulo seria enganoso.
+    if (editMode) fTitle.focus();
+  }
+
+  /* ─── El panel de detalle, movido por un muelle ───
+     Antes lo animaba un @keyframes: llevaba una duracion fija y no se podia
+     agarrar a mitad de vuelo. Si volvias a pulsar mientras se cerraba, habia
+     que esperar. Ahora el destino cambia y la velocidad se conserva. */
+
+  const panelDeDetalle = (function () {
+    if (!overlay || !window.Muelle) return null;
+
+    const hoja = overlay.querySelector('.task-modal');
+    if (!hoja) return null;
+
+    const esMovil = () => window.matchMedia('(max-width: 768px)').matches;
+    const alto = () => hoja.getBoundingClientRect().height || window.innerHeight;
+
+    // 0 = colocado, 100 = fuera. Un solo eje: en escritorio entra por la
+    // derecha y en movil sube desde abajo, pero el recorrido es el mismo
+    // numero, asi que el muelle no distingue.
+    let cerrandoAlTerminar = false;
+
+    const pintar = (v) => {
+      // Se permite un valor negativo pequeno: es la resistencia visible al
+      // tirar hacia arriba. Solo la cortina se limita a un rango valido.
+      const fuera = v;
+      hoja.style.transform = esMovil()
+        ? `translate3d(0, ${fuera}%, 0)`
+        : `translate3d(${fuera}%, 0, 0)`;
+      // La cortina acompana al recorrido en vez de aparecer de golpe.
+      const progreso = Math.max(0, Math.min(1, 1 - Math.max(0, fuera) / 100));
+      overlay.style.setProperty('--panel-progreso', String(progreso));
+    };
+
+    const muelle = window.Muelle.crear({
+      // Critico al colocarse: un panel que rebota al abrirse distrae. El
+      // rebote se reserva para lo que el usuario ha lanzado con el dedo.
+      amortiguacion: 1,
+      respuesta: 0.4,
+      inicial: 100,
+      alCambiar: pintar,
+      alTerminar: (v) => {
+        if (cerrandoAlTerminar && v >= 99.9) {
+          overlay.classList.remove('open');
+          hoja.style.transform = '';
+          cerrandoAlTerminar = false;
+        }
+        hoja.style.willChange = '';
+      }
+    });
+
+    function abrir() {
+      cerrandoAlTerminar = false;
+      hoja.style.willChange = 'transform';
+      if (!overlay.classList.contains('open')) {
+        muelle.fijar(100);
+        overlay.classList.add('open');
+      }
+      // Si ya estaba cerrandose, esto solo cambia el destino: sigue desde
+      // donde esta y con la velocidad que lleva.
+      muelle.irA(0);
+    }
+
+    function cerrar(velocidadPx) {
+      if (!overlay.classList.contains('open')) return;
+      cerrandoAlTerminar = true;
+      hoja.style.willChange = 'transform';
+      // La velocidad del gesto viene en px/s y el muelle trabaja en
+      // porcentaje del recorrido: se normaliza para que no haya costura
+      // entre arrastrar y soltar.
+      const enPorcentaje = velocidadPx ? (velocidadPx / alto()) * 100 : undefined;
+      muelle.irA(100, enPorcentaje);
+    }
+
+    /* ─── Arrastre ───
+       En movil se agarra la hoja entera por su cabecera; en escritorio, por
+       el borde. Se sigue el dedo 1:1 y al soltar se decide con la velocidad
+       proyectada, no con la posicion. */
+    const asa = hoja.querySelector('.task-modal-handle') || hoja.querySelector('.task-modal-header');
+    if (asa) {
+      let inicio = 0;
+      let dimension = 1;
+
+      window.Muelle.seguirGesto(asa, {
+        eje: 'y',
+        umbral: 8,
+        puedeEmpezar: (e) => {
+          // Solo con el dedo o el raton sobre el asa, y nunca sobre un boton:
+          // arrastrar desde la X no debe mover la hoja.
+          if (e.target.closest('button, a, input, select, textarea')) return false;
+          return esMovil();
+        },
+        alEmpezar: () => {
+          const estado = muelle.agarrar();
+          inicio = estado.valor;
+          dimension = alto();
+          hoja.style.willChange = 'transform';
+        },
+        alMover: (delta) => {
+          let v = inicio + (delta / dimension) * 100;
+          // Tirar hacia arriba no descubre nada: resistencia creciente en vez
+          // de un tope seco.
+          if (v < 0) {
+            const exceso = window.Muelle.gomaElastica(v * dimension / 100, dimension);
+            v = (exceso / dimension) * 100;
+          }
+          muelle.fijar(v);
+        },
+        alSoltar: (velocidad) => {
+          const actualPx = (muelle.valorActual() / 100) * dimension;
+          // A donde IRIA el gesto, no donde se solto: un impulso corto y
+          // rapido debe lanzar la hoja aunque apenas se haya movido.
+          const proyectado = actualPx + window.Muelle.proyectar(velocidad);
+          if (proyectado > dimension * 0.35) cerrar(velocidad);
+          else {
+            hoja.style.willChange = 'transform';
+            muelle.irA(0, (velocidad / dimension) * 100);
+          }
+        }
+      });
+    }
+
+    return { abrir: abrir, cerrar: cerrar };
+  })();
+
+  function abrirPanel() {
+    if (panelDeDetalle) panelDeDetalle.abrir();
+    else overlay.classList.add('open');
   }
 
   function closeModal() {
-    overlay.classList.remove('open');
+    if (panelDeDetalle) panelDeDetalle.cerrar();
+    else overlay.classList.remove('open');
   }
 
   document.querySelectorAll('.status-chip').forEach(function (chip) {
@@ -1327,6 +1950,12 @@ document.addEventListener('DOMContentLoaded', function () {
       });
       chip.classList.add('selected');
       currentStatus = chip.dataset.status;
+    });
+  });
+
+  document.querySelectorAll('.task-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      setActiveTaskTab(tab.dataset.tab);
     });
   });
 
@@ -1349,6 +1978,56 @@ document.addEventListener('DOMContentLoaded', function () {
       acList.classList.remove('visible');
     }, 200);
   });
+
+  /* ── Request modal ── */
+  /* El formulario de solicitud vive en static/js/task_request_form.js: lo
+     comparten Mis tareas y la pagina de Solicitudes. Aqui solo queda el
+     disparador, marcado con data-abrir-solicitud en la plantilla. */
+
+  /* ── Templates ── */
+  if (btnSaveAsTemplate) {
+    btnSaveAsTemplate.addEventListener('click', function () {
+      var name = prompt('Nombre para la plantilla:');
+      if (!name || !name.trim()) return;
+      var payload = {
+        title: fTitle ? fTitle.value : '',
+        description: fDesc ? fDesc.value : '',
+        client: fClient ? fClient.value : '',
+        priority: fPriority ? fPriority.value : DEFAULT_PRIORITY,
+        budget_type: fBudgetType ? fBudgetType.value : '',
+        due_offset_days: 7,
+        checklist: [],
+      };
+      // Try to read checklist items from the current task (if loaded)
+      var taskId = fId ? fId.value : '';
+      if (taskId) {
+        fetch('/api/tasks/' + taskId + '/checklist')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.success && Array.isArray(data.items)) {
+              payload.checklist = data.items.map(function (it) { return it.body; });
+            }
+          })
+          .catch(function () {})
+          .finally(function () {
+            saveTemplate(name.trim(), payload);
+          });
+      } else {
+        saveTemplate(name.trim(), payload);
+      }
+    });
+  }
+
+  function saveTemplate(name, payload) {
+    fetch('/api/tasks/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, payload: payload })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.success) { notify('error', data.error || 'Error al guardar plantilla.'); return; }
+      notify('success', 'Plantilla guardada.');
+    }).catch(function () { notify('error', 'Error de conexión.'); });
+  }
 
   btnNew.addEventListener('click', function () { openModal(false); });
   btnClose.addEventListener('click', closeModal);
@@ -1373,9 +2052,11 @@ document.addEventListener('DOMContentLoaded', function () {
       description: fDesc.value.trim(),
       assignee_id: parseInt(fAssignee.value, 10),
       due_date: normalizeIsoDate(fDueDate.value),
+      priority: fPriority.value,
       start_date: normalizeIsoDate(fStartDate.value),
       end_date: normalizeIsoDate(fEndDate.value),
       status: currentStatus,
+      expected_updated_at: currentUpdatedAt,
       is_recurrent: recurrentCb.checked,
       recurrence_type: recurrentCb.checked ? fRecType.value : '',
       recurrence_end: recurrentCb.checked ? normalizeIsoDate(fEndDate.value) : ''
@@ -1396,6 +2077,12 @@ document.addEventListener('DOMContentLoaded', function () {
     })
       .then(function (data) {
         if (!data.success) {
+          if (data.task) {
+            applyTaskToModal(data.task);
+            showFormMessage(data.error || 'La tarea cambió en otra sesión.', 'warning');
+            notify('warning', data.error || 'La tarea fue modificada por otro usuario.');
+            return;
+          }
           showFormMessage(data.error || 'No se pudo guardar la tarea.', 'error');
           return;
         }
@@ -1428,29 +2115,276 @@ document.addEventListener('DOMContentLoaded', function () {
     deleteTaskById(id, { deleteSeries: deleteSeries });
   });
 
-  [filterStatus, filterAssignee, filterArea].filter(Boolean).forEach(function (el) {
-    el.addEventListener('change', refreshCalendar);
+  if (btnTaskCommentSend) {
+    btnTaskCommentSend.addEventListener('click', function () {
+      const taskId = fId.value;
+      const body = (taskCommentBody.value || '').trim();
+      if (!taskId || !body) return;
+
+      btnTaskCommentSend.disabled = true;
+      requestJson(`/api/tasks/${taskId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: body })
+      }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo guardar comentario.');
+          return;
+        }
+        taskCommentBody.value = '';
+        return Promise.all([refreshTaskDetail(taskId), loadTaskComments(taskId), loadTaskHistory(taskId)]).then(function () {
+          setActiveTaskTab('comments');
+        });
+      }).catch(function () {
+        notify('error', 'Error de conexion al comentar.');
+      }).finally(function () {
+        btnTaskCommentSend.disabled = false;
+      });
+    });
+  }
+
+  if (btnAddWatcher) {
+    btnAddWatcher.addEventListener('click', function () {
+      const taskId = fId.value;
+      const userId = taskWatcherUserSelect ? taskWatcherUserSelect.value : '';
+      if (!taskId || !userId) return;
+      requestJson(`/api/tasks/${taskId}/watchers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId })
+      }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo agregar observador.');
+          return;
+        }
+        return refreshTaskDetail(taskId).then(function () {
+          notify('success', 'Observador agregado.');
+        });
+      }).catch(function () {
+        notify('error', 'Error de conexion al agregar observador.');
+      });
+    });
+  }
+
+  if (taskWatchersChips) {
+    taskWatchersChips.addEventListener('click', function (event) {
+      const button = event.target.closest('.task-watcher-remove');
+      if (!button) return;
+      const taskId = fId.value;
+      const userId = button.dataset.userId;
+      requestJson(`/api/tasks/${taskId}/watchers/${userId}`, { method: 'DELETE' }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo quitar observador.');
+          return;
+        }
+        return refreshTaskDetail(taskId).then(function () {
+          notify('success', 'Observador removido.');
+        });
+      }).catch(function () {
+        notify('error', 'Error de conexion al quitar observador.');
+      });
+    });
+  }
+
+  /* ── Checklist ── */
+
+  if (btnChecklistAdd && taskChecklistInput) {
+    function addChecklistItem() {
+      const taskId = fId.value;
+      const body = (taskChecklistInput.value || '').trim();
+      if (!taskId || !body) return;
+      btnChecklistAdd.disabled = true;
+      requestJson('/api/tasks/' + taskId + '/checklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: body })
+      }).then(function (data) {
+        if (!data.success) { notify('error', data.error || 'Error al agregar ítem.'); return; }
+        taskChecklistInput.value = '';
+        loadChecklist(taskId).catch(function () {});
+      }).catch(function () {
+        notify('error', 'Error de conexión.');
+      }).finally(function () {
+        btnChecklistAdd.disabled = false;
+      });
+    }
+    btnChecklistAdd.addEventListener('click', addChecklistItem);
+    taskChecklistInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') addChecklistItem();
+    });
+  }
+
+  if (taskChecklistList) {
+    taskChecklistList.addEventListener('click', function (event) {
+      const taskId = fId.value;
+      if (!taskId) return;
+
+      // Toggle checkbox
+      const cb = event.target.closest('.task-checklist-cb');
+      if (cb) {
+        const itemEl = cb.closest('.task-checklist-item');
+        if (!itemEl) return;
+        const itemId = itemEl.dataset.id;
+        const completed = cb.checked;
+        requestJson('/api/tasks/' + taskId + '/checklist/' + itemId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_completed: completed })
+        }).then(function (data) {
+          if (!data.success) { notify('error', data.error || 'Error al actualizar.'); return; }
+          loadChecklist(taskId).catch(function () {});
+        }).catch(function () {
+          notify('error', 'Error de conexión.');
+        });
+        return;
+      }
+
+      // Delete
+      const del = event.target.closest('.task-checklist-delete');
+      if (del) {
+        const itemEl = del.closest('.task-checklist-item');
+        if (!itemEl) return;
+        const itemId = itemEl.dataset.id;
+        requestJson('/api/tasks/' + taskId + '/checklist/' + itemId, {
+          method: 'DELETE'
+        }).then(function (data) {
+          if (!data.success) { notify('error', data.error || 'Error al eliminar.'); return; }
+          loadChecklist(taskId).catch(function () {});
+        }).catch(function () {
+          notify('error', 'Error de conexión.');
+        });
+      }
+    });
+  }
+
+  if (btnLeaveWatching) {
+    btnLeaveWatching.addEventListener('click', function () {
+      const taskId = fId.value;
+      const myUserId = currentTaskDetail && currentTaskDetail.current_user_id;
+      const watcher = currentTaskDetail && Array.isArray(currentTaskDetail.watchers)
+        ? currentTaskDetail.watchers.find(function (item) { return item.is_self; })
+        : null;
+      const userId = watcher ? watcher.user_id : myUserId;
+      if (!taskId || !userId) return;
+      requestJson(`/api/tasks/${taskId}/watchers/${userId}`, { method: 'DELETE' }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo dejar de observar.');
+          return;
+        }
+        closeModal();
+        notify('success', 'Ya no observas esta tarea.');
+        loadWatchingTasks();
+      }).catch(function () {
+        notify('error', 'Error de conexion al dejar de observar.');
+      });
+    });
+  }
+
+  if (btnWatchingTasks && tasksWatchingPanel) {
+    btnWatchingTasks.addEventListener('click', function () {
+      tasksWatchingPanel.classList.toggle('modal-hidden');
+      if (!tasksWatchingPanel.classList.contains('modal-hidden')) loadWatchingTasks();
+    });
+  }
+
+  if (btnWatchingRefresh) {
+    btnWatchingRefresh.addEventListener('click', loadWatchingTasks);
+  }
+
+  if (tasksWatchingList) {
+    tasksWatchingList.addEventListener('click', function (event) {
+      const item = event.target.closest('.task-watching-item');
+      if (!item) return;
+      refreshTaskDetail(item.dataset.taskId).then(function (task) {
+        openModal(true, task);
+      }).catch(function () {
+        notify('error', 'No se pudo abrir tarea observada.');
+      });
+    });
+  }
+
+  [filterStatus, filterPriority, filterAssignee, filterArea].filter(Boolean).forEach(function (el) {
+    el.addEventListener('change', function () { refreshCalendar(); loadOverdueCount(); });
   });
 
   filterClient.addEventListener('input', function () {
     clearTimeout(filterClientTimer);
-    filterClientTimer = setTimeout(refreshCalendar, 300);
+    filterClientTimer = setTimeout(function () { refreshCalendar(); loadOverdueCount(); }, 300);
   });
 
   btnClearFilters.addEventListener('click', function () {
     filterStatus.value = '';
+    if (filterPriority) filterPriority.value = '';
     filterAssignee.value = '';
     filterClient.value = '';
     if (filterArea) filterArea.value = '';
+    clearSearch();
     refreshCalendar();
+    loadOverdueCount();
   });
+
+  /* ── Search ── */
+  if (tasksSearch) {
+    tasksSearch.addEventListener('input', function () {
+      if (searchTimer) clearTimeout(searchTimer);
+      var q = (tasksSearch.value || '').trim();
+      if (q.length < 2) { clearSearch(); loadOverdueCount(); return; }
+      searchTimer = setTimeout(function () { loadSearchResults(q); }, 300);
+    });
+  }
+
+  if (tasksSearchResults) {
+    tasksSearchResults.addEventListener('click', function (event) {
+      var item = event.target.closest('[data-task-id]');
+      if (!item) return;
+      var taskId = item.dataset.taskId;
+      if (taskId) openModal(true, { id: taskId });
+    });
+  }
+
+  /* ── Overdue badge ── */
+  if (tasksOverdueBadge) {
+    tasksOverdueBadge.addEventListener('click', function () {
+      if (tasksSearch) tasksSearch.value = '';
+      clearSearch();
+      if (filterStatus) filterStatus.value = '';
+      // Set the calendar to show overdue tasks only — use a special filter
+      // In this simple implementation, just apply it as a filter param
+      // by setting a custom property that getCalendarFilters will pick up
+      applyOverdueFilter();
+    });
+  }
+
+  var isOverdueFilterActive = false;
+
+  function applyOverdueFilter() {
+    isOverdueFilterActive = true;
+    refreshCalendar();
+  }
+
+  // Patch getCalendarFilters to include overdue param
+  var _origGetCalendarFilters = getCalendarFilters;
+  getCalendarFilters = function () {
+    var filters = _origGetCalendarFilters();
+    if (isOverdueFilterActive) filters.overdue = '1';
+    return filters;
+  };
+
+  // Also patch clearSearch to reset overdue filter
+  var _origClearSearch = clearSearch;
+  clearSearch = function () {
+    isOverdueFilterActive = false;
+    _origClearSearch();
+  };
 
   if (btnBulkCancel) btnBulkCancel.addEventListener('click', function () { setSelectionMode(false); });
   if (btnBulkCopy) btnBulkCopy.addEventListener('click', function () { copySelectedTasks(); setSelectionMode(false); });
   if (btnBulkMove) btnBulkMove.addEventListener('click', bulkMoveSelectedToDate);
-  if (btnBulkPending) btnBulkPending.addEventListener('click', function () { bulkUpdateStatus('Pendiente'); });
-  if (btnBulkProgress) btnBulkProgress.addEventListener('click', function () { bulkUpdateStatus('En Progreso'); });
-  if (btnBulkDone) btnBulkDone.addEventListener('click', function () { bulkUpdateStatus('Completado'); });
+  if (bulkStatusQuick) bulkStatusQuick.addEventListener('change', function () {
+    if (!bulkStatusQuick.value) return;
+    bulkUpdateStatus(bulkStatusQuick.value);
+    bulkStatusQuick.value = '';
+  });
   if (btnBulkDelete) btnBulkDelete.addEventListener('click', bulkDeleteSelected);
 
   if (btnMonthApply && monthInput) {
@@ -1488,7 +2422,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  const preferredView = localStorage.getItem(getViewPreferenceKey()) || (isMobileViewport() ? 'dayGridWeek' : 'dayGridMonth');
+  // En movil se abria en semana: siete columnas en 390px dejan 50px por dia y
+  // los titulos se cortan a la tercera letra. La lista es la unica vista que
+  // se lee de verdad en un telefono.
+  const preferredView = localStorage.getItem(getViewPreferenceKey()) || (isMobileViewport() ? 'listWeek' : 'dayGridMonth');
 
   calendar = new FullCalendar.Calendar(calEl, {
     initialView: preferredView,
@@ -1504,16 +2441,31 @@ document.addEventListener('DOMContentLoaded', function () {
       week: 'Semana',
       list: 'Lista'
     },
+    // El paquete index.global de FullCalendar no incluye los locales, asi que
+    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
+    // en ingles ("No events to display", "all-day") en mitad de una interfaz
+    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
+    allDayText: 'Todo el día',
+    noEventsText: 'No hay tareas en este rango.',
+    moreLinkText: function (n) { return '+' + n + ' más'; },
+    weekText: 'Sem',
     height: 'auto',
     editable: true,
     selectable: true,
     dayMaxEvents: 4,
-    moreLinkText: 'mas',
     eventOrder: function (a, b) {
-      const priority = { Pendiente: 1, 'En Progreso': 2, Completado: 3 };
-      const p1 = priority[a.extendedProps.status] || 99;
-      const p2 = priority[b.extendedProps.status] || 99;
+      const statusPriority = Object.fromEntries(
+        Array.from(filterStatus.options).filter(o => o.value).map((o, i) => [o.value, i])
+      );
+      const taskPriority = Object.fromEntries(
+        Array.from(filterPriority.options).filter(o => o.value).map((o, i) => [o.value, i])
+      );
+      const p1 = statusPriority[a.extendedProps.status] || 99;
+      const p2 = statusPriority[b.extendedProps.status] || 99;
       if (p1 !== p2) return p1 - p2;
+      const pr1 = taskPriority[a.extendedProps.priority] || 99;
+      const pr2 = taskPriority[b.extendedProps.priority] || 99;
+      if (pr1 !== pr2) return pr1 - pr2;
       return String(a.title || '').localeCompare(String(b.title || ''), 'es');
     },
 
@@ -1525,6 +2477,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const filters = getCalendarFilters();
       if (filters.status) params.set('status', filters.status);
+      if (filters.priority) params.set('priority', filters.priority);
       if (filters.assignee_id) params.set('assignee_id', filters.assignee_id);
       if (filters.client) params.set('client', filters.client);
       if (filters.area) params.set('area', filters.area);
@@ -1536,8 +2489,9 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .then(function (tasks) {
           const events = tasks.map(function (task) {
-            const colors = statusColorMap[task.status] || statusColorMap.Pendiente;
-            const slug = (task.status || 'Pendiente').toLowerCase().replace(/\s+/g, '-');
+            const colors = statusColorMap[task.status] || { bg: 'var(--c-bg)', border: 'var(--c-border)', text: 'var(--c-text-secondary)' };
+            const statusSlug = slugifyToken(task.status || INITIAL_STATUS);
+            const prioritySlug = slugifyToken(task.priority || DEFAULT_PRIORITY);
             return {
               id: String(task.id),
               title: task.title,
@@ -1546,11 +2500,13 @@ document.addEventListener('DOMContentLoaded', function () {
               backgroundColor: colors.bg,
               borderColor: colors.border,
               textColor: colors.text,
-              classNames: ['fc-event-task', `status-${slug}`],
+              classNames: ['fc-event-task', `status-${statusSlug}`, `task-prio-${prioritySlug}`]
+                .concat(task.is_overdue ? ['task-overdue'] : []),
               extendedProps: task
             };
           });
           successCallback(events);
+          loadOverdueCount();
         })
         .catch(function (error) {
           failureCallback(error);
@@ -1562,7 +2518,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const task = info.event.extendedProps;
       const lines = [
         task.title,
-        `Estado: ${task.status || 'Pendiente'}`,
+        `Estado: ${task.status || INITIAL_STATUS}`,
+        `Prioridad: ${task.priority || DEFAULT_PRIORITY}`,
         task.client ? `Cliente: ${task.client}` : '',
         task.directorate ? `Director/Gerencia: ${task.directorate}` : '',
         task.requested_by ? `Solicitado por: ${task.requested_by}` : '',
@@ -1636,26 +2593,42 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      updateTask(taskId, { due_date: nextDate }, info.revert, { silent: true })
+      updateTask(taskId, {
+        due_date: nextDate,
+        expected_updated_at: info.event.extendedProps.updated_at || ''
+      }, info.revert, {
+        silent: true,
+        skipRevertOnConflict: true,
+        onConflict: function (data) {
+          info.revert();
+          notify('warning', data.error || 'La tarea fue modificada por otro usuario.');
+        }
+      })
         .then(function () {
+          if (info.event.extendedProps) {
+            info.event.extendedProps.updated_at = new Date().toISOString();
+          }
           showToast(`Tarea movida al ${formatDate(nextDate)}.`, 'success', {
             label: 'Deshacer',
             onClick: function () {
-              updateTask(taskId, { due_date: previousDate }, null, { silent: true })
+              updateTask(taskId, {
+                due_date: previousDate,
+                expected_updated_at: info.event.extendedProps.updated_at || ''
+              }, null, { silent: true })
                 .then(function () {
                   info.event.setStart(previousDate);
                   showToast('Movimiento revertido.', 'success');
                 })
-                .catch(function () {
+                .catch(function (err) {
+                  if (err && err.message === '__conflict__') {
+                    refreshCalendar();
+                    return;
+                  }
                   refreshCalendar();
                   showToast('Error de conexion al deshacer.', 'error');
                 });
             }
           });
-        })
-        .catch(function () {
-          info.revert();
-          showToast('Error de conexion al mover la tarea.', 'error');
         });
     },
 
@@ -1701,4 +2674,234 @@ document.addEventListener('DOMContentLoaded', function () {
   applyMobileViewButtons();
   syncMonthInput(calendar.getDate());
   loadClients();
+
+  /* ═══════════════════════════════════════════════════════
+     VISTA "HOY" (RED-2)
+     Tres bloques —vencidas, hoy, esta semana— sobre los mismos endpoints
+     que ya alimentaban el calendario. El cambio es de composicion, no de
+     backend: /api/tasks admite overdue=1 y rango de fechas.
+     ═══════════════════════════════════════════════════════ */
+
+  const shell = document.getElementById('tasksShell');
+  const todayGroups = document.getElementById('todayGroups');
+
+  // El dia de referencia lo fija el servidor en la zona de negocio. Usar el
+  // reloj del navegador desplazaria "hoy" para quien se conecte desde otro huso.
+  const HOY = (shell && shell.dataset.hoy) || '';
+
+  function sumarDias(iso, dias) {
+    const d = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    d.setDate(d.getDate() + dias);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function diasEntre(desdeIso, hastaIso) {
+    const a = new Date(`${desdeIso}T00:00:00`);
+    const b = new Date(`${hastaIso}T00:00:00`);
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+    return Math.round((b - a) / 86400000);
+  }
+
+  function etiquetaVencimiento(dueIso) {
+    if (!dueIso || !HOY) return '';
+    const dias = diasEntre(HOY, dueIso);
+    if (dias === 0) return 'hoy';
+    if (dias === 1) return 'mañana';
+    if (dias === -1) return 'venció ayer';
+    if (dias < -1) return `venció hace ${Math.abs(dias)} d`;
+    const d = new Date(`${dueIso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dueIso;
+    return d.toLocaleDateString('es-DO', { weekday: 'long' });
+  }
+
+  function claseDePrioridad(prioridad) {
+    const p = (prioridad || '').toLowerCase();
+    if (p === 'alta') return 'prio-alta';
+    if (p === 'baja') return 'prio-baja';
+    return 'prio-media';
+  }
+
+  function fichaDeTarea(tarea) {
+    const clases = ['today-card', claseDePrioridad(tarea.priority)];
+    if (tarea.is_overdue) clases.push('is-overdue');
+    if (FINAL_STATUSES.includes(tarea.status)) clases.push('is-done');
+
+    const meta = [tarea.client, tarea.assignee_name, tarea.status]
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(' · ');
+
+    return ''
+      + `<li><button type="button" class="${clases.join(' ')}" data-tarea="${tarea.id}">`
+      +   '<span class="today-card-main">'
+      +     `<span class="today-card-title">${escapeHtml(tarea.title || '(sin titulo)')}</span>`
+      +     (meta ? `<span class="today-card-meta">${meta}</span>` : '')
+      +   '</span>'
+      +   `<span class="today-card-when">${escapeHtml(etiquetaVencimiento(tarea.due_date))}</span>`
+      +   `<span class="today-card-prio">${escapeHtml(tarea.priority || DEFAULT_PRIORITY)}</span>`
+      + '</button></li>';
+  }
+
+  function bloqueDeGrupo(grupo) {
+    if (!grupo.tareas.length) return '';
+    const colapsado = grupo.colapsado ? ' is-collapsed' : '';
+    const extra = grupo.destacado ? ' is-vencidas' : '';
+    return ''
+      + `<section class="today-group${extra}${colapsado}" data-grupo="${grupo.clave}">`
+      +   '<div class="today-group-head">'
+      +     `<h3 class="today-group-title">${escapeHtml(grupo.titulo)}</h3>`
+      +     `<span class="today-group-count">${grupo.tareas.length}</span>`
+      +     (grupo.plegable
+              ? `<button type="button" class="today-group-toggle" data-plegar="${grupo.clave}">`
+                + (grupo.colapsado ? 'desplegar' : 'plegar') + '</button>'
+              : '')
+      +   '</div>'
+      +   `<ul class="today-list">${grupo.tareas.map(fichaDeTarea).join('')}</ul>`
+      + '</section>';
+  }
+
+  function pintarVistaHoy(vencidas, delRango) {
+    if (!todayGroups) return;
+
+    const finSemana = sumarDias(HOY, 7);
+    const hoyTareas = [];
+    const semana = [];
+
+    delRango.forEach(function (t) {
+      if (!t.due_date) return;
+      if (t.due_date === HOY) hoyTareas.push(t);
+      else if (t.due_date > HOY && t.due_date <= finSemana) semana.push(t);
+    });
+
+    const grupos = [
+      { clave: 'vencidas', titulo: 'Vencidas', tareas: vencidas, destacado: true, plegable: false, colapsado: false },
+      { clave: 'hoy', titulo: 'Hoy', tareas: hoyTareas, plegable: false, colapsado: false },
+      { clave: 'semana', titulo: 'Esta semana', tareas: semana, plegable: true, colapsado: gruposColapsados.has('semana') }
+    ];
+
+    const html = grupos.map(bloqueDeGrupo).join('');
+    todayGroups.innerHTML = html || '<p class="today-empty">Nada vencido ni pendiente para los proximos siete dias. Usa <strong>Nueva tarea</strong> para anadir trabajo, o abre el calendario para ver mas adelante.</p>';
+    todayGroups.setAttribute('aria-busy', 'false');
+  }
+
+  // 'Esta semana' abre plegada a proposito: la vista de entrada debe responder
+  // que hay que hacer ahora, no mostrar los siete dias de golpe.
+  const gruposColapsados = new Set(['semana']);
+
+  function mostrarFalloDeCarga(motivo) {
+    todayGroups.innerHTML = '<p class="today-error">'
+      + '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> '
+      + escapeHtml(motivo)
+      + '</p>';
+    todayGroups.setAttribute('aria-busy', 'false');
+  }
+
+  /* Una peticion caida no es una agenda vacia. Sin esta distincion, un 429 o un
+     500 pintaban "Nada vencido ni pendiente": el peor estado vacio posible,
+     porque tranquiliza al usuario justo cuando no se le pudo preguntar nada al
+     servidor. */
+  function pedirTareas(url) {
+    return fetch(url).then(function (respuesta) {
+      if (!respuesta.ok) {
+        const error = new Error('http ' + respuesta.status);
+        error.estado = respuesta.status;
+        throw error;
+      }
+      return respuesta.json();
+    }).then(function (datos) {
+      if (!Array.isArray(datos)) throw new Error('respuesta inesperada');
+      return datos;
+    });
+  }
+
+  function cargarVistaHoy() {
+    if (!todayGroups || !HOY) return Promise.resolve();
+    todayGroups.setAttribute('aria-busy', 'true');
+
+    const finSemana = sumarDias(HOY, 7);
+    return Promise.all([
+      pedirTareas('/api/tasks?overdue=1'),
+      pedirTareas(`/api/tasks?start=${HOY}&end=${finSemana}`)
+    ]).then(function (respuestas) {
+      pintarVistaHoy(respuestas[0], respuestas[1]);
+    }).catch(function (error) {
+      mostrarFalloDeCarga(error && error.estado === 429
+        ? 'Demasiadas peticiones seguidas. Espera unos segundos y pulsa Actualizar.'
+        : 'No se pudo cargar tu trabajo. Comprueba la conexión y pulsa Actualizar.');
+    });
+  }
+
+  function initVistaHoy() {
+    if (!shell || !todayGroups) return;
+
+    const botones = document.querySelectorAll('.tasks-view-btn');
+    const CLAVE_VISTA = 'nl-vista-tareas';
+
+    const aplicarVista = function (vista) {
+      shell.dataset.vista = vista;
+      botones.forEach(function (b) {
+        b.setAttribute('aria-selected', String(b.dataset.vista === vista));
+      });
+      // FullCalendar mide mal si se dibuja oculto; al volver hay que reajustarlo.
+      if (vista === 'calendario' && typeof calendar !== 'undefined' && calendar) {
+        calendar.updateSize();
+      }
+      // Observadas se carga al entrar, no al arrancar la pagina: es la vista
+      // menos usada y no merece una peticion que casi nadie va a mirar.
+      if (vista === 'observadas') loadWatchingTasks();
+    };
+
+    let recordada = null;
+    try {
+      recordada = localStorage.getItem(CLAVE_VISTA);
+    } catch (e) {
+      recordada = null;
+    }
+    if (recordada === 'calendario' || recordada === 'observadas') aplicarVista(recordada);
+
+    botones.forEach(function (boton) {
+      boton.addEventListener('click', function () {
+        aplicarVista(boton.dataset.vista);
+        try {
+          localStorage.setItem(CLAVE_VISTA, boton.dataset.vista);
+        } catch (e) { /* modo privado */ }
+      });
+    });
+
+    todayGroups.addEventListener('click', function (evento) {
+      const plegar = evento.target.closest('[data-plegar]');
+      if (plegar) {
+        const clave = plegar.dataset.plegar;
+        const grupo = todayGroups.querySelector(`[data-grupo="${clave}"]`);
+        if (!grupo) return;
+        const seColapsa = !grupo.classList.contains('is-collapsed');
+        grupo.classList.toggle('is-collapsed', seColapsa);
+        plegar.textContent = seColapsa ? 'desplegar' : 'plegar';
+        if (seColapsa) gruposColapsados.add(clave);
+        else gruposColapsados.delete(clave);
+        return;
+      }
+
+      const ficha = evento.target.closest('[data-tarea]');
+      if (!ficha) return;
+      requestJson(`/api/tasks/${ficha.dataset.tarea}`).then(function (data) {
+        if (data && data.success && data.task) openModal(true, data.task);
+      }).catch(function () {});
+    });
+
+    const btnRefrescar = document.getElementById('btnTodayRefresh');
+    if (btnRefrescar) btnRefrescar.addEventListener('click', cargarVistaHoy);
+
+    // Cualquier cambio que refresque el calendario debe refrescar tambien Hoy,
+    // o las dos vistas se contradicen tras crear o mover una tarea.
+    window.recargarVistaHoy = cargarVistaHoy;
+
+    cargarVistaHoy();
+  }
+
+  actualizarContadorDeFiltros();
+  initVistaHoy();
+  openTaskFromQueryParam();
+  loadOverdueCount();
 });

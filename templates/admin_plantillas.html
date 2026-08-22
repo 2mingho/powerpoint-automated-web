@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block title %}Plantillas | Admin{% endblock %}
+{% block page_name %}Plantillas PowerPoint{% endblock %}
+
+{% block content %}
+
+<div class="admin-shell view-start">
+
+<section class="admin-panel">
+  <div class="card-title">
+    <i class="fa-solid fa-cloud-arrow-up"></i> Subir plantilla
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Se guarda en la base de datos, no en el disco del servidor: así sobrevive a los despliegues.</span>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('admin.plantilla_upload') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="pl-subir">
+      <input type="file" name="plantilla" id="plantilla" class="form-input" accept=".pptx" required
+             aria-describedby="pl-ayuda">
+      <button type="submit" class="btn btn-primary">
+        <i class="fa-solid fa-upload"></i> Subir
+      </button>
+    </div>
+    <p class="pl-ayuda" id="pl-ayuda">
+      Archivos .pptx de hasta {{ max_mb }} MB. Si el nombre coincide con una plantilla
+      existente, la reemplaza.
+    </p>
+  </form>
+</section>
+
+<!-- ─── Subidas: se pueden reemplazar y borrar ─── -->
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title"><i class="fa-solid fa-file-powerpoint"></i> Plantillas subidas</div>
+
+  {% if subidas | length == 0 %}
+    <p class="admin-empty">Todavía no has subido ninguna. Las del repositorio siguen disponibles.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
+      <thead>
+        <tr><th>Nombre</th><th>Tamaño</th><th>Subida por</th><th>Fecha</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for t in subidas %}
+        <tr>
+          <td><strong>{{ t.name }}</strong></td>
+          <td class="pl-num">{{ (t.size_bytes / 1024) | round | int }} KB</td>
+          <td>{{ t.uploaded_by.username if t.uploaded_by else '—' }}</td>
+          <td>{{ t.created_at.strftime('%d/%m/%Y') if t.created_at else '—' }}</td>
+          <td>
+            <div class="pl-acciones">
+              <a href="{{ url_for('admin.plantilla_download', template_id=t.id) }}"
+                 class="btn btn-secondary btn-sm" title="Descargar">
+                <i class="fa-solid fa-download"></i> Descargar
+              </a>
+              <form method="POST" action="{{ url_for('admin.plantilla_delete', template_id=t.id) }}"
+                    onsubmit="return confirm('¿Eliminar la plantilla {{ t.name }}? Los reportes que la usen dejarán de generarse.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm">
+                  <i class="fa-solid fa-trash"></i> Eliminar
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ─── Del repositorio: se usan, pero no se tocan desde aquí ─── -->
+{% if del_repositorio | length > 0 %}
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title"><i class="fa-solid fa-code-branch"></i> Plantillas del repositorio</div>
+  <p class="pl-ayuda">
+    Vienen con el código y están disponibles para generar reportes. No se pueden
+    borrar desde aquí — para cambiarlas hay que tocar el repositorio. Si subes una
+    con el mismo nombre, la tuya tiene preferencia.
+  </p>
+  <div class="pl-chips">
+    {% for nombre in del_repositorio %}
+    <span class="pl-chip">{{ nombre }}</span>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+</div>
+
+<style>
+  .pl-subir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pl-subir .form-input { flex: 1; min-width: 220px; }
+
+  .pl-ayuda {
+    margin: 10px 0 0;
+    font-size: 0.8rem;
+    color: var(--c-text-secondary);
+    max-width: 70ch;
+  }
+
+  .pl-num { font-variant-numeric: tabular-nums; }
+
+  .pl-acciones { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pl-acciones form { display: contents; }
+
+  .pl-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .pl-chip {
+    padding: 4px 11px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-pill);
+    background: var(--c-bg);
+    font-size: 0.79rem;
+    font-weight: 600;
+  }
+</style>
+
+{% endblock %}

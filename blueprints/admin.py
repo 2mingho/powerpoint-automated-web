@@ -1,11 +1,13 @@
 import os
+import io
 import functools
 import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, session
 from flask_login import login_required, current_user, login_user
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 from extensions import db
-from models import User, ActivityLog, Role, Area
+from models import User, ActivityLog, Role, Area, UnitLead
 
 # The default admin email — this account is fully protected
 DEFAULT_ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
@@ -33,7 +35,7 @@ def is_default_admin(user):
     return user.email == DEFAULT_ADMIN_EMAIL
 
 
-def log_activity(action, detail="", user_id=None):
+def log_activity(action, detail="", user_id=None, entity_type=None, entity_id=None):
     """Log an action to the activity_logs table."""
     uid = user_id or (current_user.id if current_user.is_authenticated else None)
     if uid is None:
@@ -43,6 +45,8 @@ def log_activity(action, detail="", user_id=None):
             user_id=uid,
             action=action,
             detail=detail[:500] if detail else "",
+            entity_type=entity_type,
+            entity_id=entity_id,
             ip_address=request.remote_addr if request else None,
         )
         db.session.add(log)
@@ -95,25 +99,61 @@ def dashboard():
 def users_list():
     search = request.args.get('q', '').strip()
     role_filter = request.args.get('role', '').strip()
+    area_filter = request.args.get('area', '').strip()
+    estado_filter = request.args.get('estado', '').strip()
 
     query = User.query
     if search:
+        patron = f'%{search}%'
         query = query.filter(
-            (User.username.ilike(f'%{search}%')) |
-            (User.email.ilike(f'%{search}%'))
+            (User.username.ilike(patron)) |
+            (User.email.ilike(patron))
         )
     # Accept any role code (dynamic from Role table or 'admin')
     if role_filter:
         query = query.filter_by(role=role_filter)
 
+    if area_filter == 'sin':
+        query = query.filter(User.area_id.is_(None))
+    elif area_filter:
+        try:
+            query = query.filter_by(area_id=int(area_filter))
+        except ValueError:
+            pass
+
+    if estado_filter == 'activos':
+        query = query.filter(User.is_active.is_(True))
+    elif estado_filter == 'inactivos':
+        query = query.filter(User.is_active.is_(False))
+
     # Exclude the default admin from the user list
     query = query.filter(User.email != DEFAULT_ADMIN_EMAIL)
 
-    users = query.order_by(User.created_at.desc()).all()
+    # Paginado. Antes se hacia .all(): con unos cuantos cientos de usuarios eso
+    # es traerlos todos a memoria y pintarlos todos en una tabla que nadie
+    # recorre entera. El filtro es lo que se usa para llegar a alguien.
+    try:
+        pagina = max(1, int(request.args.get('p', '1')))
+    except ValueError:
+        pagina = 1
+
+    POR_PAGINA = 25
+    total = query.count()
+    paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
+    pagina = min(pagina, paginas)
+
+    users = (query.order_by(User.created_at.desc())
+             .limit(POR_PAGINA).offset((pagina - 1) * POR_PAGINA).all())
+
     all_roles = Role.query.order_by(Role.code).all()
+    all_areas = Area.query.order_by(Area.name).all()
+
     return render_template('admin_users.html', users=users,
                            search=search, role_filter=role_filter,
-                           all_roles=all_roles)
+                           area_filter=area_filter, estado_filter=estado_filter,
+                           all_roles=all_roles, all_areas=all_areas,
+                           total=total, pagina=pagina, paginas=paginas,
+                           por_pagina=POR_PAGINA)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -551,3 +591,529 @@ def area_delete(area_id):
     log_activity('area_delete', f'Area eliminada: {area.name}')
     flash('Area eliminada.', 'success')
     return redirect(url_for('admin.areas_list'))
+
+
+# ─────────────────────────────────────────────────────────────
+# Organizacion: quien lidera que unidad y quien reporta a quien
+# ─────────────────────────────────────────────────────────────
+#
+# Son las dos unicas relaciones que hacen falta. Todo lo demas —el papel de
+# cada uno y las unidades que alcanza— se deduce de ellas, y la pantalla lo
+# muestra al lado para que el efecto de un cambio se vea sin adivinarlo.
+
+def _cadena_hacia_arriba(user):
+    """Los superiores de alguien, de abajo arriba. Corta ciclos."""
+    cadena, visto = [], set()
+    actual = user.manager_id
+    while actual and actual not in visto:
+        visto.add(actual)
+        jefe = db.session.get(User, actual)
+        if jefe is None:
+            break
+        cadena.append(jefe)
+        actual = jefe.manager_id
+    return cadena
+
+
+@admin_bp.route('/organizacion')
+@admin_required
+def organizacion():
+    from services.alcance import alcance_unidades, papel, personas_a_cargo
+
+    areas = Area.query.order_by(Area.name).all()
+    usuarios = User.query.filter_by(is_active=True).order_by(User.username).all()
+
+    lideres_por_area = {a.id: [] for a in areas}
+    for fila in UnitLead.query.all():
+        if fila.area_id in lideres_por_area:
+            usuario = db.session.get(User, fila.user_id)
+            if usuario:
+                lideres_por_area[fila.area_id].append(usuario)
+
+    nombre_area = {a.id: a.name for a in areas}
+
+    filas = []
+    for u in usuarios:
+        alcance = alcance_unidades(u, usar_cache=False)
+        filas.append({
+            'usuario': u,
+            'papel': papel(u),
+            'unidades_alcance': sorted(nombre_area.get(i, f'#{i}') for i in alcance),
+            'a_cargo': len(personas_a_cargo(u)) - 1,
+            'superiores': _cadena_hacia_arriba(u),
+        })
+
+    return render_template(
+        'admin_organizacion.html',
+        areas=areas,
+        usuarios=usuarios,
+        lideres_por_area=lideres_por_area,
+        filas=filas,
+    )
+
+
+@admin_bp.route('/organizacion/lider', methods=['POST'])
+@admin_required
+def organizacion_lider_add():
+    from services.alcance import invalidar_cache_alcance
+
+    try:
+        area_id = int(request.form.get('area_id', ''))
+        user_id = int(request.form.get('user_id', ''))
+    except (TypeError, ValueError):
+        flash('Selecciona una unidad y una persona.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    area = db.session.get(Area, area_id)
+    usuario = db.session.get(User, user_id)
+    if not area or not usuario:
+        flash('Unidad o persona no encontrada.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    if UnitLead.query.filter_by(area_id=area_id, user_id=user_id).first():
+        flash(f'{usuario.username} ya lidera {area.name}.', 'warning')
+        return redirect(url_for('admin.organizacion'))
+
+    db.session.add(UnitLead(user_id=user_id, area_id=area_id))
+    db.session.commit()
+    invalidar_cache_alcance()
+    log_activity('unit_lead_add', f'{usuario.username} lidera {area.name}')
+    flash(f'{usuario.username} ahora lidera {area.name}.', 'success')
+    return redirect(url_for('admin.organizacion'))
+
+
+@admin_bp.route('/organizacion/lider/quitar', methods=['POST'])
+@admin_required
+def organizacion_lider_remove():
+    from services.alcance import invalidar_cache_alcance
+
+    try:
+        area_id = int(request.form.get('area_id', ''))
+        user_id = int(request.form.get('user_id', ''))
+    except (TypeError, ValueError):
+        return redirect(url_for('admin.organizacion'))
+
+    fila = UnitLead.query.filter_by(area_id=area_id, user_id=user_id).first()
+    if fila is None:
+        return redirect(url_for('admin.organizacion'))
+
+    area = db.session.get(Area, area_id)
+    usuario = db.session.get(User, user_id)
+    db.session.delete(fila)
+    db.session.commit()
+    invalidar_cache_alcance()
+
+    nombre = usuario.username if usuario else f'#{user_id}'
+    unidad = area.name if area else f'#{area_id}'
+    log_activity('unit_lead_remove', f'{nombre} deja de liderar {unidad}')
+    flash(f'{nombre} ya no lidera {unidad}.', 'success')
+    return redirect(url_for('admin.organizacion'))
+
+
+@admin_bp.route('/organizacion/superior', methods=['POST'])
+@admin_required
+def organizacion_superior():
+    from services.alcance import invalidar_cache_alcance, personas_a_cargo
+
+    try:
+        user_id = int(request.form.get('user_id', ''))
+    except (TypeError, ValueError):
+        return redirect(url_for('admin.organizacion'))
+
+    usuario = db.session.get(User, user_id)
+    if usuario is None:
+        flash('Persona no encontrada.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    crudo = (request.form.get('manager_id') or '').strip()
+    if not crudo:
+        usuario.manager_id = None
+        db.session.commit()
+        invalidar_cache_alcance()
+        log_activity('manager_clear', f'{usuario.username} ya no reporta a nadie')
+        flash(f'{usuario.username} ya no reporta a nadie.', 'success')
+        return redirect(url_for('admin.organizacion'))
+
+    try:
+        manager_id = int(crudo)
+    except ValueError:
+        return redirect(url_for('admin.organizacion'))
+
+    if manager_id == user_id:
+        flash('Nadie puede ser su propio superior.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    jefe = db.session.get(User, manager_id)
+    if jefe is None:
+        flash('Superior no encontrado.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    # Un ciclo no se ve venir desde la interfaz: si el jefe elegido ya cuelga
+    # de esta persona, asignarlo cierra el bucle. El resolvedor lo sobrevive,
+    # pero la organizacion resultante no significa nada.
+    if manager_id in personas_a_cargo(usuario):
+        flash(f'{jefe.username} ya esta por debajo de {usuario.username}: '
+              'asignarlo crearia un bucle en la cadena de mando.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    usuario.manager_id = manager_id
+    db.session.commit()
+    invalidar_cache_alcance()
+    log_activity('manager_set', f'{usuario.username} reporta a {jefe.username}')
+    flash(f'{usuario.username} ahora reporta a {jefe.username}.', 'success')
+    return redirect(url_for('admin.organizacion'))
+
+
+# ─────────────────────────────────────────────────────────────
+# Plantillas PowerPoint
+# ─────────────────────────────────────────────────────────────
+#
+# Se guardan en la base y no en disco: el contenedor tiene almacenamiento
+# efimero, asi que una plantilla dejada en powerpoints/ desaparece en el
+# siguiente despliegue. Las que vienen en el repositorio se siguen listando y
+# usando, pero no se pueden borrar desde aqui — para eso hay que tocar el
+# repositorio, que es donde viven.
+
+MAX_TEMPLATE_BYTES = 15 * 1024 * 1024
+
+
+def _es_pptx_de_verdad(contenido):
+    """Comprueba la estructura, no la extension.
+
+    Un .pptx es un zip con un [Content_Types].xml y al menos una parte de
+    presentacion. Fiarse del nombre deja subir cualquier cosa renombrada.
+    """
+    import io as _io
+    import zipfile as _zipfile
+
+    try:
+        with _zipfile.ZipFile(_io.BytesIO(contenido)) as z:
+            nombres = z.namelist()
+    except _zipfile.BadZipFile:
+        return False
+
+    if '[Content_Types].xml' not in nombres:
+        return False
+    return any(n.startswith('ppt/') for n in nombres)
+
+
+@admin_bp.route('/plantillas')
+@admin_required
+def plantillas_list():
+    from models import PptxTemplate
+    import app as app_module
+
+    subidas = PptxTemplate.query.order_by(PptxTemplate.name).all()
+    nombres_subidos = {t.name for t in subidas}
+    del_repositorio = [n for n in app_module._templates_del_repositorio()
+                       if n not in nombres_subidos]
+
+    return render_template('admin_plantillas.html',
+                           subidas=subidas,
+                           del_repositorio=del_repositorio,
+                           max_mb=MAX_TEMPLATE_BYTES // (1024 * 1024))
+
+
+@admin_bp.route('/plantillas/subir', methods=['POST'])
+@admin_required
+def plantilla_upload():
+    from models import PptxTemplate
+
+    archivo = request.files.get('plantilla')
+    if not archivo or not archivo.filename:
+        flash('Selecciona un archivo .pptx.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    nombre = secure_filename(os.path.basename(archivo.filename))
+    if not nombre.lower().endswith('.pptx'):
+        flash('El archivo debe ser un .pptx.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    contenido = archivo.read()
+    if len(contenido) > MAX_TEMPLATE_BYTES:
+        limite = MAX_TEMPLATE_BYTES // (1024 * 1024)
+        flash(f'La plantilla pesa {len(contenido) // (1024 * 1024)} MB y el limite es {limite} MB.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    if not _es_pptx_de_verdad(contenido):
+        flash('El archivo no es un PowerPoint valido, aunque se llame .pptx.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    existente = PptxTemplate.query.filter_by(name=nombre).first()
+    if existente is not None:
+        existente.data = contenido
+        existente.size_bytes = len(contenido)
+        existente.uploaded_by_id = current_user.id
+        accion, verbo = 'pptx_template_replace', 'reemplazada'
+    else:
+        db.session.add(PptxTemplate(name=nombre, data=contenido, size_bytes=len(contenido),
+                                    uploaded_by_id=current_user.id))
+        accion, verbo = 'pptx_template_upload', 'subida'
+
+    db.session.commit()
+    log_activity(accion, f'Plantilla {verbo}: {nombre} ({len(contenido) // 1024} KB)')
+    flash(f'Plantilla "{nombre}" {verbo}.', 'success')
+    return redirect(url_for('admin.plantillas_list'))
+
+
+@admin_bp.route('/plantillas/<int:template_id>/eliminar', methods=['POST'])
+@admin_required
+def plantilla_delete(template_id):
+    from models import PptxTemplate
+
+    plantilla = PptxTemplate.query.get_or_404(template_id)
+    nombre = plantilla.name
+    db.session.delete(plantilla)
+    db.session.commit()
+    log_activity('pptx_template_delete', f'Plantilla eliminada: {nombre}')
+    flash(f'Plantilla "{nombre}" eliminada.', 'success')
+    return redirect(url_for('admin.plantillas_list'))
+
+
+@admin_bp.route('/plantillas/<int:template_id>/descargar')
+@admin_required
+def plantilla_download(template_id):
+    """Descargar la que esta en uso, para revisarla o partir de ella."""
+    from flask import send_file
+    from models import PptxTemplate
+
+    plantilla = PptxTemplate.query.get_or_404(template_id)
+    return send_file(
+        io.BytesIO(plantilla.data),
+        as_attachment=True,
+        download_name=plantilla.name,
+        mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Catalogo de estados y prioridades de tarea
+# ─────────────────────────────────────────────────────────────
+#
+# Editarlos era un despliegue. Las guardas de aqui existen porque el catalogo
+# tiene condiciones que, si se rompen, dejan el sistema en un estado imposible:
+# sin estado inicial no se puede crear una tarea, y sin estado final nada
+# cuenta nunca como terminado.
+
+def _tareas_con(columna, valor):
+    """Cuantas tareas usan ese valor. La columna se pasa como texto controlado."""
+    from sqlalchemy import text as _text
+    try:
+        fila = db.session.execute(
+            _text(f'SELECT COUNT(*) FROM tasks WHERE {columna} = :v'), {'v': valor}
+        ).fetchone()
+        return fila[0] if fila else 0
+    except Exception:
+        return 0
+
+
+@admin_bp.route('/catalogo')
+@admin_required
+def catalogo_list():
+    from models import TaskStatus, TaskPriority
+
+    estados = TaskStatus.query.order_by(TaskStatus.orden, TaskStatus.nombre).all()
+    prioridades = TaskPriority.query.order_by(TaskPriority.orden.desc(), TaskPriority.nombre).all()
+
+    return render_template(
+        'admin_catalogo.html',
+        estados=[(e, _tareas_con('status', e.nombre)) for e in estados],
+        prioridades=[(p, _tareas_con('priority', p.nombre)) for p in prioridades],
+        colores=['neutro', 'info', 'aviso', 'alerta', 'bien'],
+    )
+
+
+@admin_bp.route('/catalogo/estado', methods=['POST'])
+@admin_required
+def catalogo_estado_guardar():
+    from models import TaskStatus
+    from services.catalogo import invalidar_cache_catalogo
+
+    estado_id = (request.form.get('id') or '').strip()
+    nombre = (request.form.get('nombre') or '').strip()[:30]
+    color = (request.form.get('color') or 'neutro').strip()[:20]
+    es_final = request.form.get('es_final') == 'on'
+    es_inicial = request.form.get('es_inicial') == 'on'
+    try:
+        orden = int(request.form.get('orden') or 0)
+    except ValueError:
+        orden = 0
+
+    if not nombre:
+        flash('El nombre es obligatorio.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    duplicado = TaskStatus.query.filter(TaskStatus.nombre == nombre)
+    if estado_id:
+        duplicado = duplicado.filter(TaskStatus.id != int(estado_id))
+    if duplicado.first():
+        flash(f'Ya existe un estado llamado "{nombre}".', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if estado_id:
+        estado = TaskStatus.query.get_or_404(int(estado_id))
+        anterior = estado.nombre
+
+        # Quitar la ultima bandera final dejaria al sistema sin forma de dar una
+        # tarea por terminada: vencimientos, carga e indicadores dependen de ella.
+        if estado.es_final and not es_final:
+            otros_finales = TaskStatus.query.filter(
+                TaskStatus.es_final.is_(True), TaskStatus.id != estado.id).count()
+            if otros_finales == 0:
+                flash('Tiene que quedar al menos un estado que signifique "terminado".', 'error')
+                return redirect(url_for('admin.catalogo_list'))
+
+        estado.nombre, estado.color, estado.orden = nombre, color, orden
+        estado.es_final, estado.es_inicial = es_final, es_inicial
+
+        # La tarea guarda el nombre, no una clave: renombrar sin reescribir las
+        # tareas las dejaria con un estado que ya no existe.
+        movidas = 0
+        if anterior != nombre:
+            from sqlalchemy import text as _text
+            resultado = db.session.execute(
+                _text('UPDATE tasks SET status = :nuevo WHERE status = :viejo'),
+                {'nuevo': nombre, 'viejo': anterior})
+            movidas = resultado.rowcount or 0
+
+        mensaje = f'Estado "{nombre}" actualizado.'
+        if movidas:
+            mensaje += f' Se renombraron {movidas} tarea(s).'
+        accion = 'task_status_edit'
+    else:
+        estado = TaskStatus(nombre=nombre, color=color, orden=orden,
+                            es_final=es_final, es_inicial=es_inicial)
+        db.session.add(estado)
+        mensaje = f'Estado "{nombre}" creado.'
+        accion = 'task_status_create'
+
+    # Inicial hay uno solo: marcar otro apaga el anterior.
+    if es_inicial:
+        db.session.flush()
+        TaskStatus.query.filter(TaskStatus.id != estado.id).update({'es_inicial': False})
+
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity(accion, mensaje)
+    flash(mensaje, 'success')
+    return redirect(url_for('admin.catalogo_list'))
+
+
+@admin_bp.route('/catalogo/estado/<int:estado_id>/eliminar', methods=['POST'])
+@admin_required
+def catalogo_estado_eliminar(estado_id):
+    from models import TaskStatus
+    from services.catalogo import invalidar_cache_catalogo
+
+    estado = TaskStatus.query.get_or_404(estado_id)
+
+    en_uso = _tareas_con('status', estado.nombre)
+    if en_uso:
+        flash(f'No se puede eliminar: {en_uso} tarea(s) están en "{estado.nombre}". '
+              'Muévelas antes de quitarlo.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if estado.es_final and TaskStatus.query.filter(
+            TaskStatus.es_final.is_(True), TaskStatus.id != estado.id).count() == 0:
+        flash('Es el único estado que significa "terminado": no se puede eliminar.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if TaskStatus.query.count() <= 1:
+        flash('Tiene que quedar al menos un estado.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    nombre = estado.nombre
+    db.session.delete(estado)
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity('task_status_delete', f'Estado eliminado: {nombre}')
+    flash(f'Estado "{nombre}" eliminado.', 'success')
+    return redirect(url_for('admin.catalogo_list'))
+
+
+@admin_bp.route('/catalogo/prioridad', methods=['POST'])
+@admin_required
+def catalogo_prioridad_guardar():
+    from models import TaskPriority
+    from services.catalogo import invalidar_cache_catalogo
+
+    prioridad_id = (request.form.get('id') or '').strip()
+    nombre = (request.form.get('nombre') or '').strip()[:30]
+    color = (request.form.get('color') or 'neutro').strip()[:20]
+    es_defecto = request.form.get('es_defecto') == 'on'
+    try:
+        orden = int(request.form.get('orden') or 0)
+    except ValueError:
+        orden = 0
+
+    if not nombre:
+        flash('El nombre es obligatorio.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    duplicado = TaskPriority.query.filter(TaskPriority.nombre == nombre)
+    if prioridad_id:
+        duplicado = duplicado.filter(TaskPriority.id != int(prioridad_id))
+    if duplicado.first():
+        flash(f'Ya existe una prioridad llamada "{nombre}".', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if prioridad_id:
+        prioridad = TaskPriority.query.get_or_404(int(prioridad_id))
+        anterior = prioridad.nombre
+        prioridad.nombre, prioridad.color, prioridad.orden = nombre, color, orden
+        prioridad.es_defecto = es_defecto
+
+        movidas = 0
+        if anterior != nombre:
+            from sqlalchemy import text as _text
+            resultado = db.session.execute(
+                _text('UPDATE tasks SET priority = :nuevo WHERE priority = :viejo'),
+                {'nuevo': nombre, 'viejo': anterior})
+            movidas = resultado.rowcount or 0
+
+        mensaje = f'Prioridad "{nombre}" actualizada.'
+        if movidas:
+            mensaje += f' Se renombraron {movidas} tarea(s).'
+        accion = 'task_priority_edit'
+    else:
+        prioridad = TaskPriority(nombre=nombre, color=color, orden=orden, es_defecto=es_defecto)
+        db.session.add(prioridad)
+        mensaje = f'Prioridad "{nombre}" creada.'
+        accion = 'task_priority_create'
+
+    if es_defecto:
+        db.session.flush()
+        TaskPriority.query.filter(TaskPriority.id != prioridad.id).update({'es_defecto': False})
+
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity(accion, mensaje)
+    flash(mensaje, 'success')
+    return redirect(url_for('admin.catalogo_list'))
+
+
+@admin_bp.route('/catalogo/prioridad/<int:prioridad_id>/eliminar', methods=['POST'])
+@admin_required
+def catalogo_prioridad_eliminar(prioridad_id):
+    from models import TaskPriority
+    from services.catalogo import invalidar_cache_catalogo
+
+    prioridad = TaskPriority.query.get_or_404(prioridad_id)
+
+    en_uso = _tareas_con('priority', prioridad.nombre)
+    if en_uso:
+        flash(f'No se puede eliminar: {en_uso} tarea(s) tienen prioridad "{prioridad.nombre}".',
+              'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if TaskPriority.query.count() <= 1:
+        flash('Tiene que quedar al menos una prioridad.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    nombre = prioridad.nombre
+    db.session.delete(prioridad)
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity('task_priority_delete', f'Prioridad eliminada: {nombre}')
+    flash(f'Prioridad "{nombre}" eliminada.', 'success')
+    return redirect(url_for('admin.catalogo_list'))

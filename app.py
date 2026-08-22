@@ -1,4 +1,5 @@
 import os
+import io
 import pandas as pd
 import uuid
 import zipfile
@@ -26,7 +27,9 @@ from werkzeug.exceptions import HTTPException
 
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
+from blueprints.notifications import notifications_bp
 from blueprints.tasks import tasks_bp
+from blueprints.task_requests import task_requests_bp
 
 
 from extensions import db, login_manager, csrf, limiter, migrate
@@ -153,6 +156,10 @@ login_manager.init_app(app)
 csrf.init_app(app)
 limiter.init_app(app)
 
+# Un CSS y un JS no son trafico que haya que limitar, pero contaban igual: solo
+# entre esos dos, cada carga de /tasks gastaba dos peticiones de la cuota.
+limiter.exempt(app.view_functions['static'])
+
 # SEC-05: detras de un proxy inverso (Render, nginx) request.remote_addr es la
 # IP del proxy, no la del cliente. Sin esto el limite de 5 intentos de login por
 # minuto se aplica a todos los usuarios en conjunto: un atacante podria bloquear
@@ -172,11 +179,17 @@ if _is_production_mode():
 # NOTE: Do NOT use content_security_policy_nonce_in — it causes browsers to ignore 'unsafe-inline'
 Talisman(app,
          force_https=_is_production_mode(),
+         permissions_policy={
+             'camera': '()',
+             'geolocation': '()',
+             'microphone': '()',
+         },
          content_security_policy={
              'default-src': "'self'",
              'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
              'style-src':  ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-             'font-src':   ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+             # FullCalendar inyecta su fuente fcicons como data URI.
+             'font-src':   ["'self'", "data:", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
              'img-src':    ["'self'", "data:"],
              'connect-src': "'self'",
          })
@@ -191,12 +204,19 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA busy_timeout=5000")
+        # SQLite ignora las claves foraneas salvo que se le pida lo contrario, y
+        # lo hace en silencio. Sin esto, ninguna restriccion se cumple en local
+        # ni en las pruebas mientras que en PostgreSQL si: un ON DELETE CASCADE
+        # que aqui no dispara deja creer que el modelo se limpia solo.
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
 # Registrar blueprints
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
+app.register_blueprint(notifications_bp)
 app.register_blueprint(tasks_bp)
+app.register_blueprint(task_requests_bp)
 
 # ─────────────────────────────────────────────────────────────
 # Force-logout check (session kick feature)
@@ -349,6 +369,7 @@ def ensure_schema():
 ACTIVITY_LOG_RETENTION_DAYS = max(1, _env_int('ACTIVITY_LOG_RETENTION_DAYS', 90))
 ACTIVITY_LOG_MAX_ROWS = max(1000, _env_int('ACTIVITY_LOG_MAX_ROWS', 100000))
 REPORT_METADATA_RETENTION_DAYS = max(1, _env_int('REPORT_METADATA_RETENTION_DAYS', 180))
+SOFT_DELETED_TASK_RETENTION_DAYS = max(1, _env_int('SOFT_DELETED_TASK_RETENTION_DAYS', 30))
 
 
 def prune_activity_logs(retention_days=ACTIVITY_LOG_RETENTION_DAYS, max_rows=ACTIVITY_LOG_MAX_ROWS):
@@ -404,6 +425,18 @@ def prune_report_metadata(retention_days=REPORT_METADATA_RETENTION_DAYS):
     return {'deleted_rows': deleted}
 
 
+def prune_soft_deleted_tasks(retention_days=SOFT_DELETED_TASK_RETENTION_DAYS):
+    """Hard-delete tasks that were soft-deleted before retention cutoff."""
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    deleted = (
+        Task.query
+        .filter(Task.deleted_at.isnot(None), Task.deleted_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.session.commit()
+    return {'deleted_rows': deleted, 'retention_days': retention_days}
+
+
 def _scratch_root_abs():
     return os.path.abspath(app.config['UPLOAD_FOLDER'])
 
@@ -451,9 +484,11 @@ def prune_database_storage():
     """Run all DB pruning tasks and return stats."""
     logs_stats = prune_activity_logs()
     reports_stats = prune_report_metadata()
+    tasks_stats = prune_soft_deleted_tasks()
     return {
         'activity_logs': logs_stats,
         'reports': reports_stats,
+        'tasks': tasks_stats,
     }
 
 
@@ -464,6 +499,7 @@ def maintenance_prune_command():
         stats = prune_database_storage()
     click.echo(f"Activity logs pruned: {stats['activity_logs']}")
     click.echo(f"Reports metadata pruned: {stats['reports']}")
+    click.echo(f"Soft-deleted tasks pruned: {stats['tasks']}")
 
 
 @app.cli.command('schema-check')
@@ -589,22 +625,73 @@ DEFAULT_TEMPLATE_FILENAME = "Reporte_plantilla.pptx"
 TEMPLATES_DIR = "powerpoints"
 
 
-def get_available_templates():
-    """Lista segura de nombres de archivo .pptx dentro de powerpoints/"""
+# Una plantilla de 15 MB ya es enorme para un .pptx; el limite existe porque
+# el binario viaja entero en cada consulta que lo lea.
+MAX_TEMPLATE_BYTES = 15 * 1024 * 1024
+
+
+def _templates_del_repositorio():
+    """Nombres .pptx que vienen en powerpoints/, dentro del repositorio."""
     try:
-        files = [
+        return sorted(
             f for f in os.listdir(TEMPLATES_DIR)
             if os.path.isfile(os.path.join(TEMPLATES_DIR, f)) and f.lower().endswith(".pptx")
-        ]
-        return sorted(files)
+        )
     except FileNotFoundError:
         return []
 
 
+def _templates_de_la_base():
+    """Nombres de las plantillas subidas desde el panel."""
+    from models import PptxTemplate
+    try:
+        return sorted(t.name for t in PptxTemplate.query.with_entities(PptxTemplate.name).all())
+    except Exception:
+        # Antes de aplicar 0006 la tabla no existe todavia. Que la aplicacion
+        # arranque igual es mas importante que listar plantillas subidas.
+        return []
+
+
+def get_available_templates():
+    """Todas las plantillas disponibles: las subidas y las del repositorio.
+
+    Si un nombre coincide gana la subida, para que reemplazar una plantilla del
+    repositorio no obligue a un despliegue.
+    """
+    nombres = set(_templates_del_repositorio()) | set(_templates_de_la_base())
+    return sorted(nombres)
+
+
 def template_path_from_name(template_name):
-    """Construye la ruta absoluta segura a la plantilla."""
-    safe_name = os.path.basename(template_name)  # evita traversal
+    """Ruta a una plantilla del repositorio. Evita traversal."""
+    safe_name = os.path.basename(template_name)
     return os.path.join(TEMPLATES_DIR, safe_name)
+
+
+def open_template(template_name):
+    """Devuelve algo que python-pptx pueda abrir: bytes en memoria o una ruta.
+
+    La base manda sobre el disco. Presentation() acepta tanto una ruta como un
+    objeto de fichero, asi que quien llama no necesita distinguirlos.
+    """
+    from models import PptxTemplate
+
+    safe_name = os.path.basename(template_name or '')
+    if not safe_name:
+        raise FileNotFoundError('Plantilla no indicada.')
+
+    try:
+        subida = PptxTemplate.query.filter_by(name=safe_name).first()
+    except Exception:
+        subida = None
+
+    if subida is not None:
+        return io.BytesIO(subida.data)
+
+    ruta = template_path_from_name(safe_name)
+    if not os.path.isfile(ruta):
+        raise FileNotFoundError(f'Plantilla no encontrada: {safe_name}')
+    return ruta
 
 
 def clean_scratch_folder():
@@ -690,7 +777,17 @@ def inject_tool_access():
         if current_user.is_authenticated:
             return current_user.has_tool_access(tool_key)
         return False
-    return dict(has_tool_access=_has_tool_access)
+    def _puede_ver_equipo(user=None):
+        # Lo usa la barra lateral para decidir si ensena la entrada del panel.
+        # Antes era `current_user.is_admin or current_user.is_area_lead`, que a
+        # un director le escondia el menu de un equipo que si puede ver.
+        from services.alcance import puede_ver_equipo
+        objetivo = user if user is not None else current_user
+        if not getattr(objetivo, 'is_authenticated', False):
+            return False
+        return puede_ver_equipo(objetivo)
+
+    return dict(has_tool_access=_has_tool_access, puede_ver_equipo=_puede_ver_equipo)
 
 
 @app.route('/menu')
@@ -809,11 +906,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
     client_name = report_title if report_title else os.path.basename(csv_path).split()[0]
 
     # Abrir plantilla seleccionada
-    tpl_path = template_path_from_name(template_filename)
-    if not os.path.isfile(tpl_path):
-        raise FileNotFoundError(f"Plantilla no encontrada: {tpl_path}")
-
-    prs = Presentation(tpl_path)
+    prs = Presentation(open_template(template_filename))
 
     # --- OPTIMIZED: Single-pass placeholder indexing (P3) ---
     # Build index once instead of scanning slides multiple times
