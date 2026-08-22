@@ -22,13 +22,14 @@ from babel.dates import format_datetime
 from sqlalchemy import inspect, text, event
 from dotenv import load_dotenv
 from flask_talisman import Talisman
+from werkzeug.exceptions import HTTPException
 
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
 from blueprints.tasks import tasks_bp
 
 
-from extensions import db, login_manager, csrf, limiter
+from extensions import db, login_manager, csrf, limiter, migrate
 from models import User, Report, ActivityLog, ClassificationPreset, Task, TempArtifact
 from services import calculation as report
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
@@ -77,6 +78,26 @@ def _resolve_database_uri():
     return 'sqlite:///users.db'
 
 
+def _is_remote_database():
+    """True si la base no es un SQLite local (es decir, vive en otro servidor)."""
+    return not app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite')
+
+
+def _startup_db_writes_allowed():
+    """
+    Si el arranque puede escribir en la base.
+
+    Prohibido cuando una maquina de desarrollo apunta a una base remota: ahi
+    la base es, casi con seguridad, la de produccion. El arranque no solo crea
+    tablas, tambien PODA (borra logs de actividad, metadatos de reportes y
+    tareas con borrado logico). Ejecutar eso contra produccion por haber
+    exportado una DATABASE_URL seria destructivo y silencioso.
+    """
+    if _is_production_mode():
+        return True
+    return not _is_remote_database()
+
+
 def _is_production_mode():
     return (
         os.environ.get('FLASK_ENV') == 'production'
@@ -96,6 +117,17 @@ if not app.config['SECRET_KEY']:
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB upload limit
 app.config['SQLALCHEMY_DATABASE_URI'] = _resolve_database_uri()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# OPS-02: en produccion el contenedor es efimero. Arrancar con SQLite ahi
+# significa perder usuarios, tareas y notificaciones en cada redespliegue,
+# y en silencio. Preferimos fallar el arranque.
+if _is_production_mode() and app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite'):
+    raise RuntimeError(
+        "Startup blocked: la aplicacion esta en modo produccion pero apunta a SQLite "
+        f"({app.config['SQLALCHEMY_DATABASE_URI']}). El almacenamiento del contenedor es "
+        "efimero y los datos se perderian en el proximo despliegue. Define DATABASE_URL "
+        "con la cadena de conexion de PostgreSQL."
+    )
 app.config['ALLOW_SELF_REGISTRATION'] = _env_bool('ALLOW_SELF_REGISTRATION', False)
 
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
@@ -116,9 +148,24 @@ if _is_production_mode():
 # Initialize extensions
 # ─────────────────────────────────────────────────────────────
 db.init_app(app)
+migrate.init_app(app, db)
 login_manager.init_app(app)
 csrf.init_app(app)
 limiter.init_app(app)
+
+# SEC-05: detras de un proxy inverso (Render, nginx) request.remote_addr es la
+# IP del proxy, no la del cliente. Sin esto el limite de 5 intentos de login por
+# minuto se aplica a todos los usuarios en conjunto: un atacante podria bloquear
+# el acceso de toda la organizacion, y el limite deja de distinguir atacantes.
+# Solo se confia en las cabeceras cuando hay un proxy delante de verdad.
+if _is_production_mode():
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=_env_int('PROXY_COUNT', 1),
+        x_proto=_env_int('PROXY_COUNT', 1),
+        x_host=_env_int('PROXY_COUNT', 1),
+    )
 
 # Security headers via Talisman (CSP, HSTS, X-Frame-Options)
 # Using 'unsafe-inline' for scripts/styles since templates use inline code extensively
@@ -270,60 +317,31 @@ def ensure_default_admin():
     return admin_user
 
 
-def ensure_reports_schema():
+def ensure_schema():
     """
-    Garantiza que la tabla reports exista y tenga la columna template_name.
-    Se ejecuta en el arranque de la app, usando la MISMA conexión de SQLAlchemy.
+    Prepara el esquema al arrancar.
+
+    El esquema lo gobierna Alembic (carpeta migrations/). Tres casos:
+
+    1. Modo produccion: no se crea ni altera nada. Aplicar migraciones es un
+       paso explicito del despliegue (`flask db upgrade`).
+    2. Local sobre SQLite: create_all por comodidad, para que un clon nuevo
+       arranque sin ceremonia.
+    3. Local apuntando a una base remota: NO se toca nada.
+
+    El tercer caso es el que importa. Sin el, bastaba con exportar la
+    DATABASE_URL de produccion en una maquina de desarrollo (sin FLASK_ENV,
+    que es lo normal en local) para que el simple hecho de importar la app
+    ejecutase create_all() contra la base real, creando tablas a espaldas de
+    Alembic. Que no ocurra no puede depender de que alguien recuerde poner
+    SKIP_STARTUP_TASKS.
     """
     with app.app_context():
-        # Crea tablas faltantes (idempotente)
-        db.create_all()
+        if not _startup_db_writes_allowed():
+            return
 
-        insp = inspect(db.engine)
-        tables = set(insp.get_table_names())
-        if 'reports' in tables:
-            cols = {c['name'] for c in insp.get_columns('reports')}
-            if 'template_name' not in cols:
-                try:
-                    db.session.execute(text("ALTER TABLE reports ADD COLUMN template_name TEXT"))
-                    db.session.commit()
-                except Exception as e:
-                    print(f"[ensure_reports_schema] Aviso al agregar columna template_name: {e}")
-
-        # Migrate users table for session control + area columns
-        if 'users' in tables:
-            user_cols = {c['name'] for c in insp.get_columns('users')}
-            new_user_cols = {
-                'session_token': 'VARCHAR(64)',
-                'force_logout': 'BOOLEAN DEFAULT 0',
-                'area_id': 'INTEGER REFERENCES areas(id)',
-            }
-            for col_name, col_type in new_user_cols.items():
-                if col_name not in user_cols:
-                    try:
-                        db.session.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
-                        db.session.commit()
-                        print(f"[migration] Added column users.{col_name}")
-                    except Exception as e:
-                        print(f"[migration] Aviso al agregar users.{col_name}: {e}")
-
-        if 'tasks' in tables:
-            task_cols = {c['name'] for c in insp.get_columns('tasks')}
-            new_task_cols = {
-                'start_date': 'DATE',
-                'end_date': 'DATE',
-                'directorate': 'VARCHAR(255)',
-                'requested_by': 'VARCHAR(255)',
-                'budget_type': 'VARCHAR(255)',
-            }
-            for col_name, col_type in new_task_cols.items():
-                if col_name not in task_cols:
-                    try:
-                        db.session.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
-                        db.session.commit()
-                        print(f"[migration] Added column tasks.{col_name}")
-                    except Exception as e:
-                        print(f"[migration] Aviso al agregar tasks.{col_name}: {e}")
+        if not _is_production_mode():
+            db.create_all()
 
         ensure_default_admin()
 
@@ -448,10 +466,106 @@ def maintenance_prune_command():
     click.echo(f"Reports metadata pruned: {stats['reports']}")
 
 
-# Ejecutar guardado de esquema al iniciar
-ensure_reports_schema()
+@app.cli.command('schema-check')
+def schema_check_command():
+    """
+    Compara la base de datos real contra lo que declara models.py.
 
-if _env_bool('RUN_STARTUP_MAINTENANCE', True):
+    Pensado para decidir con datos, y no a ciegas, que revision de Alembic
+    estampar en una base que ya esta en produccion:
+
+      - sin diferencias           -> flask db stamp head
+      - solo faltan cosas de 0002 -> flask db stamp 0001_baseline && flask db upgrade
+      - falta algo mas            -> revisar antes de tocar nada
+    """
+    with app.app_context():
+        insp = inspect(db.engine)
+        live_tables = set(insp.get_table_names())
+        expected_tables = set(db.metadata.tables.keys())
+
+        missing_tables = sorted(expected_tables - live_tables)
+        extra_tables = sorted(live_tables - expected_tables - {'alembic_version'})
+
+        missing_columns = []
+        for table_name in sorted(expected_tables & live_tables):
+            live_cols = {c['name'] for c in insp.get_columns(table_name)}
+            expected_cols = set(db.metadata.tables[table_name].columns.keys())
+            for col in sorted(expected_cols - live_cols):
+                missing_columns.append(f'{table_name}.{col}')
+
+        has_alembic = 'alembic_version' in live_tables
+        click.echo(f"URL           : {db.engine.url.render_as_string(hide_password=True)}")
+        click.echo(f"alembic_version: {'presente' if has_alembic else 'AUSENTE (base sin versionar)'}")
+        click.echo(f"Tablas en la base : {len(live_tables)}")
+        click.echo(f"Tablas esperadas  : {len(expected_tables)}")
+
+        if missing_tables:
+            click.echo(f"\nTablas que faltan ({len(missing_tables)}):")
+            for name in missing_tables:
+                click.echo(f"  - {name}")
+        if missing_columns:
+            click.echo(f"\nColumnas que faltan ({len(missing_columns)}):")
+            for name in missing_columns:
+                click.echo(f"  - {name}")
+        if extra_tables:
+            click.echo(f"\nTablas presentes que models.py no declara ({len(extra_tables)}):")
+            for name in extra_tables:
+                click.echo(f"  - {name}")
+            click.echo(
+                "  Alembic las ignora (include_object en migrations/env.py), asi que\n"
+                "  ni el upgrade ni el autogenerate las tocaran. Aparecen aqui porque\n"
+                "  significan que hay esquema en uso fuera de este codigo: si alguna\n"
+                "  pertenece a la aplicacion, su modelo deberia acabar en models.py."
+            )
+
+        # Todo lo que introduce la revision 0002
+        delta_tables = {
+            'notifications', 'task_comments', 'task_watchers',
+            'task_checklist_items', 'task_templates', 'task_requests',
+        }
+        delta_columns = {
+            'users.is_area_lead',
+            'activity_logs.entity_type', 'activity_logs.entity_id',
+            'tasks.updated_at', 'tasks.priority', 'tasks.visibility',
+            'tasks.area_id', 'tasks.deleted_at', 'tasks.deleted_by_id',
+        }
+
+        click.echo('')
+        if has_alembic:
+            click.echo('La base ya esta versionada por Alembic: usa `flask db upgrade`.')
+        elif not missing_tables and not missing_columns:
+            click.echo('VEREDICTO: el esquema ya esta completo.')
+            click.echo('  flask db stamp head')
+        elif set(missing_tables) <= delta_tables and set(missing_columns) <= delta_columns:
+            click.echo('VEREDICTO: solo falta la revision 0002. Es el caso esperado.')
+            click.echo('  flask db stamp 0001_baseline')
+            click.echo('  flask db upgrade')
+        else:
+            click.echo('VEREDICTO: hay deriva fuera de lo que cubre 0002. NO estampes todavia.')
+            click.echo('  Revisa la lista de arriba antes de aplicar ninguna migracion.')
+
+
+# Las tareas de arranque (crear esquema, sembrar admin, podar, log de estado)
+# se saltan cuando la app se importa solo como contenedor de contexto: los
+# comandos `flask db ...` necesitan una app sin efectos secundarios sobre el
+# esquema, o el autogenerate compara contra tablas que el propio arranque acaba
+# de crear.
+SKIP_STARTUP_TASKS = _env_bool('SKIP_STARTUP_TASKS', False)
+
+if not SKIP_STARTUP_TASKS and not _startup_db_writes_allowed():
+    _safe_uri = app.config['SQLALCHEMY_DATABASE_URI']
+    app.logger.warning(
+        "[startup] Apuntando a una base remota (%s) fuera de modo produccion. "
+        "No se crea esquema, no se siembra admin y NO se ejecuta la poda de datos. "
+        "Para inspeccionarla usa `flask schema-check`; para migrarla, `flask db upgrade`.",
+        _safe_uri.split('@')[-1] if '@' in _safe_uri else _safe_uri,
+    )
+
+if not SKIP_STARTUP_TASKS:
+    ensure_schema()
+
+if (not SKIP_STARTUP_TASKS and _startup_db_writes_allowed()
+        and _env_bool('RUN_STARTUP_MAINTENANCE', True)):
     try:
         with app.app_context():
             stats = prune_database_storage()
@@ -460,6 +574,8 @@ if _env_bool('RUN_STARTUP_MAINTENANCE', True):
         app.logger.warning(f"[startup] DB pruning warning: {e}")
 
 try:
+    if SKIP_STARTUP_TASKS:
+        raise RuntimeError('startup tasks skipped')
     with app.app_context():
         app.logger.info(f"[startup] Database URL: {db.engine.url.render_as_string(hide_password=True)}")
         app.logger.info(f"[startup] Admin users: {User.query.filter_by(role='admin').count()}")
@@ -526,7 +642,8 @@ def _schedule_background_cleanup():
     t = threading.Thread(target=_run, daemon=True)
     t.start()
 
-_schedule_background_cleanup()
+if not SKIP_STARTUP_TASKS:
+    _schedule_background_cleanup()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1130,6 +1247,10 @@ def clasificacion_upload():
             f.write(header)
             f.write(body)
 
+        # SEC-03: la sesion pertenece a quien la crea. upload_body, chunk y
+        # finalize verifican esta propiedad antes de tocar el disco.
+        _register_temp_artifact('classify_session', session_id, f"upload_{session_id}.tsv")
+
         CHUNK_SIZE = 2000
         total_chunks = max(1, -(-total_rows // CHUNK_SIZE))  # ceiling division
 
@@ -1161,6 +1282,7 @@ def clasificacion_upload_body(session_id):
     safe_sid = secure_filename(session_id)
     if not safe_sid or safe_sid != session_id:
         abort(400)
+    _get_owned_artifact_or_403('classify_session', safe_sid)  # SEC-03
     session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"upload_{safe_sid}.tsv")
     if not os.path.exists(session_file):
         abort(404)
@@ -1289,6 +1411,8 @@ def clasificacion_chunk():
         if not safe_sid or safe_sid != session_id:
             return jsonify({"success": False, "error": "session_id invalido."}), 400
 
+        _get_owned_artifact_or_403('classify_session', safe_sid)  # SEC-03
+
         if not header_text or not rows_text:
             return jsonify({"success": False, "error": "Datos de chunk vacios."}), 400
 
@@ -1323,6 +1447,10 @@ def clasificacion_chunk():
             "rows_in_chunk": len(df_chunk)
         })
 
+    except HTTPException:
+        # abort(403)/abort(404) deben propagarse con su propio codigo,
+        # no convertirse en un 500 generico.
+        raise
     except Exception as e:
         app.logger.error(f"Error en chunk de clasificacion: {e}")
         return jsonify({"success": False, "error": "Error procesando el chunk."}), 500
@@ -1344,6 +1472,8 @@ def clasificacion_finalize():
         safe_sid = secure_filename(session_id)
         if not safe_sid or safe_sid != session_id:
             return jsonify({"success": False, "error": "session_id invalido."}), 400
+
+        _get_owned_artifact_or_403('classify_session', safe_sid)  # SEC-03
 
         session_file = os.path.join(app.config['UPLOAD_FOLDER'], f"session_{safe_sid}.csv")
         if not os.path.exists(session_file):
@@ -1376,6 +1506,17 @@ def clasificacion_finalize():
         os.replace(session_file, output_path)
         _register_temp_artifact('classified', safe_sid, f"classified_{safe_sid}.csv")
 
+        # La sesion ya cumplio su proposito: liberar archivo y metadatos.
+        try:
+            upload_file = _scratch_path(f"upload_{safe_sid}.tsv")
+            if os.path.exists(upload_file):
+                os.remove(upload_file)
+            TempArtifact.query.filter_by(kind='classify_session', file_id=safe_sid).delete()
+            db.session.commit()
+        except Exception as cleanup_error:
+            db.session.rollback()
+            app.logger.warning(f"No se pudo limpiar la sesion {safe_sid}: {cleanup_error}")
+
         log_activity('classify_data',
                      f'Clasificacion (chunked): {safe_orig} ({len(df_full)} filas, {len(stats)} categorias)')
 
@@ -1390,6 +1531,8 @@ def clasificacion_finalize():
             }
         })
 
+    except HTTPException:
+        raise
     except Exception as e:
         app.logger.error(f"Error en finalizacion de clasificacion: {e}")
         return jsonify({"success": False, "error": "Error finalizando la clasificacion."}), 500
@@ -1778,17 +1921,30 @@ def generate_pptx_route():
         # 1. Recibir el JSON con los datos editados
         data = request.json
         if not data:
-            return "No se recibieron datos JSON", 400
+            return jsonify({"success": False, "error": "No se recibieron datos JSON."}), 400
+
+        # Validar la entrada antes de tocar el disco (FUN-06)
+        client_name = ((data.get('meta') or {}).get('client_name') or '').strip()
+        if not client_name:
+            return jsonify({"success": False, "error": "Falta meta.client_name."}), 400
 
         # 2. Definir rutas
-        template_path = os.path.join('powerpoints', 'Reporte_plantilla.pptx') 
-        
+        template_path = os.path.join('powerpoints', 'Reporte_plantilla.pptx')
+
         # Verificar que la plantilla existe
         if not os.path.exists(template_path):
-            return f"Error: No se encuentra la plantilla en {template_path}", 500
+            app.logger.error(f"Plantilla no encontrada: {template_path}")
+            return jsonify({"success": False, "error": "No se encuentra la plantilla del reporte."}), 500
 
-        filename = f"Reporte_{data['meta']['client_name']}.pptx"
-        output_path = os.path.join('scratch', filename)
+        # El nombre en disco lo genera el servidor; client_name solo se usa
+        # como nombre de descarga (SEC-02: evita traversal via meta.client_name)
+        storage_name = f"Reporte_{uuid.uuid4().hex}.pptx"
+        output_path = _scratch_path(storage_name)
+        if not os.path.abspath(output_path).startswith(_scratch_root_abs() + os.sep):
+            abort(403)
+
+        safe_client = secure_filename(client_name) or 'reporte'
+        filename = f"Reporte_{safe_client}.pptx"
 
         # 3. Llamar al motor de generación
         ppt_engine.generate_pptx(data, template_path, output_path)
@@ -1798,7 +1954,7 @@ def generate_pptx_route():
 
     except Exception as e:
         app.logger.error(f"ERROR GENERANDO PPT: {e}")
-        return "Error generando el reporte. Por favor intenta nuevamente.", 500
+        return jsonify({"success": False, "error": "Error generando el reporte. Por favor intenta nuevamente."}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
