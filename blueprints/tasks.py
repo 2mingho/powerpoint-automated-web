@@ -6,10 +6,23 @@ import unicodedata
 from datetime import datetime, timedelta, date
 from flask import Blueprint, render_template, request, jsonify, Response, abort
 from flask_login import login_required, current_user
+from sqlalchemy.orm import joinedload
 from extensions import db
 from models import User, Task, Area
+from services.clock import current_year
 
 tasks_bp = Blueprint('tasks', __name__)
+
+
+# FUN-04: to_dict() resuelve creator.username y assignee.username de forma
+# perezosa, dos consultas extra por tarea. Sin tope ni carga anticipada, el
+# calendario de un admin sin filtros dispara cientos de consultas.
+TASK_FEED_MAX_ROWS = 500
+
+
+def _with_task_relations(query):
+    """Carga creador y asignado en la misma consulta (evita el N+1)."""
+    return query.options(joinedload(Task.creator), joinedload(Task.assignee))
 
 
 TASK_CSV_COLUMNS = [
@@ -269,7 +282,7 @@ def _parse_csv_flexible_date(raw_value):
             if year < 100:
                 year += 2000
         else:
-            year = date.today().year
+            year = current_year()
             warning_code = 'year_inferred_current'
 
         try:
@@ -449,7 +462,7 @@ def _validate_task_csv_row(row_fields, users):
             'warning',
             'start_date',
             'year_inferred_current',
-            f'Se infirió el año actual ({date.today().year}) para esta fecha.',
+            f'Se infirió el año actual ({current_year()}) para esta fecha.',
         )
 
     end_date, end_date_warning = _parse_csv_flexible_date(clean_fields['end_date'])
@@ -460,7 +473,7 @@ def _validate_task_csv_row(row_fields, users):
             'warning',
             'end_date',
             'year_inferred_current',
-            f'Se infirió el año actual ({date.today().year}) para esta fecha.',
+            f'Se infirió el año actual ({current_year()}) para esta fecha.',
         )
 
     due_date, due_date_warning = _parse_csv_flexible_date(clean_fields['due_date'])
@@ -473,7 +486,7 @@ def _validate_task_csv_row(row_fields, users):
             'warning',
             'due_date',
             'year_inferred_current',
-            f'Se infirió el año actual ({date.today().year}) para esta fecha.',
+            f'Se infirió el año actual ({current_year()}) para esta fecha.',
         )
 
     recurrence_type = _normalize_recurrence_value(clean_fields['recurrence'])
@@ -662,7 +675,7 @@ def api_tasks_list():
         except ValueError:
             pass
 
-    tasks = query.order_by(Task.due_date.asc()).all()
+    tasks = _with_task_relations(query).order_by(Task.due_date.asc()).limit(TASK_FEED_MAX_ROWS).all()
     return jsonify([t.to_dict() for t in tasks])
 
 
@@ -1247,12 +1260,15 @@ def api_admin_tasks():
     tasks = query.order_by(Task.due_date.desc()).all()
 
     # Summary stats
-    all_tasks = Task.query.all()
+    # Contar por estado en el motor, sin traer todas las tareas a memoria.
+    from sqlalchemy import func as _func
+    _rows = db.session.query(Task.status, _func.count(Task.id)).group_by(Task.status).all()
+    _by_status = {st: n for st, n in _rows}
     stats = {
-        'total': len(all_tasks),
-        'pendiente': sum(1 for t in all_tasks if t.status == 'Pendiente'),
-        'en_progreso': sum(1 for t in all_tasks if t.status == 'En Progreso'),
-        'completado': sum(1 for t in all_tasks if t.status == 'Completado'),
+        'total': sum(_by_status.values()),
+        'pendiente': _by_status.get('Pendiente', 0),
+        'en_progreso': _by_status.get('En Progreso', 0),
+        'completado': _by_status.get('Completado', 0),
     }
 
     return jsonify({
