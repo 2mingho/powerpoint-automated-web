@@ -412,7 +412,21 @@ document.addEventListener('DOMContentLoaded', function () {
     };
   }
 
+  /* Un filtro activo dentro de un panel plegado es invisible: sin este
+     contador la gente deja uno puesto, ve el calendario a medias y cree que
+     faltan tareas. */
+  function actualizarContadorDeFiltros() {
+    const marca = document.getElementById('tasksFiltersCount');
+    if (!marca) return;
+    const activos = Object.values(getCalendarFilters()).filter(function (v) {
+      return String(v || '').trim() !== '';
+    }).length;
+    marca.textContent = String(activos);
+    marca.hidden = activos === 0;
+  }
+
   function refreshCalendar() {
+    actualizarContadorDeFiltros();
     if (calendar) calendar.refetchEvents();
     // La vista Hoy se alimenta de los mismos datos: si no se recarga aqui, las
     // dos vistas se contradicen en cuanto se crea, mueve o completa una tarea.
@@ -1788,7 +1802,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function clearReqMessage() { if (reqMessage) reqMessage.textContent = ''; }
   function openReqModal() {
-    if (reqModal) reqModal.classList.remove('modal-hidden');
+    if (reqModal) window.abrirModal(reqModal);
     clearReqMessage();
     if (reqArea) {
       reqArea.innerHTML = '<option value="">Cargando...</option>';
@@ -1804,7 +1818,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (reqPriority) reqPriority.value = 'Media';
     if (reqDueDate) reqDueDate.value = '';
   }
-  function closeReqModal() { if (reqModal) reqModal.classList.add('modal-hidden'); }
+  function closeReqModal() { if (reqModal) window.cerrarModal(reqModal); }
   function sendRequest() {
     if (!reqArea || !reqTitle) return;
     var areaId = reqArea.value;
@@ -2283,7 +2297,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  const preferredView = localStorage.getItem(getViewPreferenceKey()) || (isMobileViewport() ? 'dayGridWeek' : 'dayGridMonth');
+  // En movil se abria en semana: siete columnas en 390px dejan 50px por dia y
+  // los titulos se cortan a la tercera letra. La lista es la unica vista que
+  // se lee de verdad en un telefono.
+  const preferredView = localStorage.getItem(getViewPreferenceKey()) || (isMobileViewport() ? 'listWeek' : 'dayGridMonth');
 
   calendar = new FullCalendar.Calendar(calEl, {
     initialView: preferredView,
@@ -2701,6 +2718,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (vista === 'calendario' && typeof calendar !== 'undefined' && calendar) {
         calendar.updateSize();
       }
+      // Observadas se carga al entrar, no al arrancar la pagina: es la vista
+      // menos usada y no merece una peticion que casi nadie va a mirar.
+      if (vista === 'observadas') loadWatchingTasks();
     };
 
     let recordada = null;
@@ -2709,7 +2729,7 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {
       recordada = null;
     }
-    if (recordada === 'calendario') aplicarVista('calendario');
+    if (recordada === 'calendario' || recordada === 'observadas') aplicarVista(recordada);
 
     botones.forEach(function (boton) {
       boton.addEventListener('click', function () {

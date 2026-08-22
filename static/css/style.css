@@ -69,6 +69,7 @@
   --c-prio-alta:   #8d4d4d;
   --c-prio-media:  #8a7750;
   --c-prio-baja:   #7d8794;
+  --c-info:        #4a6785;
   --c-prio-alta-bg:  #f4eaea;
   --c-prio-media-bg: #f3efe5;
   --c-prio-baja-bg:  #eef0f3;
@@ -101,6 +102,7 @@
   --c-prio-alta:   #b77d7d;
   --c-prio-media:  #b7a274;
   --c-prio-baja:   #8d97a6;
+  --c-info:        #8aa6c4;
   --c-prio-alta-bg:  #2a1d1d;
   --c-prio-media-bg: #2a2519;
   --c-prio-baja-bg:  #1e242e;
@@ -2809,7 +2811,25 @@ body.app-prompt-open {
   .success-actions { flex-direction: column; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
 
-  .topbar-breadcrumb { display: none; }
+  /* El titulo de pagina se ocultaba en movil porque cada pagina repetia su
+     nombre en un <h1>. Ya no lo hacen, asi que esta es la unica senal de
+     donde esta uno: se queda, y lo que cede sitio es el nombre de usuario,
+     que el avatar ya representa. */
+  .topbar-breadcrumb {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+  }
+
+  .topbar-left { min-width: 0; flex: 1; }
+
+  .topbar-user-btn span,
+  .topbar-user-btn .fa-chevron-down { display: none; }
+
+  .topbar-right { flex-shrink: 0; }
 }
 
 @media (max-width: 480px) {
@@ -2993,4 +3013,13 @@ textarea:focus-visible {
 @media (max-width: 768px) {
   .cmdk-overlay { padding-top: 6vh; }
   .cmdk-foot { display: none; }
+}
+
+/* Fila de accion de pagina: sustituye a las cabeceras que repetian en un <h1>
+   el nombre que la barra superior ya muestra. */
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-sm);
+  margin-bottom: var(--sp-md);
 }

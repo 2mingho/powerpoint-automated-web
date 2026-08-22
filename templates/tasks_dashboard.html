@@ -7,19 +7,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <div class="td-layout">
-  <!-- Hero -->
-  <div class="td-hero">
-    <div class="td-hero-actions">
-      <button class="btn btn-secondary btn-sm" id="btnExportTasksCsv">
-        <i class="fa-solid fa-file-arrow-down"></i> <span class="td-btn-label">Exportar</span>
-      </button>
-      <button class="btn btn-primary btn-sm" id="btnImportTasksCsv">
-        <i class="fa-solid fa-file-arrow-up"></i> <span class="td-btn-label">Importar</span>
-      </button>
-      <input type="file" id="inputImportTasksCsv" accept=".csv,text/csv" class="modal-hidden">
-    </div>
-  </div>
-
   {#
     Indicadores de cabecera (RED-7). El dashboard abria con la distribucion
     por estado y dos graficos: informacion, pero no una respuesta. Estos
@@ -48,6 +35,19 @@
       <span class="td-kpi-label">Carga máxima</span>
       <span class="td-kpi-hint" id="kpiLoadHint">—</span>
     </button>
+  </div>
+
+  <!-- Hero -->
+  <div class="td-hero">
+    <div class="td-hero-actions">
+      <button class="btn btn-secondary btn-sm" id="btnExportTasksCsv">
+        <i class="fa-solid fa-file-arrow-down"></i> <span class="td-btn-label">Exportar</span>
+      </button>
+      <button class="btn btn-primary btn-sm" id="btnImportTasksCsv">
+        <i class="fa-solid fa-file-arrow-up"></i> <span class="td-btn-label">Importar</span>
+      </button>
+      <input type="file" id="inputImportTasksCsv" accept=".csv,text/csv" class="modal-hidden">
+    </div>
   </div>
 
   <!-- Analytics Section -->
@@ -696,6 +696,13 @@ document.addEventListener('DOMContentLoaded', function() {
   function updateCharts(stats, tasks) {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const textColor = isDark ? '#a0aec0' : '#718096';
+
+    // Los graficos usaban los colores por defecto de Chart.js —naranja #f59e0b,
+    // azul #2563eb, verde #10b981— que no pertenecen al sistema y compiten con
+    // el amarillo de marca. Se leen los tokens del CSS para que sigan al tema
+    // claro/oscuro sin duplicar la paleta aqui.
+    const token = (nombre) => getComputedStyle(document.documentElement)
+      .getPropertyValue(nombre).trim();
     const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
 
     // 1. Status Donut
@@ -707,7 +714,7 @@ document.addEventListener('DOMContentLoaded', function() {
         labels: ['Pendiente', 'En Progreso', 'Completada'],
         datasets: [{
           data: [stats.pendiente, stats.en_progreso, stats.completado],
-          backgroundColor: ['#f59e0b', '#2563eb', '#10b981'],
+          backgroundColor: [token('--c-prio-media'), token('--c-info') || token('--c-text-secondary'), token('--c-success')],
           borderWidth: 0,
           hoverOffset: 4
         }]
@@ -747,7 +754,7 @@ document.addEventListener('DOMContentLoaded', function() {
         datasets: [{
           label: 'Tareas',
           data: sortedData,
-          backgroundColor: '#3b82f6',
+          backgroundColor: token('--c-info'),
           borderRadius: 6,
           maxBarThickness: 32
         }]

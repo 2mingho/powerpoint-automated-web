@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var pending = 0;
         receivedList.innerHTML = data.requests.length
           ? data.requests.map(function (r) { if (r.status === 'Pendiente') pending++; return renderRequestCard(r, true); }).join('')
-          : '<div class="task-comments-empty">Sin solicitudes recibidas.</div>';
+          : '<div class="task-comments-empty">Ninguna unidad te ha pedido trabajo todavia. Cuando lo hagan, apareceran aqui para aceptarlas o rechazarlas.</div>';
         if (receivedBadge) receivedBadge.textContent = String(pending);
         if (receivedBadgeInline) receivedBadgeInline.textContent = String(pending);
       });
@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (sentBadgeInline) sentBadgeInline.textContent = String(data.requests.length);
         sentList.innerHTML = data.requests.length
           ? data.requests.map(function (r) { return renderRequestCard(r, false); }).join('')
-          : '<div class="task-comments-empty">Sin solicitudes enviadas.</div>';
+          : '<div class="task-comments-empty">No has pedido trabajo a otra unidad. Usa Solicitar en Mis tareas para derivar algo sin asignarlo tu.</div>';
       });
   }
 
@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', function () {
     currentRequestId = requestId;
     acceptAssignee.innerHTML = '<option value="">Cargando...</option>';
     acceptDueDate.value = '';
-    acceptModal.classList.remove('modal-hidden');
+    window.abrirModal(acceptModal);
 
     // Load team users for assignee select
     fetch('/api/team/tasks/filters')
@@ -161,18 +161,18 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function closeAcceptModal() {
-    acceptModal.classList.add('modal-hidden');
+    window.cerrarModal(acceptModal);
     currentRequestId = null;
   }
 
   function openRejectModal(requestId) {
     currentRejectRequestId = requestId;
     if (rejectReason) rejectReason.value = '';
-    if (rejectModal) rejectModal.classList.remove('modal-hidden');
+    if (rejectModal) window.abrirModal(rejectModal);
   }
 
   function closeRejectModal() {
-    if (rejectModal) rejectModal.classList.add('modal-hidden');
+    if (rejectModal) window.cerrarModal(rejectModal);
     currentRejectRequestId = null;
   }
 

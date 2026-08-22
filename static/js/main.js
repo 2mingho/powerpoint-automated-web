@@ -1,6 +1,24 @@
 // ─── Global HTML escaping helper ───
 // Canonical escape for any user-supplied value injected via innerHTML.
 // Defined on window so every module shares one implementation.
+/* ─── ABRIR Y CERRAR MODALES ───
+   Habia dos mecanismos compitiendo para lo mismo: la clase .modal-hidden y el
+   par ".task-modal-overlay { display:none }" + ".open { display:flex }". Un
+   modal marcado con las dos solo se abria si alguien recordaba tocar las dos,
+   y varios no lo hacian: quedaban en display:none para siempre. Estas dos
+   funciones son ahora la unica forma de abrir y cerrar. */
+window.abrirModal = function (elemento) {
+  if (!elemento) return;
+  elemento.classList.remove("modal-hidden");
+  elemento.classList.add("open");
+};
+
+window.cerrarModal = function (elemento) {
+  if (!elemento) return;
+  elemento.classList.remove("open");
+  elemento.classList.add("modal-hidden");
+};
+
 window.escapeHtml = function (value) {
   return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')

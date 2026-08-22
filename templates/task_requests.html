@@ -6,23 +6,14 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 
 <div class="tr-shell">
-  <section class="tr-hero">
-    <div class="tr-hero-copy">
-      <p class="tasks-kicker">Inbox compartida</p>
-      <h1>Solicitudes entre equipos</h1>
-      <p class="tasks-hero-text">Revisa pendientes, acepta con contexto y responde sin perder trazabilidad.</p>
-    </div>
-    <div class="tr-stats">
-      <article class="tr-stat-card">
-        <span class="tr-stat-label">Pendientes recibidas</span>
-        <strong id="trReceivedBadge">0</strong>
-      </article>
-      <article class="tr-stat-card">
-        <span class="tr-stat-label">Enviadas</span>
-        <strong id="trSentCount">0</strong>
-      </article>
-    </div>
-  </section>
+  {#
+    Igual que en tareas: el hero repetia en un <h1> el nombre que ya da la
+    barra superior y añadia dos tarjetas con los mismos dos numeros que las
+    pestanas ya llevan al lado. El contenido empezaba en el pixel 580.
+    Los contadores se conservan ocultos porque el JS los escribe.
+  #}
+  <span class="visually-hidden" id="trReceivedBadge">0</span>
+  <span class="visually-hidden" id="trSentCount">0</span>
 
   <section class="tr-panel">
     <div class="tr-tabs">

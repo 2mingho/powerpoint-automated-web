@@ -98,15 +98,14 @@
   justify-content: flex-end;
 }
 
+/* Una sola columna. La derecha solo contenia tres fichas decorativas que
+   describian acciones sin ejecutar ninguna, y repetian los botones de la
+   cabecera. */
 .tasks-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 20px;
-  align-items: start;
+  display: block;
 }
 
-.tasks-main-column,
-.tasks-side-column {
+.tasks-main-column {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -391,9 +390,9 @@
   background: var(--c-bg);
 }
 
-.task-status-dot.st-pendiente { color: #b45309; }
-.task-status-dot.st-completado { color: #047857; }
-.task-status-dot.st-bloqueado { color: #b91c1c; }
+.task-status-dot.st-pendiente { color: var(--c-prio-media); }
+.task-status-dot.st-completado { color: var(--c-success); }
+.task-status-dot.st-bloqueado { color: var(--c-prio-alta); }
 
 .tr-card-muted {
   color: var(--c-text-secondary);
@@ -1824,9 +1823,11 @@
   margin-top: 4px;
 }
 
-.dot.st-pendiente  { background: #f59e0b; }
-.dot.st-en-progreso { background: #2563eb; }
-.dot.st-completado  { background: #10b981; }
+/* Los puntos del resumen y las porciones del grafico representan lo mismo:
+   deben usar los mismos tokens, no una paleta suelta cada uno. */
+.dot.st-pendiente   { background: var(--c-prio-media); }
+.dot.st-en-progreso { background: var(--c-info); }
+.dot.st-completado  { background: var(--c-success); }
 
 /* Tasks grid */
 .td-grid {
@@ -2095,12 +2096,40 @@
     box-shadow: 0 6px 20px rgba(0,0,0,0.25);
   }
 
+  /* Antes se ocultaban las etiquetas y quedaban dos iconos pelados: "+" se
+     entiende, pero un "⇄" a secas no dice nada y en pantalla tactil no hay
+     tooltip que lo rescate. Se conservan las etiquetas y se deja que la barra
+     envuelva, que cuesta una fila solo cuando hace falta. */
   .btn-label-desktop {
-    display: none;
+    display: inline;
   }
 
-  .tasks-side-column {
+  .tasks-bar {
+    gap: var(--sp-sm);
+  }
+
+  .tasks-bar .tasks-search-wrap {
+    flex: 1 1 100%;
+    max-width: none;
+    order: 3;
+  }
+
+  .tasks-bar-actions {
     order: 2;
+    margin-left: auto;
+  }
+
+  /* Las tres vistas caben justas; si el idioma las alarga, se desplazan en
+     horizontal en vez de romper la fila. */
+  .tasks-views {
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tasks-view-btn {
+    padding: 8px 12px;
+    flex-shrink: 0;
   }
 
   .tasks-main-column {
@@ -2173,22 +2202,30 @@
     border-radius: 0;
   }
 
+  /* Tres bloques —navegacion, titulo y selector de vista— no caben en una
+     fila de 390px: el titulo se montaba encima de los botones. Se apilan: el
+     titulo arriba, los controles debajo. */
   .fc .fc-toolbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "titulo titulo"
+      "navegar vistas";
     align-items: center;
     column-gap: 8px;
-    row-gap: 0;
+    row-gap: var(--sp-sm);
     margin-bottom: var(--sp-sm);
   }
 
   .fc .fc-toolbar-title {
-    font-size: 0.95rem;
+    grid-area: titulo;
+    font-size: 1rem;
+    font-weight: 700;
     margin: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-align: center;
+    text-align: left;
   }
 
   .fc .fc-toolbar-chunk {
@@ -2198,14 +2235,17 @@
   }
 
   .fc .fc-toolbar-chunk:nth-child(1) {
+    grid-area: navegar;
     justify-content: flex-start;
   }
 
+  /* El bloque del titulo queda vacio: el <h2> se coloca por area propia. */
   .fc .fc-toolbar-chunk:nth-child(2) {
-    justify-content: center;
+    display: contents;
   }
 
   .fc .fc-toolbar-chunk:nth-child(3) {
+    grid-area: vistas;
     justify-content: flex-end;
     overflow-x: auto;
     overflow-y: hidden;
@@ -2772,6 +2812,25 @@
    leer una rejilla de mes ni a tocar un filtro.
    ═══════════════════════════════════════════════════════ */
 
+/* ─── BARRA DE PAGINA ───
+   Sustituye al hero de 152px cuyo <h1> repetia el nombre que ya da la barra
+   superior. Vistas a la izquierda, acciones a la derecha. */
+.tasks-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-md);
+}
+
+.tasks-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-wrap: wrap;
+}
+
 .tasks-views {
   display: flex;
   gap: 2px;
@@ -2781,6 +2840,7 @@
   border: 1px solid var(--c-border-light);
   border-radius: var(--r-lg);
   width: fit-content;
+  margin-bottom: 0;
 }
 
 .tasks-view-btn {
@@ -2813,10 +2873,20 @@
 }
 
 /* Solo se pinta la vista activa. */
-.tasks-shell[data-vista="hoy"] .tasks-panel--calendar,
-.tasks-shell[data-vista="hoy"] .tasks-panel--filters,
-.tasks-shell[data-vista="calendario"] .tasks-panel--today {
+/* Solo se pinta la vista activa. Los filtros pertenecen al calendario: en
+   "Hoy" y en "Observadas" no filtran nada y solo ocupan sitio. */
+.tasks-panel--today,
+.tasks-panel--calendar,
+.tasks-panel--filters,
+.tasks-panel--watching {
   display: none;
+}
+
+.tasks-shell[data-vista="hoy"] .tasks-panel--today,
+.tasks-shell[data-vista="calendario"] .tasks-panel--calendar,
+.tasks-shell[data-vista="calendario"] .tasks-panel--filters,
+.tasks-shell[data-vista="observadas"] .tasks-panel--watching {
+  display: block;
 }
 
 .today-groups {
@@ -3341,4 +3411,138 @@
 .td-kpi.is-active .td-kpi-hint::after {
   content: " · activo";
   font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════
+   BARRA DE FILTROS PLEGABLE
+   Los filtros ocupaban un panel entero siempre desplegado y empujaban el
+   calendario fuera de la pantalla. Ahora solo el buscador y el aviso de
+   vencidas viven siempre a la vista.
+   ═══════════════════════════════════════════════════════ */
+
+.tasks-panel--filters {
+  padding: 0;
+}
+
+.tasks-filters-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: 10px var(--sp-lg);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--c-text);
+  border-radius: var(--r-xl);
+}
+
+.tasks-filters-head::-webkit-details-marker { display: none; }
+
+.tasks-filters-head > i { color: var(--c-text-secondary); font-size: 0.8rem; }
+
+.tasks-filters-head::after {
+  content: "\f078";
+  font-family: "Font Awesome 6 Free";
+  font-weight: 900;
+  font-size: 0.68rem;
+  margin-left: auto;
+  color: var(--c-text-secondary);
+  transition: transform var(--t-fast);
+}
+
+.tasks-panel--filters[open] .tasks-filters-head::after { transform: rotate(180deg); }
+
+.tasks-filters-head:hover { background: var(--c-bg); }
+
+.tasks-filters-head:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -2px;
+}
+
+/* Un filtro activo dentro de un panel plegado es invisible: el contador lo
+   dice desde fuera. */
+.tasks-filters-count {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--c-primary-text);
+  background: var(--c-primary);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+}
+
+.tasks-panel--filters .tasks-filters {
+  padding: 0 var(--sp-lg) var(--sp-md);
+  border-top: 1px solid var(--c-border-light);
+  padding-top: var(--sp-md);
+}
+
+/* ─── Buscador siempre visible ─── */
+/* El buscador vive dentro de la barra de pagina: darle una fila propia
+   empujaba el contenido 88px hacia abajo para una sola caja de texto. */
+.tasks-search-wrap {
+  position: relative;
+  flex: 1 1 180px;
+  min-width: 160px;
+  max-width: 340px;
+}
+
+.tasks-search-wrap > i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--c-text-secondary);
+  font-size: 0.82rem;
+  pointer-events: none;
+}
+
+.tasks-search-wrap .form-input {
+  padding-left: 34px;
+  width: 100%;
+}
+
+/* El titulo de cada panel repetia la pestana recien pulsada. Se conserva para
+   lectores de pantalla, que si necesitan el nombre de la region. */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tasks-panel-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--sp-sm);
+}
+
+.tasks-panel-hint {
+  margin: 0 0 var(--sp-md);
+  font-size: 0.8rem;
+  color: var(--c-text-secondary);
+}
+
+/* Exportar e importar son mantenimiento, no la respuesta que se busca al
+   entrar: van despues de las cifras y sin ocupar una fila entera. */
+.td-hero {
+  margin-bottom: var(--sp-lg);
+}
+
+.td-hero-actions {
+  justify-content: flex-start;
+}
+
+@media (max-width: 768px) {
+  .td-headline {
+    gap: var(--sp-sm);
+  }
+  .td-kpi {
+    padding: var(--sp-md);
+  }
+  .td-kpi-value { font-size: 1.5rem; }
+  .td-hero-actions .btn { flex: 0 0 auto; }
 }

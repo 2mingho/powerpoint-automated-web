@@ -6,48 +6,53 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 
 <div class="tasks-shell" id="tasksShell" data-vista="hoy" data-hoy="{{ hoy }}">
-  <section class="tasks-hero">
-    <div class="tasks-hero-copy">
-      <p class="tasks-kicker">Planifica, sigue y desbloquea</p>
-      <h1>Gestión de tareas</h1>
-      <p class="tasks-hero-text">Calendario, filtros y acciones rápidas en un solo sitio. Menos clicks, más foco.</p>
+  {#
+    Barra unica de pagina. Antes habia un hero de 152px cuyo <h1> repetia
+    literalmente el nombre que la barra superior ya muestra, mas una linea de
+    eslogan; el contenido util empezaba en el pixel 340. Vistas a la izquierda,
+    acciones a la derecha, y se acabo.
+
+    "Observadas" era un panel que se desplegaba en la columna derecha, fuera de
+    la pantalla: se pulsaba y no pasaba nada visible. Pasa a ser una vista mas,
+    que es lo que siempre fue.
+  #}
+  <div class="tasks-bar">
+    <div class="tasks-views" role="tablist" aria-label="Vista de tareas">
+      <button type="button" class="tasks-view-btn" role="tab" data-vista="hoy" aria-selected="true" aria-controls="tasksTodayView">
+        <i class="fa-solid fa-list-check"></i> <span>Hoy</span>
+      </button>
+      <button type="button" class="tasks-view-btn" role="tab" data-vista="calendario" aria-selected="false" aria-controls="tasksCalendarPanel">
+        <i class="fa-regular fa-calendar"></i> <span>Calendario</span>
+      </button>
+      <button type="button" class="tasks-view-btn" role="tab" data-vista="observadas" aria-selected="false" aria-controls="tasksWatchingPanel">
+        <i class="fa-regular fa-eye"></i> <span>Observadas</span>
+      </button>
     </div>
-    <div class="tasks-hero-actions">
-      <button class="btn btn-primary" id="btnNewTask" aria-label="Nueva tarea">
-        <i class="fa-solid fa-plus"></i> <span class="btn-label-desktop">Nueva tarea</span>
-      </button>
-      <button class="btn btn-secondary" id="btnWatchingTasks" type="button" aria-label="Tareas que observo">
-        <i class="fa-regular fa-eye"></i> <span class="btn-label-desktop">Observadas</span>
-      </button>
-      <button class="btn btn-secondary" id="btnRequestTask" type="button" aria-label="Solicitar a otra unidad">
+
+    <div class="tasks-search-wrap">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" class="form-input" id="tasksSearch" placeholder="Buscar tareas" maxlength="100" aria-label="Buscar tareas">
+    </div>
+
+    <div class="tasks-bar-actions">
+      <span class="tasks-overdue-badge modal-hidden" id="tasksOverdueBadge" role="button" tabindex="0">0 vencidas</span>
+      <button class="btn btn-secondary btn-sm" id="btnRequestTask" type="button" aria-label="Solicitar a otra unidad">
         <i class="fa-solid fa-arrow-right-arrow-left"></i> <span class="btn-label-desktop">Solicitar</span>
       </button>
+      <button class="btn btn-primary btn-sm" id="btnNewTask" aria-label="Nueva tarea">
+        <i class="fa-solid fa-plus"></i> <span class="btn-label-desktop">Nueva tarea</span>
+      </button>
     </div>
-  </section>
-
-  {#
-    Conmutador de vistas (RED-2). El calendario dejo de ser el destino por
-    defecto: para saber que hay que hacer hoy no deberia hacer falta leer una
-    rejilla de mes. "Hoy" abre primero y el calendario queda a un clic.
-  #}
-  <div class="tasks-views" role="tablist" aria-label="Vista de tareas">
-    <button type="button" class="tasks-view-btn" role="tab" data-vista="hoy" aria-selected="true" aria-controls="tasksTodayView">
-      <i class="fa-solid fa-list-check"></i> Hoy
-    </button>
-    <button type="button" class="tasks-view-btn" role="tab" data-vista="calendario" aria-selected="false" aria-controls="tasksCalendarPanel">
-      <i class="fa-regular fa-calendar"></i> Calendario
-    </button>
   </div>
+
+  <div class="tasks-search-results modal-hidden" id="tasksSearchResults"></div>
 
   <section class="tasks-grid">
     <div class="tasks-main-column">
       {# ─── Vista Hoy (RED-2) ─── #}
       <section class="tasks-panel tasks-panel--today" id="tasksTodayView" aria-labelledby="tasksTodayTitle">
-        <div class="tasks-section-head">
-          <div>
-            <h2 id="tasksTodayTitle">Tu trabajo</h2>
-            <p id="tasksTodaySubtitle">Lo vencido primero, luego hoy, luego el resto de la semana.</p>
-          </div>
+        <div class="tasks-panel-tools">
+          <h2 id="tasksTodayTitle" class="visually-hidden">Tu trabajo</h2>
           <button class="btn btn-secondary btn-sm" id="btnTodayRefresh" type="button">
             <i class="fa-solid fa-rotate"></i> Actualizar
           </button>
@@ -58,16 +63,20 @@
         </div>
       </section>
 
-      <section class="tasks-panel tasks-panel--filters" aria-labelledby="tasksFiltersTitle">
-        <div class="tasks-section-head">
-          <div>
-            <h2 id="tasksFiltersTitle">Filtros y búsqueda</h2>
-            <p>Reduce ruido antes de abrir el calendario.</p>
-          </div>
-          <button class="btn btn-secondary btn-sm" id="btnClearTaskFilters" type="button">
-            <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar
-          </button>
-        </div>
+      {#
+        Los filtros ocupaban un panel entero con titulo, subtitulo y seis
+        controles siempre desplegados, empujando el calendario fuera de la
+        pantalla. Pasan a una barra plegada: el buscador y el aviso de vencidas
+        —lo unico que se usa a diario— quedan siempre a la vista; el resto se
+        abre cuando hace falta. La cabecera dice cuantos filtros hay puestos
+        para que nadie deje uno activo sin darse cuenta.
+      #}
+      <details class="tasks-panel tasks-panel--filters" id="tasksFiltersPanel">
+        <summary class="tasks-filters-head">
+          <i class="fa-solid fa-filter" aria-hidden="true"></i>
+          <span class="tasks-filters-title">Filtros</span>
+          <span class="tasks-filters-count" id="tasksFiltersCount" hidden>0</span>
+        </summary>
 
         <div class="tasks-filters" id="tasksFilters">
           <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
@@ -97,7 +106,6 @@
 
           <input type="search" class="form-input" id="tasksFilterClient" placeholder="Filtrar por cliente" maxlength="100" aria-label="Filtrar por cliente">
 
-          <input type="search" class="form-input" id="tasksSearch" placeholder="Buscar tareas" maxlength="100" aria-label="Buscar tareas">
 
           {% if current_user.is_admin %}
           <select class="form-select" id="tasksFilterArea" aria-label="Filtrar por unidad">
@@ -108,19 +116,16 @@
           </select>
           {% endif %}
 
-          <span class="tasks-overdue-badge modal-hidden" id="tasksOverdueBadge" role="button" tabindex="0">0 vencidas</span>
+          <button class="btn btn-secondary btn-sm" id="btnClearTaskFilters" type="button">
+            <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar
+          </button>
         </div>
+      </details>
 
-        <div class="tasks-search-results modal-hidden" id="tasksSearchResults"></div>
-      </section>
 
       <section class="tasks-panel tasks-panel--calendar" id="tasksCalendarPanel" aria-labelledby="tasksCalendarTitle">
-        <div class="tasks-section-head tasks-section-head--stacked">
-          <div>
-            <h2 id="tasksCalendarTitle">Calendario de trabajo</h2>
-            <p>Haz clic en una tarea para editarla. Usa selección múltiple para acciones masivas.</p>
-          </div>
-        </div>
+        <h2 id="tasksCalendarTitle" class="visually-hidden">Calendario de trabajo</h2>
+        <p class="tasks-panel-hint">Haz clic en una tarea para editarla. Usa selección múltiple para acciones masivas.</p>
 
         <div class="tasks-calendar-wrap">
           <div id="tasksCalendar"></div>
@@ -128,30 +133,22 @@
       </section>
     </div>
 
-    <aside class="tasks-side-column">
-      <section class="tasks-quick-actions">
-        <article class="tasks-quick-card">
-          <div class="tasks-quick-icon"><i class="fa-solid fa-bolt"></i></div>
+      <section class="tasks-panel tasks-panel--watching" id="tasksWatchingPanel" aria-labelledby="tasksWatchingTitle">
+        <div class="tasks-section-head">
           <div>
-            <h3>Crear rápido</h3>
-            <p>Abre una tarea nueva sin perder contexto.</p>
+            <h2 id="tasksWatchingTitle">Tareas que observo</h2>
+            <p>Trabajo que sigues sin que sea tuyo. Te avisamos de sus cambios.</p>
           </div>
-        </article>
-        <article class="tasks-quick-card">
-          <div class="tasks-quick-icon"><i class="fa-regular fa-eye"></i></div>
-          <div>
-            <h3>Seguimiento</h3>
-            <p>Revisa tareas observadas y retoma pendientes.</p>
-          </div>
-        </article>
-        <article class="tasks-quick-card">
-          <div class="tasks-quick-icon"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
-          <div>
-            <h3>Solicitud cruzada</h3>
-            <p>Deriva trabajo a otra unidad con un formulario corto.</p>
-          </div>
-        </article>
+          <button class="btn btn-secondary btn-sm" id="btnWatchingRefresh" type="button">
+            <i class="fa-solid fa-rotate"></i> Actualizar
+          </button>
+        </div>
+        <div class="tasks-watching-list" id="tasksWatchingList">
+          <div class="task-comments-empty">No observas ninguna tarea. Observar una te avisa de sus cambios sin que sea tuya.</div>
+        </div>
       </section>
+    </div>
+  </section>
 
       <section class="tasks-panel tasks-panel--watching modal-hidden" id="tasksWatchingPanel">
         <div class="tasks-watching-header">
