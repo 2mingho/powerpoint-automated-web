@@ -1504,6 +1504,38 @@ document.addEventListener('DOMContentLoaded', function () {
       week: 'Semana',
       list: 'Lista'
     },
+    // El paquete index.global de FullCalendar no incluye los locales, asi que
+    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
+    // en ingles ("No events to display", "all-day") en mitad de una interfaz
+    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
+    allDayText: 'Todo el día',
+    noEventsText: 'No hay tareas en este rango.',
+    moreLinkText: function (n) { return '+' + n + ' más'; },
+    weekText: 'Sem',
+    // El paquete index.global de FullCalendar no incluye los locales, asi que
+    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
+    // en ingles ("No events to display", "all-day") en mitad de una interfaz
+    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
+    allDayText: 'Todo el día',
+    noEventsText: 'No hay tareas en este rango.',
+    moreLinkText: function (n) { return '+' + n + ' más'; },
+    weekText: 'Sem',
+    // El paquete index.global de FullCalendar no incluye los locales, asi que
+    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
+    // en ingles ("No events to display", "all-day") en mitad de una interfaz
+    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
+    allDayText: 'Todo el día',
+    noEventsText: 'No hay tareas en este rango.',
+    moreLinkText: function (n) { return '+' + n + ' más'; },
+    weekText: 'Sem',
+    // El paquete index.global de FullCalendar no incluye los locales, asi que
+    // locale:'es' solo afecta al formato de fechas: sus textos propios seguian
+    // en ingles ("No events to display", "all-day") en mitad de una interfaz
+    // en espanol. Se fijan aqui en vez de cargar otro bundle del CDN.
+    allDayText: 'Todo el día',
+    noEventsText: 'No hay tareas en este rango.',
+    moreLinkText: function (n) { return '+' + n + ' más'; },
+    weekText: 'Sem',
     height: 'auto',
     editable: true,
     selectable: true,

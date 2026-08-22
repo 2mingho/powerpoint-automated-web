@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% block title %}Organizacion | Admin{% endblock %}
+{% block page_name %}Organización{% endblock %}
+
+{% block content %}
+
+{#
+  Solo se configuran dos cosas: quién lidera cada unidad y quién reporta a
+  quién. El papel de cada persona y las unidades que alcanza no se guardan en
+  ninguna columna — se deducen de esas dos, y se muestran al lado para que el
+  efecto de un cambio se vea sin tener que adivinarlo.
+#}
+
+<div class="admin-shell view-start">
+
+<!-- ─── Quién lidera cada unidad ─── -->
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title">
+    <i class="fa-solid fa-sitemap"></i> Quién lidera cada unidad
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Un manager puede llevar varias unidades. Quien esté por encima de él las hereda sin necesidad de asignárselas.</span>
+    </div>
+  </div>
+
+  {% if areas | length == 0 %}
+    <p class="admin-empty">No hay unidades definidas. Créalas en <a href="{{ url_for('admin.areas_list') }}">Gestión de Áreas</a>.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
+      <thead>
+        <tr><th style="width: 22%;">Unidad</th><th>Líderes</th><th style="width: 34%;">Añadir líder</th></tr>
+      </thead>
+      <tbody>
+        {% for area in areas %}
+        <tr>
+          <td><strong>{{ area.name }}</strong></td>
+          <td>
+            {% set lideres = lideres_por_area.get(area.id, []) %}
+            {% if lideres | length == 0 %}
+              <span class="org-sin">Sin líder — nadie recibe sus solicitudes</span>
+            {% else %}
+              <div class="org-chips">
+                {% for lider in lideres %}
+                <form method="POST" action="{{ url_for('admin.organizacion_lider_remove') }}" class="org-chip-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="area_id" value="{{ area.id }}">
+                  <input type="hidden" name="user_id" value="{{ lider.id }}">
+                  <span class="org-chip">
+                    {{ lider.username }}
+                    <button type="submit" class="org-chip-x" title="Quitar como líder" aria-label="Quitar a {{ lider.username }} como líder de {{ area.name }}">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </span>
+                </form>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.organizacion_lider_add') }}" class="org-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="area_id" value="{{ area.id }}">
+              <select name="user_id" class="form-select" aria-label="Persona a añadir como líder de {{ area.name }}">
+                <option value="">Selecciona persona…</option>
+                {% for u in usuarios %}
+                <option value="{{ u.id }}">{{ u.username }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-secondary btn-sm"><i class="fa-solid fa-plus"></i> Añadir</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ─── Cadena de mando, y lo que se deduce de ella ─── -->
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title">
+    <i class="fa-solid fa-user-group"></i> Cadena de mando
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">El papel y el alcance no se asignan: salen de quién lidera qué y de quién reporta a quién.</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
+      <thead>
+        <tr>
+          <th style="width: 16%;">Persona</th>
+          <th style="width: 26%;">Reporta a</th>
+          <th style="width: 12%;">Papel</th>
+          <th>Alcance deducido</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in filas %}
+        <tr>
+          <td>
+            <strong>{{ fila.usuario.username }}</strong>
+            {% if fila.usuario.area %}
+            <span class="org-unidad">{{ fila.usuario.area.name }}</span>
+            {% else %}
+            <span class="org-unidad org-unidad-sin">sin unidad</span>
+            {% endif %}
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.organizacion_superior') }}" class="org-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="user_id" value="{{ fila.usuario.id }}">
+              <select name="manager_id" class="form-select" aria-label="Superior de {{ fila.usuario.username }}">
+                <option value="">Nadie</option>
+                {% for u in usuarios %}
+                  {% if u.id != fila.usuario.id %}
+                  <option value="{{ u.id }}" {% if fila.usuario.manager_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                  {% endif %}
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-secondary btn-sm">Guardar</button>
+            </form>
+            {% if fila.superiores | length > 1 %}
+            <div class="org-cadena">
+              vía {% for jefe in fila.superiores %}{{ jefe.username }}{% if not loop.last %} → {% endif %}{% endfor %}
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="org-papel org-papel-{{ fila.papel }}">{{ fila.papel }}</span>
+            {% if fila.a_cargo > 0 %}
+            <div class="org-cadena">{{ fila.a_cargo }} a cargo</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if fila.unidades_alcance | length == 0 %}
+              <span class="org-sin">Ninguna — no ve el panel de equipo</span>
+            {% else %}
+              <div class="org-chips">
+                {% for nombre in fila.unidades_alcance %}
+                <span class="org-chip org-chip-quieto">{{ nombre }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="org-nota">
+    El alcance es lo que cada persona verá en el panel de equipo: las unidades que
+    lidera más las de quienes tiene a su cargo. Un empleado no alcanza ninguna,
+    aunque pertenezca a una unidad.
+  </p>
+</section>
+
+</div>
+
+<style>
+  .org-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .org-chip-form { display: contents; }
+
+  .org-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 5px 3px 10px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-pill);
+    background: var(--c-bg);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .org-chip-quieto { padding: 3px 10px; }
+
+  .org-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--c-text-secondary);
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+  .org-chip-x:hover { background: var(--c-danger-bg); color: var(--c-danger); }
+  .org-chip-x:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 1px; }
+
+  .org-inline { display: flex; align-items: center; gap: 8px; }
+  .org-inline .form-select { min-width: 0; flex: 1; }
+
+  .org-sin { font-size: 0.8rem; color: var(--c-text-secondary); font-style: italic; }
+
+  .org-unidad {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.74rem;
+    color: var(--c-text-secondary);
+  }
+  .org-unidad-sin { font-style: italic; }
+
+  .org-cadena {
+    margin-top: 4px;
+    font-size: 0.73rem;
+    color: var(--c-text-secondary);
+  }
+
+  /* El papel se deduce; el color solo lo acompaña, nunca lo sustituye. */
+  .org-papel {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: var(--r-pill);
+    font-size: 0.73rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    background: var(--c-bg);
+    color: var(--c-text-secondary);
+  }
+  .org-papel-manager  { background: var(--c-warning-bg); color: var(--c-warning); }
+  .org-papel-director { background: var(--c-primary-light); color: var(--c-primary-text); }
+  .org-papel-admin    { background: var(--c-danger-bg); color: var(--c-danger); }
+
+  .org-nota {
+    margin: 14px 0 0;
+    font-size: 0.8rem;
+    color: var(--c-text-secondary);
+    max-width: 72ch;
+  }
+</style>
+
+{% endblock %}

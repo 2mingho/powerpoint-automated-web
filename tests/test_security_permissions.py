@@ -716,3 +716,95 @@ def test_sin_unidad_ni_liderazgo_solo_queda_uno_mismo(client):
         otro = User.query.filter_by(username='mismo-rol').first()
         assert tareas._assignee_in_current_unit(otro) is False
         assert tareas._assignee_in_current_unit(db.session.get(User, huerfano)) is True
+
+
+# ─────────────────────────────────────────────────────────────
+# La pantalla de organizacion
+# ─────────────────────────────────────────────────────────────
+
+def test_solo_un_admin_entra_a_organizacion(client):
+    with app_module.app.app_context():
+        normal = _create_user(username='no-admin', email='no-admin@example.com')
+
+    _login_as(client, normal)
+    assert client.get('/admin/organizacion').status_code in (302, 403)
+
+
+def test_asignar_y_quitar_liderazgo_desde_la_pantalla(client):
+    from models import UnitLead
+
+    with app_module.app.app_context():
+        area = _create_area('Unidad gestionada')
+        jefe = _create_user(username='admin-org', email='admin-org@example.com', role='admin')
+        persona = _create_user(username='futura-manager', email='futura-manager@example.com')
+
+    _login_as(client, jefe)
+
+    client.post('/admin/organizacion/lider',
+                data={'area_id': area, 'user_id': persona}, follow_redirects=True)
+    with app_module.app.app_context():
+        assert UnitLead.query.filter_by(area_id=area, user_id=persona).count() == 1
+
+    client.post('/admin/organizacion/lider/quitar',
+                data={'area_id': area, 'user_id': persona}, follow_redirects=True)
+    with app_module.app.app_context():
+        assert UnitLead.query.filter_by(area_id=area, user_id=persona).count() == 0
+
+
+def test_la_pantalla_rechaza_un_bucle_en_la_cadena(client):
+    """Un ciclo no se ve venir desde la interfaz.
+
+    Si el superior elegido ya cuelga de esta persona, asignarlo cierra el
+    bucle. El resolvedor lo sobrevive, pero la organizacion no significa nada.
+    """
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-bucle', email='admin-bucle@example.com', role='admin')
+        arriba = _create_user(username='arriba', email='arriba@example.com')
+        abajo = _create_user(username='abajo', email='abajo@example.com')
+        db.session.get(User, abajo).manager_id = arriba
+        db.session.commit()
+
+    _login_as(client, jefe)
+
+    # arriba pasaria a reportar a abajo, que ya cuelga de arriba.
+    respuesta = client.post('/admin/organizacion/superior',
+                            data={'user_id': arriba, 'manager_id': abajo},
+                            follow_redirects=True)
+
+    assert b'bucle' in respuesta.data
+    with app_module.app.app_context():
+        assert db.session.get(User, arriba).manager_id is None, 'no debio asignarse'
+
+
+def test_nadie_puede_ser_su_propio_superior(client):
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-solo', email='admin-solo@example.com', role='admin')
+        persona = _create_user(username='solitario', email='solitario@example.com')
+
+    _login_as(client, jefe)
+    client.post('/admin/organizacion/superior',
+                data={'user_id': persona, 'manager_id': persona}, follow_redirects=True)
+
+    with app_module.app.app_context():
+        assert db.session.get(User, persona).manager_id is None
+
+
+def test_la_pantalla_muestra_el_alcance_deducido(client):
+    """Lo que se configura y lo que se deduce, en la misma pagina."""
+    from models import UnitLead
+
+    with app_module.app.app_context():
+        area = _create_area('Comunicacion')
+        jefe = _create_user(username='admin-vista', email='admin-vista@example.com', role='admin')
+        manager = _create_user(username='mgr-vista', email='mgr-vista@example.com')
+        director = _create_user(username='dir-vista', email='dir-vista@example.com')
+        db.session.add(UnitLead(user_id=manager, area_id=area))
+        db.session.get(User, manager).manager_id = director
+        db.session.commit()
+
+    _login_as(client, jefe)
+    cuerpo = client.get('/admin/organizacion').data.decode()
+
+    assert 'mgr-vista' in cuerpo and 'dir-vista' in cuerpo
+    assert 'manager' in cuerpo and 'director' in cuerpo
+    assert cuerpo.count('Comunicacion') >= 2, 'la unidad debe salir en el alcance de los dos'

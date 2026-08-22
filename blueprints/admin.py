@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user, login_user
 from werkzeug.security import generate_password_hash
 from extensions import db
-from models import User, ActivityLog, Role, Area
+from models import User, ActivityLog, Role, Area, UnitLead
 
 # The default admin email — this account is fully protected
 DEFAULT_ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
@@ -551,3 +551,174 @@ def area_delete(area_id):
     log_activity('area_delete', f'Area eliminada: {area.name}')
     flash('Area eliminada.', 'success')
     return redirect(url_for('admin.areas_list'))
+
+
+# ─────────────────────────────────────────────────────────────
+# Organizacion: quien lidera que unidad y quien reporta a quien
+# ─────────────────────────────────────────────────────────────
+#
+# Son las dos unicas relaciones que hacen falta. Todo lo demas —el papel de
+# cada uno y las unidades que alcanza— se deduce de ellas, y la pantalla lo
+# muestra al lado para que el efecto de un cambio se vea sin adivinarlo.
+
+def _cadena_hacia_arriba(user):
+    """Los superiores de alguien, de abajo arriba. Corta ciclos."""
+    cadena, visto = [], set()
+    actual = user.manager_id
+    while actual and actual not in visto:
+        visto.add(actual)
+        jefe = db.session.get(User, actual)
+        if jefe is None:
+            break
+        cadena.append(jefe)
+        actual = jefe.manager_id
+    return cadena
+
+
+@admin_bp.route('/organizacion')
+@admin_required
+def organizacion():
+    from services.alcance import alcance_unidades, papel, personas_a_cargo
+
+    areas = Area.query.order_by(Area.name).all()
+    usuarios = User.query.filter_by(is_active=True).order_by(User.username).all()
+
+    lideres_por_area = {a.id: [] for a in areas}
+    for fila in UnitLead.query.all():
+        if fila.area_id in lideres_por_area:
+            usuario = db.session.get(User, fila.user_id)
+            if usuario:
+                lideres_por_area[fila.area_id].append(usuario)
+
+    nombre_area = {a.id: a.name for a in areas}
+
+    filas = []
+    for u in usuarios:
+        alcance = alcance_unidades(u, usar_cache=False)
+        filas.append({
+            'usuario': u,
+            'papel': papel(u),
+            'unidades_alcance': sorted(nombre_area.get(i, f'#{i}') for i in alcance),
+            'a_cargo': len(personas_a_cargo(u)) - 1,
+            'superiores': _cadena_hacia_arriba(u),
+        })
+
+    return render_template(
+        'admin_organizacion.html',
+        areas=areas,
+        usuarios=usuarios,
+        lideres_por_area=lideres_por_area,
+        filas=filas,
+    )
+
+
+@admin_bp.route('/organizacion/lider', methods=['POST'])
+@admin_required
+def organizacion_lider_add():
+    from services.alcance import invalidar_cache_alcance
+
+    try:
+        area_id = int(request.form.get('area_id', ''))
+        user_id = int(request.form.get('user_id', ''))
+    except (TypeError, ValueError):
+        flash('Selecciona una unidad y una persona.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    area = db.session.get(Area, area_id)
+    usuario = db.session.get(User, user_id)
+    if not area or not usuario:
+        flash('Unidad o persona no encontrada.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    if UnitLead.query.filter_by(area_id=area_id, user_id=user_id).first():
+        flash(f'{usuario.username} ya lidera {area.name}.', 'warning')
+        return redirect(url_for('admin.organizacion'))
+
+    db.session.add(UnitLead(user_id=user_id, area_id=area_id))
+    db.session.commit()
+    invalidar_cache_alcance()
+    log_activity('unit_lead_add', f'{usuario.username} lidera {area.name}')
+    flash(f'{usuario.username} ahora lidera {area.name}.', 'success')
+    return redirect(url_for('admin.organizacion'))
+
+
+@admin_bp.route('/organizacion/lider/quitar', methods=['POST'])
+@admin_required
+def organizacion_lider_remove():
+    from services.alcance import invalidar_cache_alcance
+
+    try:
+        area_id = int(request.form.get('area_id', ''))
+        user_id = int(request.form.get('user_id', ''))
+    except (TypeError, ValueError):
+        return redirect(url_for('admin.organizacion'))
+
+    fila = UnitLead.query.filter_by(area_id=area_id, user_id=user_id).first()
+    if fila is None:
+        return redirect(url_for('admin.organizacion'))
+
+    area = db.session.get(Area, area_id)
+    usuario = db.session.get(User, user_id)
+    db.session.delete(fila)
+    db.session.commit()
+    invalidar_cache_alcance()
+
+    nombre = usuario.username if usuario else f'#{user_id}'
+    unidad = area.name if area else f'#{area_id}'
+    log_activity('unit_lead_remove', f'{nombre} deja de liderar {unidad}')
+    flash(f'{nombre} ya no lidera {unidad}.', 'success')
+    return redirect(url_for('admin.organizacion'))
+
+
+@admin_bp.route('/organizacion/superior', methods=['POST'])
+@admin_required
+def organizacion_superior():
+    from services.alcance import invalidar_cache_alcance, personas_a_cargo
+
+    try:
+        user_id = int(request.form.get('user_id', ''))
+    except (TypeError, ValueError):
+        return redirect(url_for('admin.organizacion'))
+
+    usuario = db.session.get(User, user_id)
+    if usuario is None:
+        flash('Persona no encontrada.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    crudo = (request.form.get('manager_id') or '').strip()
+    if not crudo:
+        usuario.manager_id = None
+        db.session.commit()
+        invalidar_cache_alcance()
+        log_activity('manager_clear', f'{usuario.username} ya no reporta a nadie')
+        flash(f'{usuario.username} ya no reporta a nadie.', 'success')
+        return redirect(url_for('admin.organizacion'))
+
+    try:
+        manager_id = int(crudo)
+    except ValueError:
+        return redirect(url_for('admin.organizacion'))
+
+    if manager_id == user_id:
+        flash('Nadie puede ser su propio superior.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    jefe = db.session.get(User, manager_id)
+    if jefe is None:
+        flash('Superior no encontrado.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    # Un ciclo no se ve venir desde la interfaz: si el jefe elegido ya cuelga
+    # de esta persona, asignarlo cierra el bucle. El resolvedor lo sobrevive,
+    # pero la organizacion resultante no significa nada.
+    if manager_id in personas_a_cargo(usuario):
+        flash(f'{jefe.username} ya esta por debajo de {usuario.username}: '
+              'asignarlo crearia un bucle en la cadena de mando.', 'error')
+        return redirect(url_for('admin.organizacion'))
+
+    usuario.manager_id = manager_id
+    db.session.commit()
+    invalidar_cache_alcance()
+    log_activity('manager_set', f'{usuario.username} reporta a {jefe.username}')
+    flash(f'{usuario.username} ahora reporta a {jefe.username}.', 'success')
+    return redirect(url_for('admin.organizacion'))
