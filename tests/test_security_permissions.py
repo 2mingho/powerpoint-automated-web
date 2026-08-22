@@ -12,7 +12,7 @@ os.environ.setdefault('ALLOW_SELF_REGISTRATION', 'false')
 
 import app as app_module  # noqa: E402
 from extensions import db  # noqa: E402
-from models import User, Report, Area, Task  # noqa: E402
+from models import User, Report, Area, Task, TempArtifact  # noqa: E402
 from datetime import date  # noqa: E402
 
 
@@ -227,3 +227,154 @@ def test_non_admin_cannot_delete_tasks_for_other_unit_by_day(client):
     with app_module.app.app_context():
         assert db.session.get(Task, own_task_id) is None
         assert db.session.get(Task, other_task_id) is not None
+
+
+# ─────────────────────────────────────────────────────────────
+# SEC-03: las sesiones de clasificacion pertenecen a quien las crea
+# ─────────────────────────────────────────────────────────────
+
+def _start_classification_session(client, user_id):
+    """Sube un CSV minimo y devuelve el session_id generado."""
+    _login_as(client, user_id)
+    csv_bytes = b'Hit Sentence,Autor\nprimera mencion,ana\nsegunda mencion,luis\n'
+    data = {'csv_file': (io.BytesIO(csv_bytes), 'fuente.csv')}
+    response = client.post('/clasificacion/upload', data=data,
+                           content_type='multipart/form-data')
+    assert response.status_code == 200, response.data
+    payload = response.get_json()
+    assert payload['success'], payload
+    return payload['session_id']
+
+
+def test_classification_session_is_registered_to_its_creator(client):
+    with app_module.app.app_context():
+        owner_id = _create_user(username='clf-owner', email='clf-owner@example.com',
+                                tools=['classification'])
+    session_id = _start_classification_session(client, owner_id)
+    with app_module.app.app_context():
+        artifact = TempArtifact.query.filter_by(kind='classify_session',
+                                                file_id=session_id).first()
+        assert artifact is not None and artifact.user_id == owner_id
+    assert client.get(f'/clasificacion/upload_body/{session_id}').status_code == 200
+
+
+def test_classification_session_body_not_readable_by_other_user(client):
+    with app_module.app.app_context():
+        owner_id = _create_user(username='clf-owner2', email='clf-owner2@example.com',
+                                tools=['classification'])
+        intruder_id = _create_user(username='clf-intruder', email='clf-intruder@example.com',
+                                   tools=['classification'])
+    session_id = _start_classification_session(client, owner_id)
+    _login_as(client, intruder_id)
+    assert client.get(f'/clasificacion/upload_body/{session_id}').status_code == 403
+
+
+def test_classification_chunk_rejected_for_other_user(client):
+    with app_module.app.app_context():
+        owner_id = _create_user(username='clf-owner3', email='clf-owner3@example.com',
+                                tools=['classification'])
+        intruder_id = _create_user(username='clf-intruder3', email='clf-intruder3@example.com',
+                                   tools=['classification'])
+    session_id = _start_classification_session(client, owner_id)
+    _login_as(client, intruder_id)
+    response = client.post('/clasificacion/chunk', json={
+        'session_id': session_id, 'header': 'Hit Sentence',
+        'rows': 'fila inyectada', 'rules': [], 'chunk_index': 0,
+    })
+    assert response.status_code == 403
+
+
+def test_classification_finalize_cannot_hijack_another_session(client):
+    with app_module.app.app_context():
+        owner_id = _create_user(username='clf-owner4', email='clf-owner4@example.com',
+                                tools=['classification'])
+        intruder_id = _create_user(username='clf-intruder4', email='clf-intruder4@example.com',
+                                   tools=['classification'])
+    session_id = _start_classification_session(client, owner_id)
+    _login_as(client, intruder_id)
+    assert client.post('/clasificacion/finalize', json={
+        'session_id': session_id, 'original_name': 'robado.csv'}).status_code == 403
+    with app_module.app.app_context():
+        artifact = TempArtifact.query.filter_by(kind='classify_session',
+                                                file_id=session_id).first()
+        assert artifact is not None and artifact.user_id == owner_id
+
+
+# ─────────────────────────────────────────────────────────────
+# SEC-02 / FUN-06: /generate_pptx valida y no escribe fuera de scratch
+# ─────────────────────────────────────────────────────────────
+
+def test_generate_pptx_rejects_missing_client_name(client):
+    with app_module.app.app_context():
+        user_id = _create_user(username='ppt-user', email='ppt-user@example.com',
+                               tools=['reports'])
+    _login_as(client, user_id)
+    response = client.post('/generate_pptx', json={'meta': {}})
+    assert response.status_code == 400
+    assert response.get_json()['success'] is False
+
+
+def test_generate_pptx_does_not_write_outside_scratch(client):
+    with app_module.app.app_context():
+        user_id = _create_user(username='ppt-user2', email='ppt-user2@example.com',
+                               tools=['reports'])
+    _login_as(client, user_id)
+    client.post('/generate_pptx', json={'meta': {'client_name': '../../pwned'}})
+    scratch_root = os.path.abspath(app_module.app.config['UPLOAD_FOLDER'])
+    escaped = os.path.join(os.path.dirname(os.path.dirname(scratch_root)),
+                           'Reporte_pwned.pptx')
+    assert not os.path.exists(escaped)
+
+
+# ─────────────────────────────────────────────────────────────
+# Proteccion de la base de produccion en arranques locales
+# ─────────────────────────────────────────────────────────────
+
+def _with_uri(uri, production):
+    original_uri = app_module.app.config['SQLALCHEMY_DATABASE_URI']
+    original_is_prod = app_module._is_production_mode
+    app_module.app.config['SQLALCHEMY_DATABASE_URI'] = uri
+    app_module._is_production_mode = lambda: production
+    try:
+        return app_module._startup_db_writes_allowed()
+    finally:
+        app_module.app.config['SQLALCHEMY_DATABASE_URI'] = original_uri
+        app_module._is_production_mode = original_is_prod
+
+
+def test_startup_never_writes_to_remote_db_from_a_dev_machine():
+    """
+    Exportar la DATABASE_URL de produccion en local no debe bastar para que el
+    arranque cree tablas, siembre el admin o ejecute la poda (que BORRA datos).
+    """
+    assert _with_uri('postgresql://u:p@ep-x.neon.tech/main', production=False) is False
+
+
+def test_startup_writes_allowed_on_local_sqlite():
+    assert _with_uri('sqlite:///instance/users.db', production=False) is True
+
+
+def test_startup_writes_allowed_in_production():
+    assert _with_uri('postgresql://u:p@ep-x.neon.tech/main', production=True) is True
+
+
+# ─────────────────────────────────────────────────────────────
+# FUN-01: zona horaria de negocio
+# ─────────────────────────────────────────────────────────────
+
+def test_business_timezone_is_behind_utc():
+    """
+    Republica Dominicana es UTC-4 todo el ano. A las 02:00 UTC del dia D en el
+    servidor, para el equipo son las 22:00 del dia D-1.
+    """
+    from datetime import datetime, timezone, timedelta
+    from services.clock import APP_TIMEZONE
+    utc_moment = datetime(2026, 3, 11, 2, 0, tzinfo=timezone.utc)
+    local_moment = utc_moment.astimezone(APP_TIMEZONE)
+    assert local_moment.date() == utc_moment.date() - timedelta(days=1)
+    assert local_moment.hour == 22
+
+
+def test_today_local_is_consistent_with_now_local():
+    from services.clock import now_local, today_local
+    assert today_local() == now_local().date()
