@@ -217,7 +217,7 @@
 
 {% block scripts %}
 <script>
-const API_BASE = {{ "'/api/team'" if scope == 'area' else "'/api/admin'" }};
+const API_BASE = {{ ('/api/team' if scope == 'area' else '/api/admin') | tojson }};
 const IS_TEAM_SCOPE = {{ 'true' if scope == 'area' else 'false' }};
 document.addEventListener('DOMContentLoaded', function() {
   const grid = document.getElementById('tdGrid');
