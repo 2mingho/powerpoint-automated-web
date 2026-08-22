@@ -123,7 +123,10 @@ def _task_in_current_unit(task):
     if current_user.is_admin:
         return True
 
-    if current_user.area_id and task.area_id == current_user.area_id:
+    # La tarea es visible si pertenece a alguna unidad del ambito, o si esta
+    # asignada a alguien con quien se trabaja. Lo segundo cubre las tareas que
+    # todavia no tienen area_id, que existen desde antes del modelo actual.
+    if task.area_id is not None and task.area_id in ambito_unidades(current_user):
         return True
 
     user_ids = set(_unit_user_ids())
@@ -184,8 +187,9 @@ def _apply_unit_scope(query):
     if not user_ids:
         user_ids = [current_user.id]
 
-    if current_user.area_id:
-        return query.filter(or_(Task.area_id == current_user.area_id, Task.assignee_id.in_(user_ids)))
+    unidades = ambito_unidades(current_user)
+    if unidades:
+        return query.filter(or_(Task.area_id.in_(unidades), Task.assignee_id.in_(user_ids)))
 
     return query.filter(Task.assignee_id.in_(user_ids))
 
@@ -984,7 +988,11 @@ def api_task_watchers_add(task_id):
         watcher = TaskWatcher(task_id=task.id, user_id=user_id, added_by_id=current_user.id)
         db.session.add(watcher)
 
-    if current_user.area_id and watcher_user.area_id and watcher_user.area_id != current_user.area_id:
+    # Marcar compartida si el observador viene de fuera del ambito de quien lo
+    # anade. Con un manager de varias unidades, "fuera" ya no es "otra area_id":
+    # es fuera del conjunto con el que trabaja.
+    ambito = ambito_unidades(current_user)
+    if ambito and watcher_user.area_id and watcher_user.area_id not in ambito:
         task.visibility = 'shared'
 
     notify_user(
@@ -1063,10 +1071,12 @@ def _validate_template_payload(payload):
 def api_templates_list():
     if current_user.is_admin:
         templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
-    elif current_user.area_id:
-        templates = TaskTemplate.query.filter_by(area_id=current_user.area_id).order_by(TaskTemplate.name).all()
     else:
-        templates = []
+        # El ambito, no la unidad: quien lleva dos unidades usa las plantillas
+        # de las dos, y un director las de sus managers.
+        unidades = ambito_unidades(current_user)
+        templates = (TaskTemplate.query.filter(TaskTemplate.area_id.in_(unidades))
+                     .order_by(TaskTemplate.name).all()) if unidades else []
     return jsonify({'success': True, 'templates': [t.to_dict() for t in templates]})
 
 
@@ -1105,7 +1115,7 @@ def api_templates_create():
 @task_access_required
 def api_templates_update(template_id):
     template = TaskTemplate.query.get_or_404(template_id)
-    if not current_user.is_admin and template.area_id != current_user.area_id:
+    if not current_user.is_admin and template.area_id not in ambito_unidades(current_user):
         return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
 
     data = request.get_json(force=True) or {}
@@ -1130,7 +1140,7 @@ def api_templates_update(template_id):
 @task_access_required
 def api_templates_delete(template_id):
     template = TaskTemplate.query.get_or_404(template_id)
-    if not current_user.is_admin and template.area_id != current_user.area_id:
+    if not current_user.is_admin and template.area_id not in ambito_unidades(current_user):
         return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
     db.session.delete(template)
     db.session.commit()
@@ -1152,7 +1162,7 @@ def _business_day_offset(start_date, offset_days):
 @task_access_required
 def api_templates_instantiate(template_id):
     template = TaskTemplate.query.get_or_404(template_id)
-    if not current_user.is_admin and template.area_id != current_user.area_id:
+    if not current_user.is_admin and template.area_id not in ambito_unidades(current_user):
         return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
 
     data = request.get_json(force=True) or {}
