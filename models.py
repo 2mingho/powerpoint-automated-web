@@ -136,6 +136,7 @@ class User(UserMixin, db.Model):
     allowed_tools = db.Column(db.Text, nullable=True)  # JSON list, None = all
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
+    is_area_lead = db.Column(db.Boolean, default=False)
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
 
     # Cadena de mando. Un director no lidera unidades directamente: llega a
@@ -212,6 +213,8 @@ class ActivityLog(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     action = db.Column(db.String(100), nullable=False)
     detail = db.Column(db.Text, nullable=True)
+    entity_type = db.Column(db.String(30), nullable=True, index=True)
+    entity_id = db.Column(db.Integer, nullable=True, index=True)
     ip_address = db.Column(db.String(45), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
@@ -270,7 +273,8 @@ class Task(db.Model):
 
     # Se conserva como respaldo para bases anteriores a la revision 0007. La
     # lista viva sale de services/catalogo.py, que lee task_statuses.
-    VALID_STATUSES = ('Pendiente', 'En Progreso', 'Completado')
+    VALID_STATUSES = ('Pendiente', 'En Progreso', 'Bloqueado', 'En Revisión', 'Completado')
+    VALID_PRIORITIES = ('Alta', 'Media', 'Baja')
     RECURRENCE_TYPES = ('Diaria', 'Semanal', 'Mensual')
 
     id = db.Column(db.Integer, primary_key=True)
@@ -283,23 +287,40 @@ class Task(db.Model):
     requested_by = db.Column(db.String(255), nullable=True)
     budget_type = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     due_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(30), nullable=False, default='Pendiente')
+    priority = db.Column(db.String(10), nullable=False, default='Media', index=True)
     is_recurrent = db.Column(db.Boolean, default=False)
     recurrence_type = db.Column(db.String(20), nullable=True)
     parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
     area = db.Column(db.String(20), nullable=False)
+    visibility = db.Column(db.String(15), nullable=False, default='unit')
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
+    deleted_at = db.Column(db.DateTime, nullable=True, index=True)
+    deleted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     assignee_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     creator = db.relationship('User', foreign_keys=[creator_id], backref='created_tasks')
     assignee = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_tasks')
+    area_ref = db.relationship('Area', foreign_keys=[area_id])
     children = db.relationship('Task', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
 
-    def to_dict(self):
+    @classmethod
+    def active_query(cls):
+        """Base query excluding soft-deleted tasks."""
+        return cls.query.filter(cls.deleted_at.is_(None))
+
+    def soft_delete(self, user_id):
+        self.deleted_at = datetime.utcnow()
+        self.deleted_by_id = user_id
+
+    def to_dict(self, include_counts=False):
         """Serialize task to a dictionary for JSON responses."""
-        return {
+        from datetime import date as dt_date
+        payload = {
             'id': self.id,
             'title': self.title,
             'description': self.description or '',
@@ -312,18 +333,227 @@ class Task(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
             'due_date': self.due_date.isoformat() if self.due_date else '',
             'status': self.status,
+            'priority': self.priority or 'Media',
             'is_recurrent': self.is_recurrent,
             'recurrence_type': self.recurrence_type or '',
             'parent_task_id': self.parent_task_id,
             'area': self.area,
+            'visibility': self.visibility or 'unit',
+            'area_id': self.area_id,
             'creator_id': self.creator_id,
             'creator_name': self.creator.username if self.creator else '',
             'assignee_id': self.assignee_id,
             'assignee_name': self.assignee.username if self.assignee else '',
+            'updated_at': self.updated_at.isoformat() if self.updated_at else '',
+            'is_overdue': bool(self.due_date and self.due_date < dt_date.today() and self.status != 'Completado'),
         }
+        if include_counts:
+            payload['comments_count'] = self.comments.filter_by(deleted_at=None).count()
+        return payload
 
     def __repr__(self):
         return f"<Task {self.title} ({self.status})>"
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    __table_args__ = (
+        db.Index('ix_notif_user_unread', 'user_id', 'read_at'),
+    )
+
+    KINDS = (
+        'task_assigned', 'task_reassigned', 'task_due_soon',
+        'task_overdue', 'task_comment', 'mention',
+        'request_received', 'request_accepted', 'request_rejected'
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    kind = db.Column(db.String(30), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    link_url = db.Column(db.String(500), nullable=True)
+    entity_type = db.Column(db.String(30), nullable=True)
+    entity_id = db.Column(db.Integer, nullable=True)
+    read_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', backref='notifications')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'kind': self.kind,
+            'title': self.title,
+            'body': self.body or '',
+            'link_url': self.link_url or '',
+            'entity_type': self.entity_type,
+            'entity_id': self.entity_id,
+            'is_read': self.read_at is not None,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M'),
+        }
+
+
+class TaskComment(db.Model):
+    __tablename__ = 'task_comments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    edited_at = db.Column(db.DateTime, nullable=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+
+    task = db.relationship('Task', backref=db.backref(
+        'comments', lazy='dynamic', order_by='TaskComment.created_at'))
+    user = db.relationship('User', backref='task_comments')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'user_id': self.user_id,
+            'user_name': self.user.username if self.user else '',
+            'body': self.body,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M'),
+            'edited': self.edited_at is not None,
+        }
+
+
+class TaskWatcher(db.Model):
+    __tablename__ = 'task_watchers'
+    __table_args__ = (
+        db.UniqueConstraint('task_id', 'user_id', name='uq_task_watcher'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    added_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    task = db.relationship('Task', backref=db.backref('watchers', lazy='dynamic'))
+    user = db.relationship('User', foreign_keys=[user_id])
+
+
+class TaskChecklistItem(db.Model):
+    """Checkable sub-items within a task."""
+    __tablename__ = 'task_checklist_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False, index=True)
+    body = db.Column(db.String(500), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    is_completed = db.Column(db.Boolean, default=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    completed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    task = db.relationship('Task', backref=db.backref('checklist', lazy='dynamic',
+                                                       order_by='TaskChecklistItem.position'))
+    completed_by = db.relationship('User', foreign_keys=[completed_by_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'body': self.body,
+            'position': self.position,
+            'is_completed': self.is_completed,
+            'completed_at': self.completed_at.strftime('%Y-%m-%d %H:%M') if self.completed_at else None,
+            'completed_by_id': self.completed_by_id,
+            'completed_by_name': self.completed_by.username if self.completed_by else None,
+        }
+
+
+class TaskTemplate(db.Model):
+    """Pre-defined task templates scoped per area."""
+    __tablename__ = 'task_templates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False, index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    name = db.Column(db.String(100), nullable=False)
+    payload_json = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    area = db.relationship('Area')
+    created_by = db.relationship('User')
+
+    def get_payload(self):
+        try:
+            return json.loads(self.payload_json)
+        except Exception:
+            return {}
+
+    def to_dict(self):
+        payload = self.get_payload()
+        return {
+            'id': self.id,
+            'area_id': self.area_id,
+            'area_name': self.area.name if self.area else '',
+            'created_by_id': self.created_by_id,
+            'created_by_name': self.created_by.username if self.created_by else '',
+            'name': self.name,
+            'payload': payload,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
+        }
+
+
+class TaskRequest(db.Model):
+    """Cross-area task requests between teams."""
+    __tablename__ = 'task_requests'
+
+    VALID_STATUSES = ('Pendiente', 'Aceptada', 'Rechazada', 'Cancelada')
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    client = db.Column(db.String(100), nullable=True)
+    due_date = db.Column(db.Date, nullable=True)
+    priority = db.Column(db.String(10), default='Media')
+
+    requester_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    from_area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False, index=True)
+    to_area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False, index=True)
+
+    status = db.Column(db.String(15), nullable=False, default='Pendiente', index=True)
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+    created_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    requester = db.relationship('User', foreign_keys=[requester_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+    from_area = db.relationship('Area', foreign_keys=[from_area_id])
+    to_area = db.relationship('Area', foreign_keys=[to_area_id])
+    created_task = db.relationship('Task', foreign_keys=[created_task_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description or '',
+            'client': self.client or '',
+            'due_date': self.due_date.isoformat() if self.due_date else '',
+            'priority': self.priority or 'Media',
+            'requester_id': self.requester_id,
+            'requester_name': self.requester.username if self.requester else '',
+            'from_area_id': self.from_area_id,
+            'from_area_name': self.from_area.name if self.from_area else '',
+            'to_area_id': self.to_area_id,
+            'to_area_name': self.to_area.name if self.to_area else '',
+            'status': self.status,
+            'resolved_by_id': self.resolved_by_id,
+            'resolved_by_name': self.resolved_by.username if self.resolved_by else '',
+            'resolved_at': self.resolved_at.strftime('%Y-%m-%d %H:%M') if self.resolved_at else None,
+            'rejection_reason': self.rejection_reason or '',
+            'created_task_id': self.created_task_id,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
+        }
 
 
 @login_manager.user_loader

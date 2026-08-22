@@ -27,7 +27,9 @@ from werkzeug.exceptions import HTTPException
 
 from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
+from blueprints.notifications import notifications_bp
 from blueprints.tasks import tasks_bp
+from blueprints.task_requests import task_requests_bp
 
 
 from extensions import db, login_manager, csrf, limiter, migrate
@@ -202,7 +204,9 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
 # Registrar blueprints
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
+app.register_blueprint(notifications_bp)
 app.register_blueprint(tasks_bp)
+app.register_blueprint(task_requests_bp)
 
 # ─────────────────────────────────────────────────────────────
 # Force-logout check (session kick feature)
@@ -355,6 +359,7 @@ def ensure_schema():
 ACTIVITY_LOG_RETENTION_DAYS = max(1, _env_int('ACTIVITY_LOG_RETENTION_DAYS', 90))
 ACTIVITY_LOG_MAX_ROWS = max(1000, _env_int('ACTIVITY_LOG_MAX_ROWS', 100000))
 REPORT_METADATA_RETENTION_DAYS = max(1, _env_int('REPORT_METADATA_RETENTION_DAYS', 180))
+SOFT_DELETED_TASK_RETENTION_DAYS = max(1, _env_int('SOFT_DELETED_TASK_RETENTION_DAYS', 30))
 
 
 def prune_activity_logs(retention_days=ACTIVITY_LOG_RETENTION_DAYS, max_rows=ACTIVITY_LOG_MAX_ROWS):
@@ -410,6 +415,18 @@ def prune_report_metadata(retention_days=REPORT_METADATA_RETENTION_DAYS):
     return {'deleted_rows': deleted}
 
 
+def prune_soft_deleted_tasks(retention_days=SOFT_DELETED_TASK_RETENTION_DAYS):
+    """Hard-delete tasks that were soft-deleted before retention cutoff."""
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    deleted = (
+        Task.query
+        .filter(Task.deleted_at.isnot(None), Task.deleted_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.session.commit()
+    return {'deleted_rows': deleted, 'retention_days': retention_days}
+
+
 def _scratch_root_abs():
     return os.path.abspath(app.config['UPLOAD_FOLDER'])
 
@@ -457,9 +474,11 @@ def prune_database_storage():
     """Run all DB pruning tasks and return stats."""
     logs_stats = prune_activity_logs()
     reports_stats = prune_report_metadata()
+    tasks_stats = prune_soft_deleted_tasks()
     return {
         'activity_logs': logs_stats,
         'reports': reports_stats,
+        'tasks': tasks_stats,
     }
 
 
@@ -470,6 +489,7 @@ def maintenance_prune_command():
         stats = prune_database_storage()
     click.echo(f"Activity logs pruned: {stats['activity_logs']}")
     click.echo(f"Reports metadata pruned: {stats['reports']}")
+    click.echo(f"Soft-deleted tasks pruned: {stats['tasks']}")
 
 
 @app.cli.command('schema-check')

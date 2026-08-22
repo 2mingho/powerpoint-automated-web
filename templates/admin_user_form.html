@@ -59,8 +59,15 @@
       </div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Herramientas permitidas</label>
+      <div class="form-group">
+        <label class="form-check">
+          <input type="checkbox" name="is_area_lead" value="1" {{ 'checked' if user and user.is_area_lead else '' }}>
+          Lider de unidad
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Herramientas permitidas</label>
       <p class="perm-hint">Selecciona las herramientas a las que este usuario tendra acceso.</p>
       <div class="perm-grid">
         {% for key, label in all_tools.items() %}

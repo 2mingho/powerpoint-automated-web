@@ -10,6 +10,21 @@ document.addEventListener('DOMContentLoaded', function () {
   const btnCancel = document.getElementById('btnCancelTask');
   const btnSave = document.getElementById('btnSaveTask');
   const btnDelete = document.getElementById('btnDeleteTask');
+  const taskModalTabs = document.getElementById('taskModalTabs');
+  const taskCommentsCount = document.getElementById('taskCommentsCount');
+  const taskCommentsList = document.getElementById('taskCommentsList');
+  const taskActivityList = document.getElementById('taskActivityList');
+  const taskCommentBody = document.getElementById('taskCommentBody');
+  const btnTaskCommentSend = document.getElementById('btnTaskCommentSend');
+  const taskWatchersSection = document.getElementById('taskWatchersSection');
+  const taskWatchersChips = document.getElementById('taskWatchersChips');
+  const taskWatcherUserSelect = document.getElementById('taskWatcherUserSelect');
+  const btnAddWatcher = document.getElementById('btnAddWatcher');
+  const btnLeaveWatching = document.getElementById('btnLeaveWatching');
+  const taskChecklistCount = document.getElementById('taskChecklistCount');
+  const taskChecklistInput = document.getElementById('taskChecklistInput');
+  const btnChecklistAdd = document.getElementById('btnTaskChecklistAdd');
+  const taskChecklistList = document.getElementById('taskChecklistList');
   const modalTitle = document.getElementById('taskModalTitle');
   const statusGroup = document.getElementById('statusGroup');
   const recurrentCb = document.getElementById('taskRecurrent');
@@ -19,10 +34,18 @@ document.addEventListener('DOMContentLoaded', function () {
   const deleteSeriesCb = document.getElementById('taskDeleteSeries');
 
   const filterStatus = document.getElementById('tasksFilterStatus');
+  const filterPriority = document.getElementById('tasksFilterPriority');
   const filterAssignee = document.getElementById('tasksFilterAssignee');
   const filterClient = document.getElementById('tasksFilterClient');
   const filterArea = document.getElementById('tasksFilterArea');
+  const tasksSearch = document.getElementById('tasksSearch');
+  const tasksSearchResults = document.getElementById('tasksSearchResults');
+  const tasksOverdueBadge = document.getElementById('tasksOverdueBadge');
   const btnClearFilters = document.getElementById('btnClearTaskFilters');
+  const btnWatchingTasks = document.getElementById('btnWatchingTasks');
+  const btnWatchingRefresh = document.getElementById('btnWatchingRefresh');
+  const tasksWatchingPanel = document.getElementById('tasksWatchingPanel');
+  const tasksWatchingList = document.getElementById('tasksWatchingList');
   const bulkActions = document.getElementById('tasksBulkActions');
   const bulkCount = document.getElementById('tasksBulkCount');
   const btnBulkCopy = document.getElementById('btnBulkCopy');
@@ -32,6 +55,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const btnBulkDone = document.getElementById('btnBulkDone');
   const btnBulkDelete = document.getElementById('btnBulkDelete');
   const btnBulkCancel = document.getElementById('btnBulkCancel');
+  const bulkStatusQuick = document.getElementById('bulkStatusQuick');
   const monthPicker = document.getElementById('tasksMonthPicker');
   const monthInput = document.getElementById('tasksMonthInput');
   const btnMonthApply = document.getElementById('btnTasksMonthApply');
@@ -50,9 +74,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const fDesc = document.getElementById('taskDesc');
   const fAssignee = document.getElementById('taskAssignee');
   const fDueDate = document.getElementById('taskDueDate');
+  const fPriority = document.getElementById('taskPriority');
   const fStartDate = document.getElementById('taskStartDate');
   const fEndDate = document.getElementById('taskEndDate');
   const fRecType = document.getElementById('taskRecurrenceType');
+  const fTemplateSelect = document.getElementById('taskTemplateSelect');
+  const templateSelectGroup = document.getElementById('templateSelectGroup');
+  const btnSaveAsTemplate = document.getElementById('btnSaveAsTemplate');
 
   const formMessage = document.getElementById('taskFormMessage');
   const fieldErrors = {
@@ -107,10 +135,14 @@ document.addEventListener('DOMContentLoaded', function () {
   let longPressPayload = null;
   let longPressHandled = false;
   let moveAnchorDate = '';
+  let currentUpdatedAt = '';
+  let currentTaskDetail = null;
 
   const statusColorMap = {
     Pendiente: { bg: 'var(--c-warning-bg)', border: 'var(--c-warning)', text: 'var(--c-warning)' },
     'En Progreso': { bg: '#dbeafe', border: '#2563eb', text: '#2563eb' },
+    Bloqueado: { bg: 'var(--c-danger-bg)', border: 'var(--c-danger)', text: 'var(--c-danger)' },
+    'En Revisión': { bg: '#eef2ff', border: '#4f46e5', text: '#4f46e5' },
     Completado: { bg: 'var(--c-success-bg)', border: 'var(--c-success)', text: 'var(--c-success)' }
   };
 
@@ -209,6 +241,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!value) return '';
     if (value.includes('T')) return value.split('T', 1)[0];
     return value;
+  }
+
+  function slugifyToken(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, '-');
   }
 
   function isMobileViewport() {
@@ -355,6 +395,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function getCalendarFilters() {
     return {
       status: filterStatus.value,
+      priority: filterPriority ? filterPriority.value : '',
       assignee_id: filterAssignee.value,
       client: filterClient.value.trim(),
       area: filterArea ? filterArea.value : ''
@@ -363,6 +404,68 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function refreshCalendar() {
     if (calendar) calendar.refetchEvents();
+  }
+
+  let searchTimer = null;
+
+  function loadSearchResults(query) {
+    if (!tasksSearchResults) return;
+    var params = new URLSearchParams(getCalendarFilters());
+    params.set('q', query);
+    fetch('/api/tasks?' + params.toString())
+      .then(function (r) { return r.json(); })
+      .then(function (tasks) {
+        if (!Array.isArray(tasks)) { tasks = []; }
+        var calEl = document.getElementById('tasksCalendar');
+        if (tasks.length === 0) {
+          tasksSearchResults.innerHTML = '<div class="task-comments-empty">Sin resultados.</div>';
+          tasksSearchResults.classList.remove('modal-hidden');
+          if (calEl) calEl.style.display = 'none';
+          return;
+        }
+        tasksSearchResults.innerHTML = tasks.map(function (t) {
+          var statusDot = '';
+          var statusClass = '';
+          if (t.status === 'Pendiente') statusClass = 'st-pendiente';
+          else if (t.status === 'En Progreso') statusClass = 'st-en-progreso';
+          else if (t.status === 'Completado') statusClass = 'st-completado';
+          else if (t.status === 'Bloqueado') statusClass = 'st-bloqueado';
+          else if (t.status === 'En Revisión') statusClass = 'st-revision';
+          return '<div class="task-comment-item" style="cursor:pointer" data-task-id="' + t.id + '">'
+            + '<div class="task-comment-meta"><span class="task-status-dot ' + statusClass + '">' + t.status + '</span> · ' + t.priority + ' · ' + (t.due_date || '') + '</div>'
+            + '<div class="task-comment-body"><strong>' + (t.title || '') + '</strong>' + (t.client ? ' — ' + t.client : '') + '</div>'
+            + '</div>';
+        }).join('');
+        tasksSearchResults.classList.remove('modal-hidden');
+        if (calEl) calEl.style.display = 'none';
+      })
+      .catch(function () {});
+  }
+
+  function clearSearch() {
+    if (tasksSearch) tasksSearch.value = '';
+    if (tasksSearchResults) {
+      tasksSearchResults.classList.add('modal-hidden');
+      tasksSearchResults.innerHTML = '';
+    }
+    var calEl = document.getElementById('tasksCalendar');
+    if (calEl) calEl.style.display = '';
+  }
+
+  function loadOverdueCount() {
+    if (!tasksOverdueBadge) return;
+    var params = new URLSearchParams(getCalendarFilters());
+    params.set('overdue', '1');
+    params.set('start', '');
+    params.set('end', '');
+    fetch('/api/tasks?' + params.toString())
+      .then(function (r) { return r.json(); })
+      .then(function (tasks) {
+        var count = Array.isArray(tasks) ? tasks.length : 0;
+        tasksOverdueBadge.textContent = count + ' vencida' + (count !== 1 ? 's' : '');
+        tasksOverdueBadge.classList.toggle('modal-hidden', count === 0);
+      })
+      .catch(function () {});
   }
 
   function syncMonthInput(dateObj) {
@@ -437,6 +540,7 @@ document.addEventListener('DOMContentLoaded', function () {
       requested_by: (taskData.requested_by || '').trim(),
       budget_type: (taskData.budget_type || '').trim(),
       description: (taskData.description || '').trim(),
+      priority: (taskData.priority || 'Media').trim(),
       assignee_id: parseInt(taskData.assignee_id, 10),
       original_due_date: dueDate,
       weekday_offset: weekdayOffset,
@@ -626,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const label = `${count} seleccionada(s)`;
     if (bulkCount) bulkCount.textContent = label;
 
-    [btnBulkCopy, btnBulkMove, btnBulkPending, btnBulkProgress, btnBulkDone, btnBulkDelete].forEach(function (btn) {
+    [btnBulkCopy, btnBulkMove, btnBulkPending, btnBulkProgress, btnBulkDone, btnBulkDelete, bulkStatusQuick].forEach(function (btn) {
       if (btn) btn.disabled = count === 0;
     });
 
@@ -760,6 +864,10 @@ document.addEventListener('DOMContentLoaded', function () {
     })
       .then(function (data) {
         if (!data.success) {
+          if (data.task && opts.onConflict) {
+            opts.onConflict(data);
+            throw new Error('__conflict__');
+          }
           if (typeof revertFn === 'function') revertFn();
           throw new Error(data.error || 'No se pudo actualizar la tarea.');
         }
@@ -772,12 +880,165 @@ document.addEventListener('DOMContentLoaded', function () {
         return data;
       })
       .catch(function (err) {
-        if (typeof revertFn === 'function') revertFn();
+        if (!(opts.skipRevertOnConflict && err && err.message === '__conflict__') && typeof revertFn === 'function') revertFn();
         if (!opts.silent) {
           notify('error', err.message || 'Error de conexion.');
         }
         throw err;
       });
+  }
+
+  function applyTaskToModal(taskData) {
+    if (!taskData) return;
+    currentTaskDetail = taskData;
+    fId.value = taskData.id || '';
+    fTitle.value = taskData.title || '';
+    fClient.value = taskData.client || '';
+    fDirectorate.value = taskData.directorate || '';
+    fRequestedBy.value = taskData.requested_by || '';
+    fBudgetType.value = taskData.budget_type || '';
+    fDesc.value = taskData.description || '';
+    fAssignee.value = taskData.assignee_id;
+    fDueDate.value = normalizeIsoDate(taskData.due_date);
+    fPriority.value = taskData.priority || 'Media';
+    fStartDate.value = normalizeIsoDate(taskData.start_date);
+    fEndDate.value = normalizeIsoDate(taskData.end_date);
+    currentStatus = taskData.status || 'Pendiente';
+    currentUpdatedAt = taskData.updated_at || '';
+    if (taskCommentsCount) taskCommentsCount.textContent = String(taskData.comments_count || 0);
+    renderWatchers(taskData);
+
+    document.querySelectorAll('.status-chip').forEach(function (chip) {
+      chip.classList.toggle('selected', chip.dataset.status === currentStatus);
+    });
+    updateRecurrencePreview();
+  }
+
+  function setActiveTaskTab(tabName) {
+    document.querySelectorAll('.task-tab').forEach(function (tab) {
+      tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.task-tab-panel').forEach(function (panel) {
+      panel.classList.remove('active');
+    });
+    const activePanel = document.getElementById(`taskTab${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}`);
+    if (activePanel) activePanel.classList.add('active');
+  }
+
+  function renderTaskComments(comments) {
+    if (!taskCommentsList) return;
+    if (!Array.isArray(comments) || !comments.length) {
+      taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios.</div>';
+      return;
+    }
+    taskCommentsList.innerHTML = comments.map(function (comment) {
+      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${comment.user_name || 'Usuario'}</strong> · ${comment.created_at || ''}</div><div class="task-comment-body">${comment.body || ''}</div></div>`;
+    }).join('');
+  }
+
+  function renderTaskHistory(items) {
+    if (!taskActivityList) return;
+    if (!Array.isArray(items) || !items.length) {
+      taskActivityList.innerHTML = '<div class="task-comments-empty">Sin actividad.</div>';
+      return;
+    }
+    taskActivityList.innerHTML = items.map(function (item) {
+      return `<div class="task-comment-item"><div class="task-comment-meta"><strong>${item.user_name || 'Sistema'}</strong> · ${item.timestamp || ''}</div><div class="task-comment-body">${item.detail || item.action || ''}</div></div>`;
+    }).join('');
+  }
+
+  function loadTaskComments(taskId) {
+    return requestJson(`/api/tasks/${taskId}/comments`).then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudieron cargar comentarios.');
+      renderTaskComments(data.comments || []);
+      if (taskCommentsCount) taskCommentsCount.textContent = String((data.comments || []).length);
+      return data;
+    });
+  }
+
+  function loadTaskHistory(taskId) {
+    return requestJson(`/api/tasks/${taskId}/history`).then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudo cargar actividad.');
+      renderTaskHistory(data.items || []);
+      return data;
+    });
+  }
+
+  function refreshTaskDetail(taskId) {
+    return requestJson(`/api/tasks/${taskId}`).then(function (data) {
+      if (!data.success || !data.task) throw new Error(data.error || 'No se pudo cargar detalle.');
+      applyTaskToModal(data.task);
+      return data.task;
+    });
+  }
+
+  function renderWatchers(taskData) {
+    if (!taskWatchersSection || !taskWatchersChips) return;
+    const watchers = Array.isArray(taskData && taskData.watchers) ? taskData.watchers : [];
+    taskWatchersSection.classList.toggle('modal-hidden', !taskData || !taskData.id);
+    taskWatchersChips.innerHTML = watchers.length
+      ? watchers.map(function (watcher) {
+          const canRemove = !!taskData.can_edit || !!watcher.is_self;
+          return `<span class="task-watcher-chip">${watcher.username}${watcher.unit ? ` · ${watcher.unit}` : ''}${canRemove ? ` <button type="button" class="task-watcher-remove" data-user-id="${watcher.user_id}">&times;</button>` : ''}</span>`;
+        }).join('')
+      : '<div class="task-comments-empty">Sin observadores.</div>';
+    if (taskWatcherUserSelect) taskWatcherUserSelect.disabled = !taskData.can_edit;
+    if (btnAddWatcher) btnAddWatcher.disabled = !taskData.can_edit;
+    if (btnLeaveWatching) btnLeaveWatching.classList.toggle('modal-hidden', !(taskData.is_watcher && !taskData.can_edit));
+  }
+
+  function renderChecklist(items) {
+    if (!taskChecklistList) return;
+    if (!Array.isArray(items) || !items.length) {
+      taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems.</div>';
+      if (taskChecklistCount) taskChecklistCount.textContent = '0';
+      return;
+    }
+    taskChecklistList.innerHTML = items.map(function (item) {
+      return '<div class="task-checklist-item' + (item.is_completed ? ' is-completed' : '') + '" data-id="' + item.id + '">'
+        + '<input type="checkbox" class="task-checklist-cb" ' + (item.is_completed ? 'checked' : '') + '>'
+        + '<span class="task-checklist-body">' + (item.body || '') + '</span>'
+        + '<button type="button" class="task-checklist-delete" title="Eliminar">&times;</button>'
+        + '</div>';
+    }).join('');
+    if (taskChecklistCount) taskChecklistCount.textContent = String(items.length);
+  }
+
+  function loadChecklist(taskId) {
+    return requestJson('/api/tasks/' + taskId + '/checklist').then(function (data) {
+      if (!data.success) throw new Error(data.error || 'No se pudo cargar checklist.');
+      renderChecklist(data.items || []);
+      return data;
+    });
+  }
+
+  function loadWatchingTasks() {
+    if (!tasksWatchingList) return;
+    tasksWatchingList.innerHTML = '<div class="task-comments-empty">Cargando...</div>';
+    requestJson('/api/tasks/watching').then(function (data) {
+      if (!data.success || !Array.isArray(data.tasks) || !data.tasks.length) {
+        tasksWatchingList.innerHTML = '<div class="task-comments-empty">Sin tareas observadas.</div>';
+        return;
+      }
+      tasksWatchingList.innerHTML = data.tasks.map(function (task) {
+        return `<button type="button" class="task-watching-item" data-task-id="${task.id}"><strong>${task.title}</strong><span>${task.due_date || ''}</span></button>`;
+      }).join('');
+    }).catch(function () {
+      tasksWatchingList.innerHTML = '<div class="task-comments-empty">No se pudieron cargar.</div>';
+    });
+  }
+
+  function openTaskFromQueryParam() {
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get('task');
+    if (!taskId) return;
+
+    requestJson(`/api/tasks/${taskId}`)
+      .then(function (data) {
+        if (!data.success || !data.task) return;
+        openModal(true, data.task);
+      })
+      .catch(function () {});
   }
 
   function bulkUpdateStatus(statusValue) {
@@ -973,6 +1234,7 @@ document.addEventListener('DOMContentLoaded', function () {
           requested_by: item.requested_by || '',
           budget_type: item.budget_type || '',
           description: item.description || '',
+          priority: item.priority || 'Media',
           start_date: item.start_offset === null || item.start_offset === undefined ? '' : shiftIsoDate(dueDate, item.start_offset),
           end_date: item.end_offset === null || item.end_offset === undefined ? '' : shiftIsoDate(dueDate, item.end_offset),
           assignee_id: parseInt(item.assignee_id, 10),
@@ -1258,6 +1520,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fBudgetType.value = '';
     fDesc.value = '';
     fDueDate.value = '';
+    fPriority.value = 'Media';
     fStartDate.value = '';
     fEndDate.value = '';
     fRecType.value = 'Semanal';
@@ -1266,6 +1529,19 @@ document.addEventListener('DOMContentLoaded', function () {
     deleteSeriesCb.checked = false;
     deleteSeriesWrap.classList.add('modal-hidden');
     currentStatus = 'Pendiente';
+    currentUpdatedAt = '';
+    currentTaskDetail = null;
+    if (taskCommentBody) taskCommentBody.value = '';
+    if (taskCommentsList) taskCommentsList.innerHTML = '<div class="task-comments-empty">Sin comentarios.</div>';
+    if (taskActivityList) taskActivityList.innerHTML = '<div class="task-comments-empty">Sin actividad.</div>';
+    if (taskCommentsCount) taskCommentsCount.textContent = '0';
+    if (taskChecklistList) taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems.</div>';
+    if (taskChecklistCount) taskChecklistCount.textContent = '0';
+    if (taskChecklistInput) taskChecklistInput.value = '';
+    if (taskWatchersChips) taskWatchersChips.innerHTML = '<div class="task-comments-empty">Sin observadores.</div>';
+    if (taskWatchersSection) taskWatchersSection.classList.add('modal-hidden');
+    if (btnLeaveWatching) btnLeaveWatching.classList.add('modal-hidden');
+    setActiveTaskTab('details');
 
     clearFormMessage();
     clearFieldErrors();
@@ -1277,25 +1553,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (editMode && taskData) {
       modalTitle.textContent = 'Editar Tarea';
-      fId.value = taskData.id;
-      fTitle.value = taskData.title || '';
-      fClient.value = taskData.client || '';
-      fDirectorate.value = taskData.directorate || '';
-      fRequestedBy.value = taskData.requested_by || '';
-      fBudgetType.value = taskData.budget_type || '';
-      fDesc.value = taskData.description || '';
-      fAssignee.value = taskData.assignee_id;
-      fDueDate.value = normalizeIsoDate(taskData.due_date);
-      fStartDate.value = normalizeIsoDate(taskData.start_date);
-      fEndDate.value = normalizeIsoDate(taskData.end_date);
-      currentStatus = taskData.status || 'Pendiente';
-
-      document.querySelectorAll('.status-chip').forEach(function (chip) {
-        chip.classList.toggle('selected', chip.dataset.status === currentStatus);
-      });
+      applyTaskToModal(taskData);
+      if (taskModalTabs) taskModalTabs.classList.remove('modal-hidden');
+      loadTaskComments(taskData.id).catch(function () {});
+      loadTaskHistory(taskData.id).catch(function () {});
+      loadChecklist(taskData.id).catch(function () {});
 
       statusGroup.classList.remove('modal-hidden');
       btnDelete.classList.remove('modal-hidden');
+      if (templateSelectGroup) templateSelectGroup.classList.add('modal-hidden');
+      if (btnSaveAsTemplate) btnSaveAsTemplate.classList.remove('modal-hidden');
 
       recurrentCb.checked = false;
       recurrentCb.parentElement.style.display = 'none';
@@ -1306,9 +1573,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     } else {
       modalTitle.textContent = 'Nueva Tarea';
+      if (taskModalTabs) taskModalTabs.classList.add('modal-hidden');
       statusGroup.classList.remove('modal-hidden');
       btnDelete.classList.add('modal-hidden');
+      if (templateSelectGroup) templateSelectGroup.classList.remove('modal-hidden');
+      if (btnSaveAsTemplate) btnSaveAsTemplate.classList.add('modal-hidden');
       recurrentCb.parentElement.style.display = '';
+      loadTemplates();
     }
 
     hideContextMenu();
@@ -1327,6 +1598,12 @@ document.addEventListener('DOMContentLoaded', function () {
       });
       chip.classList.add('selected');
       currentStatus = chip.dataset.status;
+    });
+  });
+
+  document.querySelectorAll('.task-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      setActiveTaskTab(tab.dataset.tab);
     });
   });
 
@@ -1349,6 +1626,152 @@ document.addEventListener('DOMContentLoaded', function () {
       acList.classList.remove('visible');
     }, 200);
   });
+
+  /* ── Request modal ── */
+  const reqModal = document.getElementById('taskRequestModal');
+  const reqBtn = document.getElementById('btnRequestTask');
+  const reqClose = document.getElementById('taskRequestClose');
+  const reqCancel = document.getElementById('taskRequestCancel');
+  const reqSend = document.getElementById('btnTaskRequestSend');
+  const reqArea = document.getElementById('taskRequestArea');
+  const reqTitle = document.getElementById('taskRequestTitle');
+  const reqDesc = document.getElementById('taskRequestDesc');
+  const reqClient = document.getElementById('taskRequestClient');
+  const reqPriority = document.getElementById('taskRequestPriority');
+  const reqDueDate = document.getElementById('taskRequestDueDate');
+  const reqMessage = document.getElementById('taskRequestMessage');
+
+  function clearReqMessage() { if (reqMessage) reqMessage.textContent = ''; }
+  function openReqModal() {
+    if (reqModal) reqModal.classList.remove('modal-hidden');
+    clearReqMessage();
+    if (reqArea) {
+      reqArea.innerHTML = '<option value="">Cargando...</option>';
+      fetch('/api/areas').then(function (r) { return r.json(); }).then(function (data) {
+        if (!data.success || !Array.isArray(data.areas)) { reqArea.innerHTML = '<option value="">Error</option>'; return; }
+        reqArea.innerHTML = '<option value="">Selecciona unidad...</option>';
+        data.areas.forEach(function (a) { var o = document.createElement('option'); o.value = a.id; o.textContent = a.name; reqArea.appendChild(o); });
+      }).catch(function () { reqArea.innerHTML = '<option value="">Error al cargar</option>'; });
+    }
+    if (reqTitle) reqTitle.value = '';
+    if (reqDesc) reqDesc.value = '';
+    if (reqClient) reqClient.value = '';
+    if (reqPriority) reqPriority.value = 'Media';
+    if (reqDueDate) reqDueDate.value = '';
+  }
+  function closeReqModal() { if (reqModal) reqModal.classList.add('modal-hidden'); }
+  function sendRequest() {
+    if (!reqArea || !reqTitle) return;
+    var areaId = reqArea.value;
+    var title = (reqTitle.value || '').trim();
+    if (!areaId) { if (reqMessage) reqMessage.textContent = 'Selecciona una unidad destino.'; return; }
+    if (!title) { if (reqMessage) reqMessage.textContent = 'El título es obligatorio.'; return; }
+    reqSend.disabled = true;
+    var payload = {
+      title: title,
+      to_area_id: Number(areaId),
+      description: (reqDesc ? reqDesc.value : '') || undefined,
+      client: (reqClient ? reqClient.value : '') || undefined,
+      priority: reqPriority ? reqPriority.value : 'Media',
+      due_date: reqDueDate ? (reqDueDate.value || undefined) : undefined,
+    };
+    fetch('/api/task-requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.success) {
+        if (reqMessage) reqMessage.textContent = data.error || 'Error al enviar solicitud.';
+        return;
+      }
+      closeReqModal();
+      notify('success', 'Solicitud enviada.');
+    }).catch(function () {
+      if (reqMessage) reqMessage.textContent = 'Error de conexión.';
+    }).finally(function () { reqSend.disabled = false; });
+  }
+
+  /* ── Templates ── */
+  function loadTemplates() {
+    if (!fTemplateSelect) return;
+    fetch('/api/tasks/templates').then(function (r) { return r.json(); }).then(function (data) {
+      fTemplateSelect.innerHTML = '<option value="">— Sin plantilla —</option>';
+      if (data.success && Array.isArray(data.templates)) {
+        data.templates.forEach(function (t) {
+          var o = document.createElement('option');
+          o.value = t.id;
+          o.textContent = t.name;
+          o.dataset.payload = JSON.stringify(t.payload || {});
+          fTemplateSelect.appendChild(o);
+        });
+      }
+    }).catch(function () {});
+  }
+
+  if (fTemplateSelect) {
+    fTemplateSelect.addEventListener('change', function () {
+      var opt = fTemplateSelect.options[fTemplateSelect.selectedIndex];
+      if (!opt || !opt.value) return;
+      try {
+        var payload = JSON.parse(opt.dataset.payload || '{}');
+        if (fTitle) fTitle.value = payload.title || '';
+        if (fClient) fClient.value = payload.client || '';
+        if (fDesc) fDesc.value = payload.description || '';
+        if (fPriority) fPriority.value = payload.priority || 'Media';
+      } catch (e) { /* ignore */ }
+    });
+  }
+
+  if (btnSaveAsTemplate) {
+    btnSaveAsTemplate.addEventListener('click', function () {
+      var name = prompt('Nombre para la plantilla:');
+      if (!name || !name.trim()) return;
+      var payload = {
+        title: fTitle ? fTitle.value : '',
+        description: fDesc ? fDesc.value : '',
+        client: fClient ? fClient.value : '',
+        priority: fPriority ? fPriority.value : 'Media',
+        budget_type: fBudgetType ? fBudgetType.value : '',
+        due_offset_days: 7,
+        checklist: [],
+      };
+      // Try to read checklist items from the current task (if loaded)
+      var taskId = fId ? fId.value : '';
+      if (taskId) {
+        fetch('/api/tasks/' + taskId + '/checklist')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.success && Array.isArray(data.items)) {
+              payload.checklist = data.items.map(function (it) { return it.body; });
+            }
+          })
+          .catch(function () {})
+          .finally(function () {
+            saveTemplate(name.trim(), payload);
+          });
+      } else {
+        saveTemplate(name.trim(), payload);
+      }
+    });
+  }
+
+  function saveTemplate(name, payload) {
+    fetch('/api/tasks/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, payload: payload })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.success) { notify('error', data.error || 'Error al guardar plantilla.'); return; }
+      notify('success', 'Plantilla guardada.');
+      loadTemplates();
+    }).catch(function () { notify('error', 'Error de conexión.'); });
+  }
+
+  if (reqBtn) reqBtn.addEventListener('click', openReqModal);
+  if (reqClose) reqClose.addEventListener('click', closeReqModal);
+  if (reqCancel) reqCancel.addEventListener('click', closeReqModal);
+  if (reqSend) reqSend.addEventListener('click', sendRequest);
+  if (reqModal) reqModal.addEventListener('click', function (e) { if (e.target === reqModal) closeReqModal(); });
 
   btnNew.addEventListener('click', function () { openModal(false); });
   btnClose.addEventListener('click', closeModal);
@@ -1373,9 +1796,11 @@ document.addEventListener('DOMContentLoaded', function () {
       description: fDesc.value.trim(),
       assignee_id: parseInt(fAssignee.value, 10),
       due_date: normalizeIsoDate(fDueDate.value),
+      priority: fPriority.value,
       start_date: normalizeIsoDate(fStartDate.value),
       end_date: normalizeIsoDate(fEndDate.value),
       status: currentStatus,
+      expected_updated_at: currentUpdatedAt,
       is_recurrent: recurrentCb.checked,
       recurrence_type: recurrentCb.checked ? fRecType.value : '',
       recurrence_end: recurrentCb.checked ? normalizeIsoDate(fEndDate.value) : ''
@@ -1396,6 +1821,12 @@ document.addEventListener('DOMContentLoaded', function () {
     })
       .then(function (data) {
         if (!data.success) {
+          if (data.task) {
+            applyTaskToModal(data.task);
+            showFormMessage(data.error || 'La tarea cambió en otra sesión.', 'warning');
+            notify('warning', data.error || 'La tarea fue modificada por otro usuario.');
+            return;
+          }
           showFormMessage(data.error || 'No se pudo guardar la tarea.', 'error');
           return;
         }
@@ -1428,22 +1859,267 @@ document.addEventListener('DOMContentLoaded', function () {
     deleteTaskById(id, { deleteSeries: deleteSeries });
   });
 
-  [filterStatus, filterAssignee, filterArea].filter(Boolean).forEach(function (el) {
-    el.addEventListener('change', refreshCalendar);
+  if (btnTaskCommentSend) {
+    btnTaskCommentSend.addEventListener('click', function () {
+      const taskId = fId.value;
+      const body = (taskCommentBody.value || '').trim();
+      if (!taskId || !body) return;
+
+      btnTaskCommentSend.disabled = true;
+      requestJson(`/api/tasks/${taskId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: body })
+      }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo guardar comentario.');
+          return;
+        }
+        taskCommentBody.value = '';
+        return Promise.all([refreshTaskDetail(taskId), loadTaskComments(taskId), loadTaskHistory(taskId)]).then(function () {
+          setActiveTaskTab('comments');
+        });
+      }).catch(function () {
+        notify('error', 'Error de conexion al comentar.');
+      }).finally(function () {
+        btnTaskCommentSend.disabled = false;
+      });
+    });
+  }
+
+  if (btnAddWatcher) {
+    btnAddWatcher.addEventListener('click', function () {
+      const taskId = fId.value;
+      const userId = taskWatcherUserSelect ? taskWatcherUserSelect.value : '';
+      if (!taskId || !userId) return;
+      requestJson(`/api/tasks/${taskId}/watchers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId })
+      }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo agregar observador.');
+          return;
+        }
+        return refreshTaskDetail(taskId).then(function () {
+          notify('success', 'Observador agregado.');
+        });
+      }).catch(function () {
+        notify('error', 'Error de conexion al agregar observador.');
+      });
+    });
+  }
+
+  if (taskWatchersChips) {
+    taskWatchersChips.addEventListener('click', function (event) {
+      const button = event.target.closest('.task-watcher-remove');
+      if (!button) return;
+      const taskId = fId.value;
+      const userId = button.dataset.userId;
+      requestJson(`/api/tasks/${taskId}/watchers/${userId}`, { method: 'DELETE' }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo quitar observador.');
+          return;
+        }
+        return refreshTaskDetail(taskId).then(function () {
+          notify('success', 'Observador removido.');
+        });
+      }).catch(function () {
+        notify('error', 'Error de conexion al quitar observador.');
+      });
+    });
+  }
+
+  /* ── Checklist ── */
+
+  if (btnChecklistAdd && taskChecklistInput) {
+    function addChecklistItem() {
+      const taskId = fId.value;
+      const body = (taskChecklistInput.value || '').trim();
+      if (!taskId || !body) return;
+      btnChecklistAdd.disabled = true;
+      requestJson('/api/tasks/' + taskId + '/checklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: body })
+      }).then(function (data) {
+        if (!data.success) { notify('error', data.error || 'Error al agregar ítem.'); return; }
+        taskChecklistInput.value = '';
+        loadChecklist(taskId).catch(function () {});
+      }).catch(function () {
+        notify('error', 'Error de conexión.');
+      }).finally(function () {
+        btnChecklistAdd.disabled = false;
+      });
+    }
+    btnChecklistAdd.addEventListener('click', addChecklistItem);
+    taskChecklistInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') addChecklistItem();
+    });
+  }
+
+  if (taskChecklistList) {
+    taskChecklistList.addEventListener('click', function (event) {
+      const taskId = fId.value;
+      if (!taskId) return;
+
+      // Toggle checkbox
+      const cb = event.target.closest('.task-checklist-cb');
+      if (cb) {
+        const itemEl = cb.closest('.task-checklist-item');
+        if (!itemEl) return;
+        const itemId = itemEl.dataset.id;
+        const completed = cb.checked;
+        requestJson('/api/tasks/' + taskId + '/checklist/' + itemId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_completed: completed })
+        }).then(function (data) {
+          if (!data.success) { notify('error', data.error || 'Error al actualizar.'); return; }
+          loadChecklist(taskId).catch(function () {});
+        }).catch(function () {
+          notify('error', 'Error de conexión.');
+        });
+        return;
+      }
+
+      // Delete
+      const del = event.target.closest('.task-checklist-delete');
+      if (del) {
+        const itemEl = del.closest('.task-checklist-item');
+        if (!itemEl) return;
+        const itemId = itemEl.dataset.id;
+        requestJson('/api/tasks/' + taskId + '/checklist/' + itemId, {
+          method: 'DELETE'
+        }).then(function (data) {
+          if (!data.success) { notify('error', data.error || 'Error al eliminar.'); return; }
+          loadChecklist(taskId).catch(function () {});
+        }).catch(function () {
+          notify('error', 'Error de conexión.');
+        });
+      }
+    });
+  }
+
+  if (btnLeaveWatching) {
+    btnLeaveWatching.addEventListener('click', function () {
+      const taskId = fId.value;
+      const myUserId = currentTaskDetail && currentTaskDetail.current_user_id;
+      const watcher = currentTaskDetail && Array.isArray(currentTaskDetail.watchers)
+        ? currentTaskDetail.watchers.find(function (item) { return item.is_self; })
+        : null;
+      const userId = watcher ? watcher.user_id : myUserId;
+      if (!taskId || !userId) return;
+      requestJson(`/api/tasks/${taskId}/watchers/${userId}`, { method: 'DELETE' }).then(function (data) {
+        if (!data.success) {
+          notify('error', data.error || 'No se pudo dejar de observar.');
+          return;
+        }
+        closeModal();
+        notify('success', 'Ya no observas esta tarea.');
+        loadWatchingTasks();
+      }).catch(function () {
+        notify('error', 'Error de conexion al dejar de observar.');
+      });
+    });
+  }
+
+  if (btnWatchingTasks && tasksWatchingPanel) {
+    btnWatchingTasks.addEventListener('click', function () {
+      tasksWatchingPanel.classList.toggle('modal-hidden');
+      if (!tasksWatchingPanel.classList.contains('modal-hidden')) loadWatchingTasks();
+    });
+  }
+
+  if (btnWatchingRefresh) {
+    btnWatchingRefresh.addEventListener('click', loadWatchingTasks);
+  }
+
+  if (tasksWatchingList) {
+    tasksWatchingList.addEventListener('click', function (event) {
+      const item = event.target.closest('.task-watching-item');
+      if (!item) return;
+      refreshTaskDetail(item.dataset.taskId).then(function (task) {
+        openModal(true, task);
+      }).catch(function () {
+        notify('error', 'No se pudo abrir tarea observada.');
+      });
+    });
+  }
+
+  [filterStatus, filterPriority, filterAssignee, filterArea].filter(Boolean).forEach(function (el) {
+    el.addEventListener('change', function () { refreshCalendar(); loadOverdueCount(); });
   });
 
   filterClient.addEventListener('input', function () {
     clearTimeout(filterClientTimer);
-    filterClientTimer = setTimeout(refreshCalendar, 300);
+    filterClientTimer = setTimeout(function () { refreshCalendar(); loadOverdueCount(); }, 300);
   });
 
   btnClearFilters.addEventListener('click', function () {
     filterStatus.value = '';
+    if (filterPriority) filterPriority.value = '';
     filterAssignee.value = '';
     filterClient.value = '';
     if (filterArea) filterArea.value = '';
+    clearSearch();
     refreshCalendar();
+    loadOverdueCount();
   });
+
+  /* ── Search ── */
+  if (tasksSearch) {
+    tasksSearch.addEventListener('input', function () {
+      if (searchTimer) clearTimeout(searchTimer);
+      var q = (tasksSearch.value || '').trim();
+      if (q.length < 2) { clearSearch(); loadOverdueCount(); return; }
+      searchTimer = setTimeout(function () { loadSearchResults(q); }, 300);
+    });
+  }
+
+  if (tasksSearchResults) {
+    tasksSearchResults.addEventListener('click', function (event) {
+      var item = event.target.closest('[data-task-id]');
+      if (!item) return;
+      var taskId = item.dataset.taskId;
+      if (taskId) openModal(true, { id: taskId });
+    });
+  }
+
+  /* ── Overdue badge ── */
+  if (tasksOverdueBadge) {
+    tasksOverdueBadge.addEventListener('click', function () {
+      if (tasksSearch) tasksSearch.value = '';
+      clearSearch();
+      if (filterStatus) filterStatus.value = '';
+      // Set the calendar to show overdue tasks only — use a special filter
+      // In this simple implementation, just apply it as a filter param
+      // by setting a custom property that getCalendarFilters will pick up
+      applyOverdueFilter();
+    });
+  }
+
+  var isOverdueFilterActive = false;
+
+  function applyOverdueFilter() {
+    isOverdueFilterActive = true;
+    refreshCalendar();
+  }
+
+  // Patch getCalendarFilters to include overdue param
+  var _origGetCalendarFilters = getCalendarFilters;
+  getCalendarFilters = function () {
+    var filters = _origGetCalendarFilters();
+    if (isOverdueFilterActive) filters.overdue = '1';
+    return filters;
+  };
+
+  // Also patch clearSearch to reset overdue filter
+  var _origClearSearch = clearSearch;
+  clearSearch = function () {
+    isOverdueFilterActive = false;
+    _origClearSearch();
+  };
 
   if (btnBulkCancel) btnBulkCancel.addEventListener('click', function () { setSelectionMode(false); });
   if (btnBulkCopy) btnBulkCopy.addEventListener('click', function () { copySelectedTasks(); setSelectionMode(false); });
@@ -1451,6 +2127,11 @@ document.addEventListener('DOMContentLoaded', function () {
   if (btnBulkPending) btnBulkPending.addEventListener('click', function () { bulkUpdateStatus('Pendiente'); });
   if (btnBulkProgress) btnBulkProgress.addEventListener('click', function () { bulkUpdateStatus('En Progreso'); });
   if (btnBulkDone) btnBulkDone.addEventListener('click', function () { bulkUpdateStatus('Completado'); });
+  if (bulkStatusQuick) bulkStatusQuick.addEventListener('change', function () {
+    if (!bulkStatusQuick.value) return;
+    bulkUpdateStatus(bulkStatusQuick.value);
+    bulkStatusQuick.value = '';
+  });
   if (btnBulkDelete) btnBulkDelete.addEventListener('click', bulkDeleteSelected);
 
   if (btnMonthApply && monthInput) {
@@ -1542,10 +2223,14 @@ document.addEventListener('DOMContentLoaded', function () {
     dayMaxEvents: 4,
     moreLinkText: 'mas',
     eventOrder: function (a, b) {
-      const priority = { Pendiente: 1, 'En Progreso': 2, Completado: 3 };
-      const p1 = priority[a.extendedProps.status] || 99;
-      const p2 = priority[b.extendedProps.status] || 99;
+      const statusPriority = { Pendiente: 1, 'En Progreso': 2, 'Bloqueado': 3, 'En Revisión': 4, Completado: 5 };
+      const taskPriority = { Alta: 1, Media: 2, Baja: 3 };
+      const p1 = statusPriority[a.extendedProps.status] || 99;
+      const p2 = statusPriority[b.extendedProps.status] || 99;
       if (p1 !== p2) return p1 - p2;
+      const pr1 = taskPriority[a.extendedProps.priority] || 99;
+      const pr2 = taskPriority[b.extendedProps.priority] || 99;
+      if (pr1 !== pr2) return pr1 - pr2;
       return String(a.title || '').localeCompare(String(b.title || ''), 'es');
     },
 
@@ -1557,6 +2242,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const filters = getCalendarFilters();
       if (filters.status) params.set('status', filters.status);
+      if (filters.priority) params.set('priority', filters.priority);
       if (filters.assignee_id) params.set('assignee_id', filters.assignee_id);
       if (filters.client) params.set('client', filters.client);
       if (filters.area) params.set('area', filters.area);
@@ -1569,7 +2255,8 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(function (tasks) {
           const events = tasks.map(function (task) {
             const colors = statusColorMap[task.status] || statusColorMap.Pendiente;
-            const slug = (task.status || 'Pendiente').toLowerCase().replace(/\s+/g, '-');
+            const statusSlug = slugifyToken(task.status || 'Pendiente');
+            const prioritySlug = slugifyToken(task.priority || 'Media');
             return {
               id: String(task.id),
               title: task.title,
@@ -1578,11 +2265,13 @@ document.addEventListener('DOMContentLoaded', function () {
               backgroundColor: colors.bg,
               borderColor: colors.border,
               textColor: colors.text,
-              classNames: ['fc-event-task', `status-${slug}`],
+              classNames: ['fc-event-task', `status-${statusSlug}`, `task-prio-${prioritySlug}`]
+                .concat(task.is_overdue ? ['task-overdue'] : []),
               extendedProps: task
             };
           });
           successCallback(events);
+          loadOverdueCount();
         })
         .catch(function (error) {
           failureCallback(error);
@@ -1595,6 +2284,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const lines = [
         task.title,
         `Estado: ${task.status || 'Pendiente'}`,
+        `Prioridad: ${task.priority || 'Media'}`,
         task.client ? `Cliente: ${task.client}` : '',
         task.directorate ? `Director/Gerencia: ${task.directorate}` : '',
         task.requested_by ? `Solicitado por: ${task.requested_by}` : '',
@@ -1668,26 +2358,42 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      updateTask(taskId, { due_date: nextDate }, info.revert, { silent: true })
+      updateTask(taskId, {
+        due_date: nextDate,
+        expected_updated_at: info.event.extendedProps.updated_at || ''
+      }, info.revert, {
+        silent: true,
+        skipRevertOnConflict: true,
+        onConflict: function (data) {
+          info.revert();
+          notify('warning', data.error || 'La tarea fue modificada por otro usuario.');
+        }
+      })
         .then(function () {
+          if (info.event.extendedProps) {
+            info.event.extendedProps.updated_at = new Date().toISOString();
+          }
           showToast(`Tarea movida al ${formatDate(nextDate)}.`, 'success', {
             label: 'Deshacer',
             onClick: function () {
-              updateTask(taskId, { due_date: previousDate }, null, { silent: true })
+              updateTask(taskId, {
+                due_date: previousDate,
+                expected_updated_at: info.event.extendedProps.updated_at || ''
+              }, null, { silent: true })
                 .then(function () {
                   info.event.setStart(previousDate);
                   showToast('Movimiento revertido.', 'success');
                 })
-                .catch(function () {
+                .catch(function (err) {
+                  if (err && err.message === '__conflict__') {
+                    refreshCalendar();
+                    return;
+                  }
                   refreshCalendar();
                   showToast('Error de conexion al deshacer.', 'error');
                 });
             }
           });
-        })
-        .catch(function () {
-          info.revert();
-          showToast('Error de conexion al mover la tarea.', 'error');
         });
     },
 
@@ -1733,4 +2439,6 @@ document.addEventListener('DOMContentLoaded', function () {
   applyMobileViewButtons();
   syncMonthInput(calendar.getDate());
   loadClients();
+  openTaskFromQueryParam();
+  loadOverdueCount();
 });

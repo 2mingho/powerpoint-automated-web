@@ -35,7 +35,7 @@ def is_default_admin(user):
     return user.email == DEFAULT_ADMIN_EMAIL
 
 
-def log_activity(action, detail="", user_id=None):
+def log_activity(action, detail="", user_id=None, entity_type=None, entity_id=None):
     """Log an action to the activity_logs table."""
     uid = user_id or (current_user.id if current_user.is_authenticated else None)
     if uid is None:
@@ -45,6 +45,8 @@ def log_activity(action, detail="", user_id=None):
             user_id=uid,
             action=action,
             detail=detail[:500] if detail else "",
+            entity_type=entity_type,
+            entity_id=entity_id,
             ip_address=request.remote_addr if request else None,
         )
         db.session.add(log)
@@ -257,6 +259,10 @@ def user_edit(user_id):
         if user.area_id != new_area_id:
             changes.append('area actualizada')
             user.area_id = new_area_id
+        is_lead = request.form.get('is_area_lead') == '1'
+        if user.is_area_lead != is_lead:
+            changes.append(f'lider: {user.is_area_lead} -> {is_lead}')
+            user.is_area_lead = is_lead
         if password:
             user.password = generate_password_hash(password, method='scrypt')
             changes.append('contrasena actualizada')

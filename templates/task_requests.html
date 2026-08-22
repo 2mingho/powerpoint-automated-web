@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block title %}Solicitudes entre Equipos | Newlink{% endblock %}
+{% block page_name %}Solicitudes entre Equipos{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
+
+<div class="tr-shell">
+  <section class="tr-hero">
+    <div class="tr-hero-copy">
+      <p class="tasks-kicker">Inbox compartida</p>
+      <h1>Solicitudes entre equipos</h1>
+      <p class="tasks-hero-text">Revisa pendientes, acepta con contexto y responde sin perder trazabilidad.</p>
+    </div>
+    <div class="tr-stats">
+      <article class="tr-stat-card">
+        <span class="tr-stat-label">Pendientes recibidas</span>
+        <strong id="trReceivedBadge">0</strong>
+      </article>
+      <article class="tr-stat-card">
+        <span class="tr-stat-label">Enviadas</span>
+        <strong id="trSentCount">0</strong>
+      </article>
+    </div>
+  </section>
+
+  <section class="tr-panel">
+    <div class="tr-tabs">
+      <button type="button" class="task-tab active" data-tab="received">Recibidas <span class="task-tab-count" id="trReceivedBadgeInline">0</span></button>
+      <button type="button" class="task-tab" data-tab="sent">Enviadas <span class="task-tab-count" id="trSentBadgeInline">0</span></button>
+    </div>
+
+    <div class="tr-panel-hint">Usa recibidas para decidir rápido. Usa enviadas para dar seguimiento.</div>
+
+    <div class="task-tab-panel active" id="trTabReceived">
+      <div class="tr-list" id="trReceivedList">
+        <div class="task-comments-empty">Cargando...</div>
+      </div>
+    </div>
+
+    <div class="task-tab-panel" id="trTabSent">
+      <div class="tr-list" id="trSentList">
+        <div class="task-comments-empty">Cargando...</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Accept Modal -->
+<div class="task-modal-overlay modal-hidden" id="trAcceptModal">
+  <div class="task-modal" role="dialog" style="max-width:440px;">
+    <div class="task-modal-header">
+      <h2>Aceptar Solicitud</h2>
+      <button class="task-modal-close" id="trAcceptClose">&times;</button>
+    </div>
+    <div class="task-modal-body">
+      <p class="tasks-modal-intro">La solicitud se convierte en tarea. Ajusta asignado y fecha antes de confirmar.</p>
+      <div class="form-group form-group-tight">
+        <label class="form-label">Asignar a *</label>
+        <select class="form-select" id="trAcceptAssignee"></select>
+      </div>
+      <div class="form-group form-group-tight">
+        <label class="form-label">Fecha de entrega</label>
+        <input type="date" class="form-input" id="trAcceptDueDate">
+      </div>
+    </div>
+    <div class="task-modal-footer">
+      <button class="btn btn-secondary" id="trAcceptCancel">Cancelar</button>
+      <button class="btn btn-primary" id="trAcceptConfirm">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reject Modal -->
+<div class="task-modal-overlay modal-hidden" id="trRejectModal">
+  <div class="task-modal" role="dialog" aria-labelledby="trRejectTitle" style="max-width:480px;">
+    <div class="task-modal-header">
+      <h2 id="trRejectTitle">Rechazar solicitud</h2>
+      <button class="task-modal-close" id="trRejectClose">&times;</button>
+    </div>
+    <div class="task-modal-body">
+      <p class="tasks-modal-intro">Escribe una razón breve. Llegará al equipo que hizo la solicitud.</p>
+      <div class="form-group form-group-tight">
+        <label class="form-label">Razón *</label>
+        <textarea class="form-textarea" id="trRejectReason" rows="4" placeholder="Ej: Falta detalle del cliente o fecha objetivo."></textarea>
+      </div>
+    </div>
+    <div class="task-modal-footer">
+      <button class="btn btn-secondary" id="trRejectCancel">Cancelar</button>
+      <button class="btn btn-danger" id="trRejectConfirm">Rechazar</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/task_requests.js') }}"></script>
+{% endblock %}

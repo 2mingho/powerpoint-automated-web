@@ -87,6 +87,10 @@
           <i class="fa-solid fa-calendar-check"></i>
           <span>Gestión de Tareas</span>
         </a>
+        <a href="{{ url_for('task_requests.task_requests_page') }}" class="sidebar-item {% if request.endpoint == 'task_requests.task_requests_page' %}active{% endif %}" aria-label="Solicitudes">
+          <i class="fa-solid fa-arrow-right-arrow-left"></i>
+          <span>Solicitudes</span>
+        </a>
         {% endif %}
 
         <div class="sidebar-section-label">Cuenta</div>
@@ -94,14 +98,16 @@
           <i class="fa-solid fa-folder-open"></i>
           <span>Mis Reportes</span>
         </a>
+        {% if current_user.is_admin or current_user.is_area_lead %}
+        <a href="{{ url_for('tasks.tasks_dashboard') if current_user.is_admin else url_for('tasks.team_dashboard') }}" class="sidebar-item {% if request.endpoint in ('tasks.tasks_dashboard', 'tasks.team_dashboard') %}active{% endif %}" aria-label="Dashboard Tareas">
+          <i class="fa-solid fa-clipboard-list"></i>
+          <span>Dashboard {{ 'Tareas' if current_user.is_admin else 'de mi equipo' }}</span>
+        </a>
+        {% endif %}
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('admin.dashboard') }}" class="sidebar-item {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" aria-label="Admin Panel">
           <i class="fa-solid fa-gear"></i>
           <span>Admin Panel</span>
-        </a>
-        <a href="{{ url_for('tasks.tasks_dashboard') }}" class="sidebar-item {% if request.endpoint == 'tasks.tasks_dashboard' %}active{% endif %}" aria-label="Dashboard Tareas">
-          <i class="fa-solid fa-clipboard-list"></i>
-          <span>Dashboard Tareas</span>
         </a>
         {% endif %}
       </nav>
@@ -128,6 +134,23 @@
         </div>
       </div>
       <div class="topbar-right">
+        {% if current_user.is_authenticated %}
+        <div class="topbar-notifications" id="notifDropdown">
+          <button class="theme-toggle notif-toggle" id="notifToggle" title="Notificaciones" aria-label="Notificaciones">
+            <i class="fa-solid fa-bell"></i>
+            <span class="notif-badge hidden" id="notifBadge">0</span>
+          </button>
+          <div class="notif-panel" id="notifPanel">
+            <div class="notif-panel-header">
+              <strong>Notificaciones</strong>
+              <button type="button" class="notif-read-all" id="notifReadAll">Marcar todas</button>
+            </div>
+            <div class="notif-panel-list" id="notifList">
+              <div class="notif-empty">Cargando...</div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
         <button class="theme-toggle" id="themeToggle" title="Cambiar tema">
           <i class="fa-solid fa-moon"></i>
         </button>
@@ -189,6 +212,9 @@
         document.getElementById('loadingHint').textContent = 'Por favor espera, esto puede tardar unos segundos.';
       }
     </script>
+    {% if current_user.is_authenticated %}
+    <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+    {% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>

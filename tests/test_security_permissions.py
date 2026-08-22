@@ -12,7 +12,7 @@ os.environ.setdefault('ALLOW_SELF_REGISTRATION', 'false')
 
 import app as app_module  # noqa: E402
 from extensions import db  # noqa: E402
-from models import User, Report, Area, Task, TempArtifact  # noqa: E402
+from models import User, Report, Area, Task, TempArtifact, Notification, TaskComment, TaskWatcher  # noqa: E402
 from datetime import date  # noqa: E402
 
 
@@ -225,13 +225,13 @@ def test_non_admin_cannot_delete_tasks_for_other_unit_by_day(client):
     assert payload['deleted'] == 1
 
     with app_module.app.app_context():
-        assert db.session.get(Task, own_task_id) is None
-        assert db.session.get(Task, other_task_id) is not None
+        own_task = db.session.get(Task, own_task_id)
+        other_task = db.session.get(Task, other_task_id)
 
-
-# ─────────────────────────────────────────────────────────────
-# SEC-03: las sesiones de clasificacion pertenecen a quien las crea
-# ─────────────────────────────────────────────────────────────
+        assert own_task is not None
+        assert own_task.deleted_at is not None
+        assert other_task is not None
+        assert other_task.deleted_at is None
 
 def _start_classification_session(client, user_id):
     """Sube un CSV minimo y devuelve el session_id generado."""
@@ -1120,3 +1120,283 @@ def test_solo_un_admin_edita_el_catalogo(client):
 
     _login_as(client, normal)
     assert client.get('/admin/catalogo').status_code in (302, 403)
+
+
+# Colaboracion en tareas: borrado suave, conflictos, notificaciones,
+# comentarios y observadores
+# ─────────────────────────────────────────────────────────────
+
+
+def test_soft_deleted_task_hidden_from_api(client):
+    target_day = date(2026, 2, 10)
+
+    with app_module.app.app_context():
+        user_id = _create_user(
+            username='tasks-owner',
+            email='tasks-owner@example.com',
+            role='DI',
+            tools=['tasks'],
+        )
+        task_id = _create_task(
+            title='Tarea oculta por soft delete',
+            due_date=target_day,
+            area='DI',
+            creator_id=user_id,
+            assignee_id=user_id,
+        )
+
+    _login_as(client, user_id)
+
+    delete_response = client.delete(f'/api/tasks/{task_id}')
+    assert delete_response.status_code == 200
+    assert delete_response.get_json()['success'] is True
+
+    list_response = client.get(f'/api/tasks?start={target_day.isoformat()}&end={target_day.isoformat()}')
+    assert list_response.status_code == 200
+    assert list_response.get_json() == []
+
+    with app_module.app.app_context():
+        task = db.session.get(Task, task_id)
+        assert task is not None
+        assert task.deleted_at is not None
+        assert task.deleted_by_id == user_id
+
+
+def test_update_conflict_returns_409(client):
+    target_day = date(2026, 2, 11)
+
+    with app_module.app.app_context():
+        user_id = _create_user(
+            username='tasks-editor',
+            email='tasks-editor@example.com',
+            role='DI',
+            tools=['tasks'],
+        )
+        task_id = _create_task(
+            title='Tarea con conflicto',
+            due_date=target_day,
+            area='DI',
+            creator_id=user_id,
+            assignee_id=user_id,
+        )
+        task = db.session.get(Task, task_id)
+        stale_updated_at = task.updated_at.isoformat()
+        task.title = 'Título cambiado en otra sesión'
+        db.session.commit()
+
+    _login_as(client, user_id)
+    response = client.put(f'/api/tasks/{task_id}', json={
+        'title': 'Mi cambio viejo',
+        'expected_updated_at': stale_updated_at,
+    })
+
+    assert response.status_code == 409
+    payload = response.get_json()
+    assert payload['success'] is False
+    assert 'modificada por otro usuario' in payload['error']
+    assert payload['task']['title'] == 'Título cambiado en otra sesión'
+
+
+def test_notifications_are_user_scoped(client):
+    with app_module.app.app_context():
+        owner_id = _create_user(username='notif-owner', email='notif-owner@example.com')
+        other_id = _create_user(username='notif-other', email='notif-other@example.com')
+
+        owner_notif = Notification(user_id=owner_id, kind='task_assigned', title='Notif owner')
+        other_notif = Notification(user_id=other_id, kind='task_assigned', title='Notif other')
+        db.session.add_all([owner_notif, other_notif])
+        db.session.commit()
+        owner_notif_id = owner_notif.id
+        other_notif_id = other_notif.id
+
+    _login_as(client, owner_id)
+
+    list_response = client.get('/api/notifications')
+    assert list_response.status_code == 200
+    payload = list_response.get_json()
+    assert payload['success'] is True
+    assert [item['id'] for item in payload['items']] == [owner_notif_id]
+
+    own_read_response = client.post(f'/api/notifications/{owner_notif_id}/read')
+    assert own_read_response.status_code == 200
+    assert own_read_response.get_json()['success'] is True
+
+    other_read_response = client.post(f'/api/notifications/{other_notif_id}/read')
+    assert other_read_response.status_code == 404
+
+    with app_module.app.app_context():
+        owner_notif = db.session.get(Notification, owner_notif_id)
+        other_notif = db.session.get(Notification, other_notif_id)
+        assert owner_notif.read_at is not None
+        assert other_notif.read_at is None
+
+
+def test_comments_respect_unit_scope(client):
+    with app_module.app.app_context():
+        area_a_id = _create_area('Area-C1')
+        area_b_id = _create_area('Area-C2')
+        owner_id = _create_user(username='comment-owner', email='comment-owner@example.com', tools=['tasks'])
+        other_id = _create_user(username='comment-other', email='comment-other@example.com', tools=['tasks'])
+        owner = db.session.get(User, owner_id)
+        other = db.session.get(User, other_id)
+        owner.area_id = area_a_id
+        other.area_id = area_b_id
+        db.session.commit()
+        task_id = _create_task(title='Tarea comentarios', due_date=date(2026, 2, 12), area='DI', creator_id=owner_id, assignee_id=owner_id)
+
+    _login_as(client, other_id)
+    response = client.get(f'/api/tasks/{task_id}/comments')
+    assert response.status_code == 403
+
+
+def test_mention_notifies_unit_user_only(client):
+    with app_module.app.app_context():
+        area_a_id = _create_area('Area-M1')
+        area_b_id = _create_area('Area-M2')
+        author_id = _create_user(username='author-user', email='author-user@example.com', tools=['tasks'])
+        same_unit_id = _create_user(username='same.unit', email='same@example.com', tools=['tasks'])
+        other_unit_id = _create_user(username='other.unit', email='other@example.com', tools=['tasks'])
+        author = db.session.get(User, author_id)
+        same_unit = db.session.get(User, same_unit_id)
+        other_unit = db.session.get(User, other_unit_id)
+        author.area_id = area_a_id
+        same_unit.area_id = area_a_id
+        other_unit.area_id = area_b_id
+        db.session.commit()
+        task_id = _create_task(title='Tarea mención', due_date=date(2026, 2, 13), area='DI', creator_id=author_id, assignee_id=author_id)
+
+    _login_as(client, author_id)
+    response = client.post(f'/api/tasks/{task_id}/comments', json={'body': 'Hola @same.unit y @other.unit'})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['success'] is True
+
+    with app_module.app.app_context():
+        same_notifs = Notification.query.filter_by(user_id=same_unit_id, kind='mention').all()
+        other_notifs = Notification.query.filter_by(user_id=other_unit_id, kind='mention').all()
+        comments = TaskComment.query.filter_by(task_id=task_id).all()
+        assert len(same_notifs) == 1
+        assert len(other_notifs) == 0
+        assert len(comments) == 1
+
+
+def test_watcher_can_view_but_not_edit_shared_task(client):
+    with app_module.app.app_context():
+        area_a_id = _create_area('Area-W1')
+        area_b_id = _create_area('Area-W2')
+        owner_id = _create_user(username='watch-owner', email='watch-owner@example.com', tools=['tasks'])
+        watcher_id = _create_user(username='watch-user', email='watch-user@example.com', tools=['tasks'])
+        owner = db.session.get(User, owner_id)
+        watcher = db.session.get(User, watcher_id)
+        owner.area_id = area_a_id
+        watcher.area_id = area_b_id
+        db.session.commit()
+
+        task_id = _create_task(
+            title='Tarea shared watcher',
+            due_date=date(2026, 2, 14),
+            area='DI',
+            creator_id=owner_id,
+            assignee_id=owner_id,
+        )
+        task = db.session.get(Task, task_id)
+        task.visibility = 'shared'
+        db.session.add(TaskWatcher(task_id=task_id, user_id=watcher_id, added_by_id=owner_id))
+        db.session.commit()
+
+    _login_as(client, watcher_id)
+
+    get_response = client.get(f'/api/tasks/{task_id}')
+    assert get_response.status_code == 200
+    payload = get_response.get_json()
+    assert payload['success'] is True
+    assert payload['task']['can_edit'] is False
+
+    comments_response = client.get(f'/api/tasks/{task_id}/comments')
+    assert comments_response.status_code == 200
+
+    update_response = client.put(f'/api/tasks/{task_id}', json={'title': 'No debe editar'})
+    assert update_response.status_code == 403
+
+    comment_response = client.post(f'/api/tasks/{task_id}/comments', json={'body': 'No debe comentar'})
+    assert comment_response.status_code == 403
+
+
+def test_unit_visibility_unchanged_for_non_watchers(client):
+    with app_module.app.app_context():
+        area_a_id = _create_area('Area-U1')
+        area_b_id = _create_area('Area-U2')
+        owner_id = _create_user(username='unit-owner', email='unit-owner@example.com', tools=['tasks'])
+        outsider_id = _create_user(username='unit-outsider', email='unit-outsider@example.com', tools=['tasks'])
+        owner = db.session.get(User, owner_id)
+        outsider = db.session.get(User, outsider_id)
+        owner.area_id = area_a_id
+        outsider.area_id = area_b_id
+        db.session.commit()
+
+        task_id = _create_task(
+            title='Tarea shared sin watcher',
+            due_date=date(2026, 2, 15),
+            area='DI',
+            creator_id=owner_id,
+            assignee_id=owner_id,
+        )
+        task = db.session.get(Task, task_id)
+        task.visibility = 'shared'
+        db.session.commit()
+
+    _login_as(client, outsider_id)
+    get_response = client.get(f'/api/tasks/{task_id}')
+    assert get_response.status_code == 403
+
+
+def test_can_add_and_remove_watcher(client):
+    with app_module.app.app_context():
+        area_id = _create_area('Area-W3')
+        owner_id = _create_user(username='owner-add-watch', email='owner-add-watch@example.com', tools=['tasks'])
+        watcher_id = _create_user(username='watch-add-user', email='watch-add-user@example.com', tools=['tasks'])
+        owner = db.session.get(User, owner_id)
+        watcher = db.session.get(User, watcher_id)
+        owner.area_id = area_id
+        watcher.area_id = area_id
+        db.session.commit()
+        task_id = _create_task(title='Tarea add watcher', due_date=date(2026, 2, 16), area='DI', creator_id=owner_id, assignee_id=owner_id)
+
+    _login_as(client, owner_id)
+    add_response = client.post(f'/api/tasks/{task_id}/watchers', json={'user_id': watcher_id})
+    assert add_response.status_code == 200
+    assert add_response.get_json()['success'] is True
+
+    with app_module.app.app_context():
+        watcher = TaskWatcher.query.filter_by(task_id=task_id, user_id=watcher_id).first()
+        assert watcher is not None
+
+    remove_response = client.delete(f'/api/tasks/{task_id}/watchers/{watcher_id}')
+    assert remove_response.status_code == 200
+    assert remove_response.get_json()['success'] is True
+
+    with app_module.app.app_context():
+        watcher = TaskWatcher.query.filter_by(task_id=task_id, user_id=watcher_id).first()
+        assert watcher is None
+
+
+def test_add_cross_area_watcher_sets_shared_visibility(client):
+    with app_module.app.app_context():
+        area_a_id = _create_area('Area-W4A')
+        area_b_id = _create_area('Area-W4B')
+        owner_id = _create_user(username='owner-cross-watch', email='owner-cross-watch@example.com', tools=['tasks'])
+        watcher_id = _create_user(username='watch-cross-user', email='watch-cross-user@example.com', tools=['tasks'])
+        owner = db.session.get(User, owner_id)
+        watcher = db.session.get(User, watcher_id)
+        owner.area_id = area_a_id
+        watcher.area_id = area_b_id
+        db.session.commit()
+        task_id = _create_task(title='Tarea cross watcher', due_date=date(2026, 2, 17), area='DI', creator_id=owner_id, assignee_id=owner_id)
+
+    _login_as(client, owner_id)
+    add_response = client.post(f'/api/tasks/{task_id}/watchers', json={'user_id': watcher_id})
+    assert add_response.status_code == 200
+
+    with app_module.app.app_context():
+        task = db.session.get(Task, task_id)
+        assert task.visibility == 'shared'

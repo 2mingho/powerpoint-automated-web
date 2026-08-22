@@ -93,7 +93,7 @@
       <option value="">Creado por</option>
     </select>
 
-    <select class="td-filter-select" id="filterArea">
+    <select class="td-filter-select" id="filterArea" {{ 'style=display:none' if scope == 'area' }}>
       <option value="">Área</option>
     </select>
 
@@ -217,6 +217,8 @@
 
 {% block scripts %}
 <script>
+const API_BASE = {{ "'/api/team'" if scope == 'area' else "'/api/admin'" }};
+const IS_TEAM_SCOPE = {{ 'true' if scope == 'area' else 'false' }};
 document.addEventListener('DOMContentLoaded', function() {
   const grid = document.getElementById('tdGrid');
   const selStatus = document.getElementById('filterStatus');
@@ -515,7 +517,7 @@ document.addEventListener('DOMContentLoaded', function() {
     btnImportCsv.disabled = true;
     btnImportCsv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analizando...';
 
-    fetch('/api/admin/tasks/import-csv/preview', {
+    fetch(API_BASE + '/tasks/import-csv/preview', {
       method: 'POST',
       body: formData
     })
@@ -617,7 +619,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ─── Load filter options ───
-  fetch('/api/admin/tasks/filters')
+  fetch(API_BASE + '/tasks/filters')
     .then(parseJsonResponse)
     .then(data => {
       if (!data || !data.statuses) return;
@@ -733,7 +735,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function loadTasks() {
     const params = buildTaskFilterParams();
 
-    fetch('/api/admin/tasks?' + params.toString())
+    fetch(API_BASE + '/tasks?' + params.toString())
       .then(parseJsonResponse)
       .then(data => {
         if (!data.success) {
@@ -838,7 +840,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   btnExportCsv.addEventListener('click', function() {
     const params = buildTaskFilterParams();
-    const url = '/api/admin/tasks/export-csv' + (params.toString() ? `?${params.toString()}` : '');
+    const url = API_BASE + '/tasks/export-csv' + (params.toString() ? `?${params.toString()}` : '');
     window.location.href = url;
   });
 
@@ -935,7 +937,7 @@ document.addEventListener('DOMContentLoaded', function() {
     btnCommitCsvImport.disabled = true;
     btnCommitCsvImport.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Importando...';
 
-    fetch('/api/admin/tasks/import-csv/commit', {
+    fetch(API_BASE + '/tasks/import-csv/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rows: csvPreviewRows })
