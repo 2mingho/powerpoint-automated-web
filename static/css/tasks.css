@@ -2994,3 +2994,156 @@
   .today-card-main { flex-basis: 100%; }
   .today-card-prio { width: auto; text-align: left; }
 }
+
+/* ═══════════════════════════════════════════════════════
+   CREACION EN DOS NIVELES (RED-3)
+   Lo imprescindible arriba; el contexto administrativo y la planificacion
+   plegados. Se usa <details>/<summary> nativo: accesible y con teclado
+   sin JS de por medio.
+   ═══════════════════════════════════════════════════════ */
+
+.task-fieldset {
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-lg);
+  margin-top: var(--sp-md);
+  background: var(--c-bg);
+}
+
+.task-fieldset-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-sm);
+  padding: 10px var(--sp-md);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  border-radius: var(--r-lg);
+}
+
+.task-fieldset-head::-webkit-details-marker { display: none; }
+
+.task-fieldset-head::after {
+  content: "\f078"; /* chevron-down */
+  font-family: "Font Awesome 6 Free";
+  font-weight: 900;
+  font-size: 0.7rem;
+  margin-left: auto;
+  color: var(--c-text-secondary);
+  transition: transform var(--t-fast);
+}
+
+.task-fieldset[open] > .task-fieldset-head::after { transform: rotate(180deg); }
+
+.task-fieldset-head:hover { background: var(--c-border-light); }
+
+.task-fieldset-head:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -2px;
+}
+
+.task-fieldset-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.task-fieldset-hint {
+  font-size: 0.76rem;
+  color: var(--c-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cuando el acordeon lleva datos, el resumen lo dice: si no, editar una tarea
+   con cliente y presupuesto los escondería sin ninguna senal. */
+.task-fieldset.has-data .task-fieldset-title::after {
+  content: "";
+  display: inline-block;
+  width: 5px; height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  vertical-align: middle;
+}
+
+.task-fieldset-body {
+  padding: 0 var(--sp-md) var(--sp-md);
+  background: var(--c-white);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  border-top: 1px solid var(--c-border-light);
+  padding-top: var(--sp-md);
+}
+
+/* ─── Plantillas como puerta de entrada (RED-3) ─── */
+.task-template-picker { margin-bottom: var(--sp-md); }
+
+.task-template-lead {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--c-text-secondary);
+  margin: 0 0 var(--sp-sm);
+}
+
+.task-template-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--sp-sm);
+}
+
+.task-template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-md);
+  text-align: left;
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.task-template-card:hover {
+  border-color: var(--c-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.task-template-card:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+.task-template-card i {
+  color: var(--c-text-secondary);
+  margin-bottom: 2px;
+}
+
+.task-template-card--blank i { color: var(--c-accent); }
+
+.task-template-name {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--c-text);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-template-meta {
+  font-size: 0.75rem;
+  color: var(--c-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* .modal-hidden se declara antes que .task-modal-footer y ambas son de una
+   sola clase: la ultima gana y el pie se quedaba visible. */
+.task-modal-footer.modal-hidden { display: none; }

@@ -221,66 +221,32 @@
 
       <div class="task-tab-panel active" id="taskTabDetails">
 
-      <div class="task-watchers-section modal-hidden" id="taskWatchersSection">
-        <label class="form-label">Observadores</label>
-        <div class="task-watchers-chips" id="taskWatchersChips"></div>
-        <div class="task-watchers-controls" id="taskWatchersControls">
-          <select class="form-select" id="taskWatcherUserSelect">
-            <option value="">Selecciona usuario...</option>
-            {% for u in area_users %}
-            <option value="{{ u.id }}">{{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}</option>
-            {% endfor %}
-          </select>
-          <button class="btn btn-secondary btn-sm" id="btnAddWatcher" type="button">Agregar</button>
-        </div>
-        <button class="btn btn-secondary btn-sm modal-hidden" id="btnLeaveWatching" type="button">Dejar de observar</button>
+      {#
+        Creacion en dos niveles (RED-3). Antes eran 14 campos en una sola
+        columna, todos con el mismo peso visual, y el primero que se veia al
+        editar era "Observadores". Ahora lo imprescindible queda arriba y el
+        resto se pliega en dos acordeones cerrados: el contexto administrativo
+        y la planificacion, relevante en menos de un tercio de las tareas.
+      #}
+
+      {# ─── Selector de plantillas: solo al crear, y solo si hay alguna ─── #}
+      <div class="task-template-picker modal-hidden" id="taskTemplatePicker">
+        <p class="task-template-lead">Empieza desde:</p>
+        <div class="task-template-cards" id="taskTemplateCards"></div>
       </div>
 
-      <div class="form-group form-group-tight" id="templateSelectGroup">
-        <label class="form-label">Usar plantilla</label>
-        <select class="form-select" id="taskTemplateSelect">
-          <option value="">— Sin plantilla —</option>
-        </select>
-      </div>
+      <div id="taskFormFields">
 
+      {# ─── Nivel rapido ─── #}
       <div class="form-group form-group-tight">
-        <label class="form-label">Título *</label>
-        <input type="text" class="form-input" id="taskTitle" placeholder="Título de la tarea" maxlength="255">
+        <label class="form-label" for="taskTitle">Título *</label>
+        <input type="text" class="form-input" id="taskTitle" placeholder="¿Qué hay que hacer?" maxlength="255">
         <div class="field-error" id="taskTitleError"></div>
       </div>
 
-      <div class="form-group form-group-tight">
-        <label class="form-label">Cliente</label>
-        <div class="autocomplete-wrap">
-          <input type="text" class="form-input" id="taskClient" placeholder="Cliente" maxlength="100" autocomplete="off">
-          <div class="autocomplete-list" id="clientAutocomplete"></div>
-        </div>
-      </div>
-
-      <div class="form-group form-group-tight">
-        <label class="form-label">Director o Gerencia</label>
-        <input type="text" class="form-input" id="taskDirectorate" placeholder="Dirección o gerencia" maxlength="255">
-      </div>
-
       <div class="form-row mb-0">
         <div class="form-group form-group-tight">
-          <label class="form-label">Solicitado por</label>
-          <input type="text" class="form-input" id="taskRequestedBy" placeholder="Persona solicitante" maxlength="255">
-        </div>
-        <div class="form-group form-group-tight">
-          <label class="form-label">Tipo de Presupuesto</label>
-          <input type="text" class="form-input" id="taskBudgetType" placeholder="Tipo de presupuesto" maxlength="255">
-        </div>
-      </div>
-
-      <div class="form-group form-group-tight">
-        <label class="form-label">Descripción</label>
-        <textarea class="form-textarea" id="taskDesc" rows="3" placeholder="Descripción"></textarea>
-      </div>
-
-      <div class="form-row mb-0">
-        <div class="form-group form-group-tight">
-          <label class="form-label">Asignar a *</label>
+          <label class="form-label" for="taskAssignee">Asignar a *</label>
           <select class="form-select" id="taskAssignee">
             {% for u in area_users %}
             <option value="{{ u.id }}">
@@ -291,14 +257,14 @@
           <div class="field-error" id="taskAssigneeError"></div>
         </div>
         <div class="form-group form-group-tight">
-          <label class="form-label">Fecha de Entrega *</label>
+          <label class="form-label" for="taskDueDate">Fecha de Entrega *</label>
           <input type="date" class="form-input" id="taskDueDate">
           <div class="field-error" id="taskDueDateError"></div>
         </div>
       </div>
 
       <div class="form-group form-group-tight">
-        <label class="form-label">Prioridad</label>
+        <label class="form-label" for="taskPriority">Prioridad</label>
         <select class="form-select" id="taskPriority">
           <option value="Alta">Alta</option>
           <option value="Media" selected>Media</option>
@@ -306,19 +272,7 @@
         </select>
       </div>
 
-      <div class="form-row mb-0">
-        <div class="form-group form-group-tight">
-          <label class="form-label">Fecha de inicio</label>
-          <input type="date" class="form-input" id="taskStartDate">
-        </div>
-        <div class="form-group form-group-tight">
-          <label class="form-label">Fecha de finalización</label>
-          <input type="date" class="form-input" id="taskEndDate">
-          <div class="field-error" id="taskEndDateError"></div>
-        </div>
-      </div>
-
-      <!-- Status (only in edit mode) -->
+      {# Estado: solo al editar #}
       <div class="form-group form-group-tight modal-hidden" id="statusGroup">
         <label class="form-label">Estado</label>
         <div class="status-select-group">
@@ -330,25 +284,100 @@
         </div>
       </div>
 
-      <!-- Recurrence -->
-      <div class="form-group form-group-tight">
-        <label class="form-check">
-          <input type="checkbox" id="taskRecurrent"> Tarea recurrente
-        </label>
-      </div>
+      {# ─── Acordeon: Encargo ─── #}
+      <details class="task-fieldset" id="taskGroupEncargo">
+        <summary class="task-fieldset-head">
+          <span class="task-fieldset-title">Encargo</span>
+          <span class="task-fieldset-hint">Cliente, dirección, presupuesto</span>
+        </summary>
+        <div class="task-fieldset-body">
+          <div class="form-group form-group-tight">
+            <label class="form-label" for="taskClient">Cliente</label>
+            <div class="autocomplete-wrap">
+              <input type="text" class="form-input" id="taskClient" placeholder="Cliente" maxlength="100" autocomplete="off">
+              <div class="autocomplete-list" id="clientAutocomplete"></div>
+            </div>
+          </div>
 
-      <div class="recurrence-fields" id="recurrenceFields">
-        <div class="form-group form-group-tight">
-          <label class="form-label">Frecuencia</label>
-          <select class="form-select" id="taskRecurrenceType">
-            <option value="Diaria">Diaria</option>
-            <option value="Semanal" selected>Semanal</option>
-            <option value="Mensual">Mensual</option>
-          </select>
+          <div class="form-group form-group-tight">
+            <label class="form-label" for="taskDirectorate">Director o Gerencia</label>
+            <input type="text" class="form-input" id="taskDirectorate" placeholder="Dirección o gerencia" maxlength="255">
+          </div>
+
+          <div class="form-row mb-0">
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskRequestedBy">Solicitado por</label>
+              <input type="text" class="form-input" id="taskRequestedBy" placeholder="Persona solicitante" maxlength="255">
+            </div>
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskBudgetType">Tipo de Presupuesto</label>
+              <input type="text" class="form-input" id="taskBudgetType" placeholder="Tipo de presupuesto" maxlength="255">
+            </div>
+          </div>
+
+          <div class="form-group form-group-tight">
+            <label class="form-label" for="taskDesc">Descripción</label>
+            <textarea class="form-textarea" id="taskDesc" rows="3" placeholder="Descripción"></textarea>
+          </div>
         </div>
-        <div class="recurrence-preview">La recurrencia usa la fecha de finalización para crear solo días laborables.</div>
-        <div class="recurrence-preview" id="recurrencePreview"></div>
-      </div>
+      </details>
+
+      {# ─── Acordeon: Planificacion ─── #}
+      <details class="task-fieldset" id="taskGroupPlanificacion">
+        <summary class="task-fieldset-head">
+          <span class="task-fieldset-title">Planificación</span>
+          <span class="task-fieldset-hint">Fechas, recurrencia, observadores</span>
+        </summary>
+        <div class="task-fieldset-body">
+          <div class="form-row mb-0">
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskStartDate">Fecha de inicio</label>
+              <input type="date" class="form-input" id="taskStartDate">
+            </div>
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskEndDate">Fecha de finalización</label>
+              <input type="date" class="form-input" id="taskEndDate">
+              <div class="field-error" id="taskEndDateError"></div>
+            </div>
+          </div>
+
+          <div class="form-group form-group-tight">
+            <label class="form-check">
+              <input type="checkbox" id="taskRecurrent"> Tarea recurrente
+            </label>
+          </div>
+
+          <div class="recurrence-fields" id="recurrenceFields">
+            <div class="form-group form-group-tight">
+              <label class="form-label" for="taskRecurrenceType">Frecuencia</label>
+              <select class="form-select" id="taskRecurrenceType">
+                <option value="Diaria">Diaria</option>
+                <option value="Semanal" selected>Semanal</option>
+                <option value="Mensual">Mensual</option>
+              </select>
+            </div>
+            <div class="recurrence-preview">La recurrencia usa la fecha de finalización para crear solo días laborables.</div>
+            <div class="recurrence-preview" id="recurrencePreview"></div>
+          </div>
+
+          <div class="task-watchers-section modal-hidden" id="taskWatchersSection">
+            <label class="form-label">Observadores</label>
+            <div class="task-watchers-chips" id="taskWatchersChips"></div>
+            <div class="task-watchers-controls" id="taskWatchersControls">
+              <select class="form-select" id="taskWatcherUserSelect">
+                <option value="">Selecciona usuario...</option>
+                {% for u in area_users %}
+                <option value="{{ u.id }}">{{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}</option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-secondary btn-sm" id="btnAddWatcher" type="button">Agregar</button>
+            </div>
+            <button class="btn btn-secondary btn-sm modal-hidden" id="btnLeaveWatching" type="button">Dejar de observar</button>
+          </div>
+        </div>
+      </details>
+
+      </div>{# /taskFormFields #}
       </div>
 
       <div class="task-tab-panel" id="taskTabComments">
@@ -382,7 +411,7 @@
       </div>
     </div>
 
-    <div class="task-modal-footer">
+    <div class="task-modal-footer" id="taskModalFooter">
       <label class="form-check delete-series-check modal-hidden modal-push-left" id="deleteSeriesWrap">
         <input type="checkbox" id="taskDeleteSeries"> Eliminar toda la serie
       </label>

@@ -90,8 +90,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const fStartDate = document.getElementById('taskStartDate');
   const fEndDate = document.getElementById('taskEndDate');
   const fRecType = document.getElementById('taskRecurrenceType');
-  const fTemplateSelect = document.getElementById('taskTemplateSelect');
-  const templateSelectGroup = document.getElementById('templateSelectGroup');
   const btnSaveAsTemplate = document.getElementById('btnSaveAsTemplate');
 
   const formMessage = document.getElementById('taskFormMessage');
@@ -1526,6 +1524,125 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  /* ─── Acordeones del formulario (RED-3) ───
+     Un acordeon cerrado que esconde datos es peor que un campo de mas: al
+     editar una tarea con cliente o fechas hay que abrirlo, o el usuario cree
+     que no tiene nada. */
+
+  const grupoEncargo = document.getElementById('taskGroupEncargo');
+  const grupoPlanificacion = document.getElementById('taskGroupPlanificacion');
+
+  const CAMPOS_POR_GRUPO = {
+    taskGroupEncargo: ['taskClient', 'taskDirectorate', 'taskRequestedBy', 'taskBudgetType', 'taskDesc'],
+    taskGroupPlanificacion: ['taskStartDate', 'taskEndDate']
+  };
+
+  function grupoTieneDatos(grupo) {
+    if (!grupo) return false;
+    return (CAMPOS_POR_GRUPO[grupo.id] || []).some(function (id) {
+      const campo = document.getElementById(id);
+      return campo && String(campo.value || '').trim() !== '';
+    });
+  }
+
+  function sincronizarGrupos(abrirSiHayDatos) {
+    [grupoEncargo, grupoPlanificacion].forEach(function (grupo) {
+      if (!grupo) return;
+      const conDatos = grupoTieneDatos(grupo);
+      grupo.classList.toggle('has-data', conDatos);
+      grupo.open = Boolean(abrirSiHayDatos && conDatos);
+    });
+  }
+
+  /* ─── Plantillas como puerta de entrada (RED-3) ───
+     La plantilla era un desplegable perdido entre catorce campos. Ahora es lo
+     primero que se ve al crear. Si el area no tiene ninguna, el paso se salta
+     entero: nadie deberia pagar un clic por una funcion que no usa. */
+
+  const templatePicker = document.getElementById('taskTemplatePicker');
+  const templateCards = document.getElementById('taskTemplateCards');
+  const formFields = document.getElementById('taskFormFields');
+  const modalFooter = document.getElementById('taskModalFooter');
+
+  function mostrarFormulario() {
+    if (templatePicker) templatePicker.classList.add('modal-hidden');
+    if (formFields) formFields.classList.remove('modal-hidden');
+    // El pie vuelve solo cuando hay algo que guardar.
+    if (modalFooter) modalFooter.classList.remove('modal-hidden');
+    if (fTitle) fTitle.focus();
+  }
+
+  function aplicarPlantilla(payload) {
+    if (fTitle) fTitle.value = payload.title || '';
+    if (fClient) fClient.value = payload.client || '';
+    if (fDesc) fDesc.value = payload.description || '';
+    if (fPriority) fPriority.value = payload.priority || 'Media';
+    if (fBudgetType) fBudgetType.value = payload.budget_type || '';
+    sincronizarGrupos(true);
+  }
+
+  function pintarFichasDePlantilla(plantillas) {
+    if (!templateCards || !templatePicker || !formFields) return;
+
+    // Sin plantillas no hay eleccion que ofrecer: al formulario directo.
+    if (!plantillas.length) {
+      mostrarFormulario();
+      return;
+    }
+
+    const fichas = ['<button type="button" class="task-template-card task-template-card--blank" data-plantilla="">'
+      + '<i class="fa-solid fa-plus"></i>'
+      + '<span class="task-template-name">En blanco</span>'
+      + '<span class="task-template-meta">Empezar de cero</span>'
+      + '</button>'];
+
+    plantillas.forEach(function (t, indice) {
+      const payload = t.payload || {};
+      const detalle = [payload.client, payload.priority].filter(Boolean).join(' · ');
+      fichas.push('<button type="button" class="task-template-card" data-plantilla="' + indice + '">'
+        + '<i class="fa-regular fa-clone"></i>'
+        + '<span class="task-template-name">' + escapeHtml(t.name || 'Plantilla') + '</span>'
+        + '<span class="task-template-meta">' + escapeHtml(detalle || 'Sin detalles') + '</span>'
+        + '</button>');
+    });
+
+    templateCards.innerHTML = fichas.join('');
+    templateCards.dataset.plantillas = JSON.stringify(plantillas);
+    templatePicker.classList.remove('modal-hidden');
+    formFields.classList.add('modal-hidden');
+    // Un "Guardar" activo sobre un formulario que aun no se ve solo confunde.
+    if (modalFooter) modalFooter.classList.add('modal-hidden');
+    const primera = templateCards.querySelector('.task-template-card');
+    if (primera) primera.focus();
+  }
+
+  if (templateCards) {
+    templateCards.addEventListener('click', function (evento) {
+      const ficha = evento.target.closest('[data-plantilla]');
+      if (!ficha) return;
+      const indice = ficha.dataset.plantilla;
+      if (indice !== '') {
+        try {
+          const plantillas = JSON.parse(templateCards.dataset.plantillas || '[]');
+          const elegida = plantillas[Number(indice)];
+          if (elegida) aplicarPlantilla(elegida.payload || {});
+        } catch (e) { /* si falla, se abre en blanco */ }
+      }
+      mostrarFormulario();
+    });
+  }
+
+  function ofrecerPlantillas() {
+    if (!templatePicker) return;
+    requestJson('/api/tasks/templates').then(function (data) {
+      pintarFichasDePlantilla(
+        (data && data.success && Array.isArray(data.templates)) ? data.templates : []
+      );
+    }).catch(function () {
+      mostrarFormulario();
+    });
+  }
+
   function openModal(editMode, taskData) {
     fId.value = '';
     fTitle.value = '';
@@ -1576,7 +1693,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
       statusGroup.classList.remove('modal-hidden');
       btnDelete.classList.remove('modal-hidden');
-      if (templateSelectGroup) templateSelectGroup.classList.add('modal-hidden');
       if (btnSaveAsTemplate) btnSaveAsTemplate.classList.remove('modal-hidden');
 
       recurrentCb.checked = false;
@@ -1586,20 +1702,26 @@ document.addEventListener('DOMContentLoaded', function () {
       if (taskData.is_recurrent && !taskData.parent_task_id) {
         deleteSeriesWrap.classList.remove('modal-hidden');
       }
+
+      // Editando siempre se ve el formulario, nunca el selector de plantillas.
+      mostrarFormulario();
+      sincronizarGrupos(true);
     } else {
       modalTitle.textContent = 'Nueva Tarea';
       if (taskModalTabs) taskModalTabs.classList.add('modal-hidden');
-      statusGroup.classList.remove('modal-hidden');
+      statusGroup.classList.add('modal-hidden');
       btnDelete.classList.add('modal-hidden');
-      if (templateSelectGroup) templateSelectGroup.classList.remove('modal-hidden');
       if (btnSaveAsTemplate) btnSaveAsTemplate.classList.add('modal-hidden');
       recurrentCb.parentElement.style.display = '';
-      loadTemplates();
+      sincronizarGrupos(false);
+      ofrecerPlantillas();
     }
 
     hideContextMenu();
     overlay.classList.add('open');
-    fTitle.focus();
+    // El foco lo pone mostrarFormulario(); al crear puede que primero se vea
+    // el selector de plantillas y llevar el foco al titulo seria enganoso.
+    if (editMode) fTitle.focus();
   }
 
   function closeModal() {
@@ -1707,36 +1829,6 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /* ── Templates ── */
-  function loadTemplates() {
-    if (!fTemplateSelect) return;
-    fetch('/api/tasks/templates').then(function (r) { return r.json(); }).then(function (data) {
-      fTemplateSelect.innerHTML = '<option value="">— Sin plantilla —</option>';
-      if (data.success && Array.isArray(data.templates)) {
-        data.templates.forEach(function (t) {
-          var o = document.createElement('option');
-          o.value = t.id;
-          o.textContent = t.name;
-          o.dataset.payload = JSON.stringify(t.payload || {});
-          fTemplateSelect.appendChild(o);
-        });
-      }
-    }).catch(function () {});
-  }
-
-  if (fTemplateSelect) {
-    fTemplateSelect.addEventListener('change', function () {
-      var opt = fTemplateSelect.options[fTemplateSelect.selectedIndex];
-      if (!opt || !opt.value) return;
-      try {
-        var payload = JSON.parse(opt.dataset.payload || '{}');
-        if (fTitle) fTitle.value = payload.title || '';
-        if (fClient) fClient.value = payload.client || '';
-        if (fDesc) fDesc.value = payload.description || '';
-        if (fPriority) fPriority.value = payload.priority || 'Media';
-      } catch (e) { /* ignore */ }
-    });
-  }
-
   if (btnSaveAsTemplate) {
     btnSaveAsTemplate.addEventListener('click', function () {
       var name = prompt('Nombre para la plantilla:');
@@ -1778,7 +1870,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }).then(function (r) { return r.json(); }).then(function (data) {
       if (!data.success) { notify('error', data.error || 'Error al guardar plantilla.'); return; }
       notify('success', 'Plantilla guardada.');
-      loadTemplates();
     }).catch(function () { notify('error', 'Error de conexión.'); });
   }
 
