@@ -1,9 +1,11 @@
 import os
+import io
 import functools
 import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, session
 from flask_login import login_required, current_user, login_user
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 from extensions import db
 from models import User, ActivityLog, Role, Area, UnitLead
 
@@ -95,25 +97,61 @@ def dashboard():
 def users_list():
     search = request.args.get('q', '').strip()
     role_filter = request.args.get('role', '').strip()
+    area_filter = request.args.get('area', '').strip()
+    estado_filter = request.args.get('estado', '').strip()
 
     query = User.query
     if search:
+        patron = f'%{search}%'
         query = query.filter(
-            (User.username.ilike(f'%{search}%')) |
-            (User.email.ilike(f'%{search}%'))
+            (User.username.ilike(patron)) |
+            (User.email.ilike(patron))
         )
     # Accept any role code (dynamic from Role table or 'admin')
     if role_filter:
         query = query.filter_by(role=role_filter)
 
+    if area_filter == 'sin':
+        query = query.filter(User.area_id.is_(None))
+    elif area_filter:
+        try:
+            query = query.filter_by(area_id=int(area_filter))
+        except ValueError:
+            pass
+
+    if estado_filter == 'activos':
+        query = query.filter(User.is_active.is_(True))
+    elif estado_filter == 'inactivos':
+        query = query.filter(User.is_active.is_(False))
+
     # Exclude the default admin from the user list
     query = query.filter(User.email != DEFAULT_ADMIN_EMAIL)
 
-    users = query.order_by(User.created_at.desc()).all()
+    # Paginado. Antes se hacia .all(): con unos cuantos cientos de usuarios eso
+    # es traerlos todos a memoria y pintarlos todos en una tabla que nadie
+    # recorre entera. El filtro es lo que se usa para llegar a alguien.
+    try:
+        pagina = max(1, int(request.args.get('p', '1')))
+    except ValueError:
+        pagina = 1
+
+    POR_PAGINA = 25
+    total = query.count()
+    paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
+    pagina = min(pagina, paginas)
+
+    users = (query.order_by(User.created_at.desc())
+             .limit(POR_PAGINA).offset((pagina - 1) * POR_PAGINA).all())
+
     all_roles = Role.query.order_by(Role.code).all()
+    all_areas = Area.query.order_by(Area.name).all()
+
     return render_template('admin_users.html', users=users,
                            search=search, role_filter=role_filter,
-                           all_roles=all_roles)
+                           area_filter=area_filter, estado_filter=estado_filter,
+                           all_roles=all_roles, all_areas=all_areas,
+                           total=total, pagina=pagina, paginas=paginas,
+                           por_pagina=POR_PAGINA)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -722,3 +760,125 @@ def organizacion_superior():
     log_activity('manager_set', f'{usuario.username} reporta a {jefe.username}')
     flash(f'{usuario.username} ahora reporta a {jefe.username}.', 'success')
     return redirect(url_for('admin.organizacion'))
+
+
+# ─────────────────────────────────────────────────────────────
+# Plantillas PowerPoint
+# ─────────────────────────────────────────────────────────────
+#
+# Se guardan en la base y no en disco: el contenedor tiene almacenamiento
+# efimero, asi que una plantilla dejada en powerpoints/ desaparece en el
+# siguiente despliegue. Las que vienen en el repositorio se siguen listando y
+# usando, pero no se pueden borrar desde aqui — para eso hay que tocar el
+# repositorio, que es donde viven.
+
+MAX_TEMPLATE_BYTES = 15 * 1024 * 1024
+
+
+def _es_pptx_de_verdad(contenido):
+    """Comprueba la estructura, no la extension.
+
+    Un .pptx es un zip con un [Content_Types].xml y al menos una parte de
+    presentacion. Fiarse del nombre deja subir cualquier cosa renombrada.
+    """
+    import io as _io
+    import zipfile as _zipfile
+
+    try:
+        with _zipfile.ZipFile(_io.BytesIO(contenido)) as z:
+            nombres = z.namelist()
+    except _zipfile.BadZipFile:
+        return False
+
+    if '[Content_Types].xml' not in nombres:
+        return False
+    return any(n.startswith('ppt/') for n in nombres)
+
+
+@admin_bp.route('/plantillas')
+@admin_required
+def plantillas_list():
+    from models import PptxTemplate
+    import app as app_module
+
+    subidas = PptxTemplate.query.order_by(PptxTemplate.name).all()
+    nombres_subidos = {t.name for t in subidas}
+    del_repositorio = [n for n in app_module._templates_del_repositorio()
+                       if n not in nombres_subidos]
+
+    return render_template('admin_plantillas.html',
+                           subidas=subidas,
+                           del_repositorio=del_repositorio,
+                           max_mb=MAX_TEMPLATE_BYTES // (1024 * 1024))
+
+
+@admin_bp.route('/plantillas/subir', methods=['POST'])
+@admin_required
+def plantilla_upload():
+    from models import PptxTemplate
+
+    archivo = request.files.get('plantilla')
+    if not archivo or not archivo.filename:
+        flash('Selecciona un archivo .pptx.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    nombre = secure_filename(os.path.basename(archivo.filename))
+    if not nombre.lower().endswith('.pptx'):
+        flash('El archivo debe ser un .pptx.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    contenido = archivo.read()
+    if len(contenido) > MAX_TEMPLATE_BYTES:
+        limite = MAX_TEMPLATE_BYTES // (1024 * 1024)
+        flash(f'La plantilla pesa {len(contenido) // (1024 * 1024)} MB y el limite es {limite} MB.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    if not _es_pptx_de_verdad(contenido):
+        flash('El archivo no es un PowerPoint valido, aunque se llame .pptx.', 'error')
+        return redirect(url_for('admin.plantillas_list'))
+
+    existente = PptxTemplate.query.filter_by(name=nombre).first()
+    if existente is not None:
+        existente.data = contenido
+        existente.size_bytes = len(contenido)
+        existente.uploaded_by_id = current_user.id
+        accion, verbo = 'pptx_template_replace', 'reemplazada'
+    else:
+        db.session.add(PptxTemplate(name=nombre, data=contenido, size_bytes=len(contenido),
+                                    uploaded_by_id=current_user.id))
+        accion, verbo = 'pptx_template_upload', 'subida'
+
+    db.session.commit()
+    log_activity(accion, f'Plantilla {verbo}: {nombre} ({len(contenido) // 1024} KB)')
+    flash(f'Plantilla "{nombre}" {verbo}.', 'success')
+    return redirect(url_for('admin.plantillas_list'))
+
+
+@admin_bp.route('/plantillas/<int:template_id>/eliminar', methods=['POST'])
+@admin_required
+def plantilla_delete(template_id):
+    from models import PptxTemplate
+
+    plantilla = PptxTemplate.query.get_or_404(template_id)
+    nombre = plantilla.name
+    db.session.delete(plantilla)
+    db.session.commit()
+    log_activity('pptx_template_delete', f'Plantilla eliminada: {nombre}')
+    flash(f'Plantilla "{nombre}" eliminada.', 'success')
+    return redirect(url_for('admin.plantillas_list'))
+
+
+@admin_bp.route('/plantillas/<int:template_id>/descargar')
+@admin_required
+def plantilla_download(template_id):
+    """Descargar la que esta en uso, para revisarla o partir de ella."""
+    from flask import send_file
+    from models import PptxTemplate
+
+    plantilla = PptxTemplate.query.get_or_404(template_id)
+    return send_file(
+        io.BytesIO(plantilla.data),
+        as_attachment=True,
+        download_name=plantilla.name,
+        mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    )

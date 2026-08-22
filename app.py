@@ -1,4 +1,5 @@
 import os
+import io
 import pandas as pd
 import uuid
 import zipfile
@@ -594,22 +595,73 @@ DEFAULT_TEMPLATE_FILENAME = "Reporte_plantilla.pptx"
 TEMPLATES_DIR = "powerpoints"
 
 
-def get_available_templates():
-    """Lista segura de nombres de archivo .pptx dentro de powerpoints/"""
+# Una plantilla de 15 MB ya es enorme para un .pptx; el limite existe porque
+# el binario viaja entero en cada consulta que lo lea.
+MAX_TEMPLATE_BYTES = 15 * 1024 * 1024
+
+
+def _templates_del_repositorio():
+    """Nombres .pptx que vienen en powerpoints/, dentro del repositorio."""
     try:
-        files = [
+        return sorted(
             f for f in os.listdir(TEMPLATES_DIR)
             if os.path.isfile(os.path.join(TEMPLATES_DIR, f)) and f.lower().endswith(".pptx")
-        ]
-        return sorted(files)
+        )
     except FileNotFoundError:
         return []
 
 
+def _templates_de_la_base():
+    """Nombres de las plantillas subidas desde el panel."""
+    from models import PptxTemplate
+    try:
+        return sorted(t.name for t in PptxTemplate.query.with_entities(PptxTemplate.name).all())
+    except Exception:
+        # Antes de aplicar 0006 la tabla no existe todavia. Que la aplicacion
+        # arranque igual es mas importante que listar plantillas subidas.
+        return []
+
+
+def get_available_templates():
+    """Todas las plantillas disponibles: las subidas y las del repositorio.
+
+    Si un nombre coincide gana la subida, para que reemplazar una plantilla del
+    repositorio no obligue a un despliegue.
+    """
+    nombres = set(_templates_del_repositorio()) | set(_templates_de_la_base())
+    return sorted(nombres)
+
+
 def template_path_from_name(template_name):
-    """Construye la ruta absoluta segura a la plantilla."""
-    safe_name = os.path.basename(template_name)  # evita traversal
+    """Ruta a una plantilla del repositorio. Evita traversal."""
+    safe_name = os.path.basename(template_name)
     return os.path.join(TEMPLATES_DIR, safe_name)
+
+
+def open_template(template_name):
+    """Devuelve algo que python-pptx pueda abrir: bytes en memoria o una ruta.
+
+    La base manda sobre el disco. Presentation() acepta tanto una ruta como un
+    objeto de fichero, asi que quien llama no necesita distinguirlos.
+    """
+    from models import PptxTemplate
+
+    safe_name = os.path.basename(template_name or '')
+    if not safe_name:
+        raise FileNotFoundError('Plantilla no indicada.')
+
+    try:
+        subida = PptxTemplate.query.filter_by(name=safe_name).first()
+    except Exception:
+        subida = None
+
+    if subida is not None:
+        return io.BytesIO(subida.data)
+
+    ruta = template_path_from_name(safe_name)
+    if not os.path.isfile(ruta):
+        raise FileNotFoundError(f'Plantilla no encontrada: {safe_name}')
+    return ruta
 
 
 def clean_scratch_folder():
@@ -814,11 +866,7 @@ def process_report(csv_path, wordcloud_path, unique_id, template_filename, repor
     client_name = report_title if report_title else os.path.basename(csv_path).split()[0]
 
     # Abrir plantilla seleccionada
-    tpl_path = template_path_from_name(template_filename)
-    if not os.path.isfile(tpl_path):
-        raise FileNotFoundError(f"Plantilla no encontrada: {tpl_path}")
-
-    prs = Presentation(tpl_path)
+    prs = Presentation(open_template(template_filename))
 
     # --- OPTIMIZED: Single-pass placeholder indexing (P3) ---
     # Build index once instead of scanning slides multiple times

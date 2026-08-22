@@ -33,6 +33,29 @@ class Area(db.Model):
         return f"<Area {self.name}>"
 
 
+class PptxTemplate(db.Model):
+    """Plantillas PowerPoint subidas desde el panel.
+
+    Se guarda el binario en la base y no en disco porque el contenedor tiene
+    almacenamiento efimero: una plantilla dejada en powerpoints/ desaparece en
+    el siguiente despliegue. Las que vienen en el repositorio se siguen
+    leyendo del directorio, asi que nada de lo existente cambia.
+    """
+    __tablename__ = 'pptx_templates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    data = db.Column(db.LargeBinary, nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    uploaded_by = db.relationship('User')
+
+    def __repr__(self):
+        return f"<PptxTemplate {self.name}>"
+
+
 class UnitLead(db.Model):
     """Quien lidera cada unidad, de forma directa.
 

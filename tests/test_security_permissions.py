@@ -808,3 +808,152 @@ def test_la_pantalla_muestra_el_alcance_deducido(client):
     assert 'mgr-vista' in cuerpo and 'dir-vista' in cuerpo
     assert 'manager' in cuerpo and 'director' in cuerpo
     assert cuerpo.count('Comunicacion') >= 2, 'la unidad debe salir en el alcance de los dos'
+
+
+# ─────────────────────────────────────────────────────────────
+# Plantillas PowerPoint subibles
+# ─────────────────────────────────────────────────────────────
+
+def _pptx_minimo():
+    """Un .pptx valido de verdad: zip con Content_Types y una parte ppt/."""
+    import io as _io
+    import zipfile
+
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr('[Content_Types].xml', '<Types/>')
+        z.writestr('ppt/presentation.xml', '<p:presentation/>')
+    return buf.getvalue()
+
+
+def test_subir_una_plantilla_la_deja_disponible(client):
+    """Sube y aparece en la lista que ve quien genera reportes."""
+    import io as _io
+    from models import PptxTemplate
+
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-pl', email='admin-pl@example.com', role='admin')
+
+    _login_as(client, jefe)
+    respuesta = client.post('/admin/plantillas/subir', data={
+        'plantilla': (_io.BytesIO(_pptx_minimo()), 'Reporte_Cliente.pptx'),
+    }, content_type='multipart/form-data', follow_redirects=True)
+
+    assert respuesta.status_code == 200
+    with app_module.app.app_context():
+        guardada = PptxTemplate.query.filter_by(name='Reporte_Cliente.pptx').first()
+        assert guardada is not None
+        assert guardada.size_bytes > 0
+        assert 'Reporte_Cliente.pptx' in app_module.get_available_templates()
+
+
+def test_un_pptx_falso_se_rechaza(client):
+    """Fiarse de la extension deja subir cualquier cosa renombrada."""
+    import io as _io
+    from models import PptxTemplate
+
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-falso', email='admin-falso@example.com', role='admin')
+
+    _login_as(client, jefe)
+    respuesta = client.post('/admin/plantillas/subir', data={
+        'plantilla': (_io.BytesIO(b'esto no es un zip'), 'trampa.pptx'),
+    }, content_type='multipart/form-data', follow_redirects=True)
+
+    assert 'no es un PowerPoint' in respuesta.data.decode()
+    with app_module.app.app_context():
+        assert PptxTemplate.query.filter_by(name='trampa.pptx').first() is None
+
+
+def test_la_subida_gana_a_la_del_repositorio(client):
+    """Reemplazar una plantilla del repositorio no debe exigir un despliegue."""
+    import io as _io
+
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-gana', email='admin-gana@example.com', role='admin')
+        del_repo = app_module._templates_del_repositorio()
+
+    if not del_repo:
+        import pytest
+        pytest.skip('el repositorio no trae plantillas en este entorno')
+
+    nombre = del_repo[0]
+    _login_as(client, jefe)
+    client.post('/admin/plantillas/subir', data={
+        'plantilla': (_io.BytesIO(_pptx_minimo()), nombre),
+    }, content_type='multipart/form-data', follow_redirects=True)
+
+    with app_module.app.app_context():
+        abierto = app_module.open_template(nombre)
+        assert isinstance(abierto, _io.BytesIO), 'debe venir de la base, no del disco'
+        # Y no se duplica en la lista.
+        assert app_module.get_available_templates().count(nombre) == 1
+
+
+def test_solo_un_admin_gestiona_plantillas(client):
+    with app_module.app.app_context():
+        normal = _create_user(username='no-admin-pl', email='no-admin-pl@example.com')
+
+    _login_as(client, normal)
+    assert client.get('/admin/plantillas').status_code in (302, 403)
+
+
+# ─────────────────────────────────────────────────────────────
+# Busqueda de usuarios: tiene que aguantar N usuarios
+# ─────────────────────────────────────────────────────────────
+
+def test_la_lista_de_usuarios_pagina(client):
+    """Antes hacia .all(): con cientos de usuarios los traia todos."""
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-pag', email='admin-pag@example.com', role='admin')
+        for i in range(30):
+            _create_user(username=f'persona{i:02d}', email=f'persona{i:02d}@example.com')
+
+    _login_as(client, jefe)
+
+    primera = client.get('/admin/users').data.decode()
+    assert 'Página 1 de' in primera
+    assert primera.count('persona') >= 20, 'debe traer una pagina llena'
+
+    segunda = client.get('/admin/users?p=2').data.decode()
+    assert 'Página 2 de' in segunda
+
+
+def test_buscar_por_nombre_email_unidad_y_estado(client):
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-busca', email='admin-busca@example.com', role='admin')
+        unidad = _create_area('Unidad buscada')
+
+        encontrada = _create_user(username='aguja', email='aguja@example.com')
+        db.session.get(User, encontrada).area_id = unidad
+        inactiva = _create_user(username='pajar-inactivo', email='pajar-inactivo@example.com',
+                                is_active=False)
+        _create_user(username='pajar', email='pajar@example.com')
+        db.session.commit()
+
+    _login_as(client, jefe)
+
+    por_nombre = client.get('/admin/users?q=aguja').data.decode()
+    assert 'aguja' in por_nombre and 'pajar@example.com' not in por_nombre
+
+    por_unidad = client.get(f'/admin/users?area={unidad}').data.decode()
+    assert 'aguja' in por_unidad and '>pajar<' not in por_unidad
+
+    por_estado = client.get('/admin/users?estado=inactivos').data.decode()
+    assert 'pajar-inactivo' in por_estado and '>aguja<' not in por_estado
+
+    sin_unidad = client.get('/admin/users?area=sin').data.decode()
+    assert 'pajar' in sin_unidad and '>aguja<' not in sin_unidad
+
+
+def test_los_filtros_sobreviven_al_cambiar_de_pagina(client):
+    """Pasar de pagina no puede perder lo que estabas buscando."""
+    with app_module.app.app_context():
+        jefe = _create_user(username='admin-filtro', email='admin-filtro@example.com', role='admin')
+        for i in range(30):
+            _create_user(username=f'lote{i:02d}', email=f'lote{i:02d}@example.com')
+
+    _login_as(client, jefe)
+    cuerpo = client.get('/admin/users?q=lote').data.decode()
+
+    assert 'q=lote' in cuerpo, 'el enlace a la pagina siguiente debe conservar la busqueda'
