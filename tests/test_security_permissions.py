@@ -1625,3 +1625,44 @@ def test_nadie_decide_permisos_con_is_area_lead():
         ['blueprints/tasks.py', 'blueprints/task_requests.py', 'templates/base.html'],
     )
     assert encontradas == set(), f'siguen leyendola: {sorted(encontradas)}'
+
+
+# Rediseno: vista Hoy y navegacion en dos espacios
+# ─────────────────────────────────────────────────────────────
+
+def test_tasks_page_publishes_business_today(client):
+    """La vista Hoy agrupa por dia usando el dia que fija el servidor.
+
+    Si se cayera a `data-hoy` vacio o al reloj del navegador, quien se conecte
+    desde otro huso veria el grupo equivocado y tareas vencidas que no lo estan.
+    """
+    from services.clock import today_local
+
+    with app_module.app.app_context():
+        user_id = _create_user(username='hoy-user', email='hoy-user@example.com', tools=['tasks'])
+        esperado = today_local().isoformat()
+
+    _login_as(client, user_id)
+    response = client.get('/tasks')
+
+    assert response.status_code == 200
+    assert f'data-hoy="{esperado}"'.encode() in response.data
+
+
+def test_sidebar_hides_work_space_without_tasks_access(client):
+    """Un espacio sin entradas visibles no debe dibujar su boton.
+
+    Quien no tiene tareas no gana un conmutador que solo lleva a un 403.
+    """
+    with app_module.app.app_context():
+        user_id = _create_user(username='solo-tools', email='solo-tools@example.com',
+                               tools=['reports'])
+
+    _login_as(client, user_id)
+    response = client.get('/menu')
+    cuerpo = response.data.decode()
+
+    assert response.status_code == 200
+    assert 'sidebar-spaces' not in cuerpo
+    assert 'data-espacio="trabajo"' not in cuerpo
+    assert 'Generar Reporte' in cuerpo

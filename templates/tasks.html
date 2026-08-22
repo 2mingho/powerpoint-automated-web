@@ -5,7 +5,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 
-<div class="tasks-shell">
+<div class="tasks-shell" id="tasksShell" data-vista="hoy" data-hoy="{{ hoy }}">
   <section class="tasks-hero">
     <div class="tasks-hero-copy">
       <p class="tasks-kicker">Planifica, sigue y desbloquea</p>
@@ -25,8 +25,39 @@
     </div>
   </section>
 
+  {#
+    Conmutador de vistas (RED-2). El calendario dejo de ser el destino por
+    defecto: para saber que hay que hacer hoy no deberia hacer falta leer una
+    rejilla de mes. "Hoy" abre primero y el calendario queda a un clic.
+  #}
+  <div class="tasks-views" role="tablist" aria-label="Vista de tareas">
+    <button type="button" class="tasks-view-btn" role="tab" data-vista="hoy" aria-selected="true" aria-controls="tasksTodayView">
+      <i class="fa-solid fa-list-check"></i> Hoy
+    </button>
+    <button type="button" class="tasks-view-btn" role="tab" data-vista="calendario" aria-selected="false" aria-controls="tasksCalendarPanel">
+      <i class="fa-regular fa-calendar"></i> Calendario
+    </button>
+  </div>
+
   <section class="tasks-grid">
     <div class="tasks-main-column">
+      {# ─── Vista Hoy (RED-2) ─── #}
+      <section class="tasks-panel tasks-panel--today" id="tasksTodayView" aria-labelledby="tasksTodayTitle">
+        <div class="tasks-section-head">
+          <div>
+            <h2 id="tasksTodayTitle">Tu trabajo</h2>
+            <p id="tasksTodaySubtitle">Lo vencido primero, luego hoy, luego el resto de la semana.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btnTodayRefresh" type="button">
+            <i class="fa-solid fa-rotate"></i> Actualizar
+          </button>
+        </div>
+
+        <div class="today-groups" id="todayGroups" aria-busy="true">
+          <p class="today-loading">Cargando tu trabajo...</p>
+        </div>
+      </section>
+
       <section class="tasks-panel tasks-panel--filters" aria-labelledby="tasksFiltersTitle">
         <div class="tasks-section-head">
           <div>
@@ -83,7 +114,7 @@
         <div class="tasks-search-results modal-hidden" id="tasksSearchResults"></div>
       </section>
 
-      <section class="tasks-panel tasks-panel--calendar" aria-labelledby="tasksCalendarTitle">
+      <section class="tasks-panel tasks-panel--calendar" id="tasksCalendarPanel" aria-labelledby="tasksCalendarTitle">
         <div class="tasks-section-head tasks-section-head--stacked">
           <div>
             <h2 id="tasksCalendarTitle">Calendario de trabajo</h2>

@@ -817,6 +817,9 @@ def tasks_page():
         }
         area_options = sorted(area_names.union(task_areas))
 
+    # La vista Hoy agrupa por dia. El dia de referencia lo fija el servidor en
+    # la zona de negocio, no el reloj del navegador: alguien conectado desde
+    # otro huso veria 'hoy' desplazado y con ello las tareas vencidas.
     return render_template(
         'tasks.html',
         area_users=area_users,
@@ -825,6 +828,7 @@ def tasks_page():
         task_priorities=prioridades_validas(),
         initial_status=estado_inicial(),
         default_priority=prioridad_por_defecto(),
+        hoy=today_local().isoformat(),
     )
 
 

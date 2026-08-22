@@ -2764,3 +2764,233 @@
 .task-status-dot.st-pendiente { color: #f59e0b; }
 .task-status-dot.st-completado { color: #10b981; }
 .task-status-dot.st-bloqueado { color: #ef4444; }
+
+/* ═══════════════════════════════════════════════════════
+   VISTA "HOY" (RED-2)
+   El calendario dejo de ser el destino por defecto. Esta vista responde
+   la pregunta con la que se entra —que tengo que hacer— sin obligar a
+   leer una rejilla de mes ni a tocar un filtro.
+   ═══════════════════════════════════════════════════════ */
+
+.tasks-views {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: var(--sp-md);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-lg);
+  width: fit-content;
+}
+
+.tasks-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: 8px 18px;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--c-text-secondary);
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.tasks-view-btn:hover { color: var(--c-text); }
+
+.tasks-view-btn[aria-selected="true"] {
+  background: var(--c-white);
+  color: var(--c-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.tasks-view-btn:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+/* Solo se pinta la vista activa. */
+.tasks-shell[data-vista="hoy"] .tasks-panel--calendar,
+.tasks-shell[data-vista="hoy"] .tasks-panel--filters,
+.tasks-shell[data-vista="calendario"] .tasks-panel--today {
+  display: none;
+}
+
+.today-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-lg);
+}
+
+.today-loading,
+.today-empty {
+  color: var(--c-text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+  padding: var(--sp-lg) 0;
+}
+
+/* ─── Agrupador temporal ─── */
+.today-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  margin-bottom: var(--sp-sm);
+}
+
+.today-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--c-text-secondary);
+  margin: 0;
+}
+
+.today-group-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--c-text-secondary);
+  background: var(--c-bg);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+}
+
+.today-group.is-vencidas .today-group-title,
+.today-group.is-vencidas .today-group-count {
+  color: var(--c-prio-alta);
+}
+.today-group.is-vencidas .today-group-count {
+  background: var(--c-prio-alta-bg);
+}
+
+.today-group-toggle {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--c-text-secondary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+}
+.today-group-toggle:hover { color: var(--c-text); }
+.today-group-toggle:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+.today-group.is-collapsed .today-list { display: none; }
+
+.today-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── Ficha de tarea ─── */
+.today-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  width: 100%;
+  text-align: left;
+  padding: 10px var(--sp-md) 10px calc(var(--sp-md) + 3px);
+  background: var(--c-white);
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-lg);
+  font-family: inherit;
+  cursor: pointer;
+  position: relative;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.today-card:hover {
+  border-color: var(--c-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.today-card:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+/* La franja de prioridad se lee por posicion y grosor, no solo por color. */
+.today-card::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--c-prio-baja);
+}
+.today-card.prio-alta::before  { background: var(--c-prio-alta); width: 4px; }
+.today-card.prio-media::before { background: var(--c-prio-media); }
+.today-card.prio-baja::before  { background: var(--c-prio-baja); }
+
+.today-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.today-card-title {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today-card.is-done .today-card-title {
+  text-decoration: line-through;
+  color: var(--c-text-secondary);
+}
+
+.today-card-meta {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--c-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.today-card-when {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--c-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.today-card.is-overdue .today-card-when { color: var(--c-prio-alta); }
+
+.today-card-prio {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  width: 46px;
+  text-align: right;
+  color: var(--c-prio-baja);
+}
+.today-card.prio-alta  .today-card-prio { color: var(--c-prio-alta); }
+.today-card.prio-media .today-card-prio { color: var(--c-prio-media); }
+
+@media (max-width: 700px) {
+  .today-card { flex-wrap: wrap; gap: var(--sp-sm); }
+  .today-card-main { flex-basis: 100%; }
+  .today-card-prio { width: auto; text-align: left; }
+}

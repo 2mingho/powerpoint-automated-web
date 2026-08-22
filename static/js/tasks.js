@@ -416,6 +416,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function refreshCalendar() {
     if (calendar) calendar.refetchEvents();
+    // La vista Hoy se alimenta de los mismos datos: si no se recarga aqui, las
+    // dos vistas se contradicen en cuanto se crea, mueve o completa una tarea.
+    if (typeof window.recargarVistaHoy === 'function') window.recargarVistaHoy();
   }
 
   let searchTimer = null;
@@ -2451,6 +2454,205 @@ document.addEventListener('DOMContentLoaded', function () {
   applyMobileViewButtons();
   syncMonthInput(calendar.getDate());
   loadClients();
+
+  /* ═══════════════════════════════════════════════════════
+     VISTA "HOY" (RED-2)
+     Tres bloques —vencidas, hoy, esta semana— sobre los mismos endpoints
+     que ya alimentaban el calendario. El cambio es de composicion, no de
+     backend: /api/tasks admite overdue=1 y rango de fechas.
+     ═══════════════════════════════════════════════════════ */
+
+  const shell = document.getElementById('tasksShell');
+  const todayGroups = document.getElementById('todayGroups');
+
+  // El dia de referencia lo fija el servidor en la zona de negocio. Usar el
+  // reloj del navegador desplazaria "hoy" para quien se conecte desde otro huso.
+  const HOY = (shell && shell.dataset.hoy) || '';
+
+  function sumarDias(iso, dias) {
+    const d = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    d.setDate(d.getDate() + dias);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function diasEntre(desdeIso, hastaIso) {
+    const a = new Date(`${desdeIso}T00:00:00`);
+    const b = new Date(`${hastaIso}T00:00:00`);
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+    return Math.round((b - a) / 86400000);
+  }
+
+  function etiquetaVencimiento(dueIso) {
+    if (!dueIso || !HOY) return '';
+    const dias = diasEntre(HOY, dueIso);
+    if (dias === 0) return 'hoy';
+    if (dias === 1) return 'mañana';
+    if (dias === -1) return 'venció ayer';
+    if (dias < -1) return `venció hace ${Math.abs(dias)} d`;
+    const d = new Date(`${dueIso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dueIso;
+    return d.toLocaleDateString('es-DO', { weekday: 'long' });
+  }
+
+  function claseDePrioridad(prioridad) {
+    const p = (prioridad || '').toLowerCase();
+    if (p === 'alta') return 'prio-alta';
+    if (p === 'baja') return 'prio-baja';
+    return 'prio-media';
+  }
+
+  function fichaDeTarea(tarea) {
+    const clases = ['today-card', claseDePrioridad(tarea.priority)];
+    if (tarea.is_overdue) clases.push('is-overdue');
+    if (tarea.status === 'Completado') clases.push('is-done');
+
+    const meta = [tarea.client, tarea.assignee_name, tarea.status]
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(' · ');
+
+    return ''
+      + `<li><button type="button" class="${clases.join(' ')}" data-tarea="${tarea.id}">`
+      +   '<span class="today-card-main">'
+      +     `<span class="today-card-title">${escapeHtml(tarea.title || '(sin titulo)')}</span>`
+      +     (meta ? `<span class="today-card-meta">${meta}</span>` : '')
+      +   '</span>'
+      +   `<span class="today-card-when">${escapeHtml(etiquetaVencimiento(tarea.due_date))}</span>`
+      +   `<span class="today-card-prio">${escapeHtml(tarea.priority || 'Media')}</span>`
+      + '</button></li>';
+  }
+
+  function bloqueDeGrupo(grupo) {
+    if (!grupo.tareas.length) return '';
+    const colapsado = grupo.colapsado ? ' is-collapsed' : '';
+    const extra = grupo.destacado ? ' is-vencidas' : '';
+    return ''
+      + `<section class="today-group${extra}${colapsado}" data-grupo="${grupo.clave}">`
+      +   '<div class="today-group-head">'
+      +     `<h3 class="today-group-title">${escapeHtml(grupo.titulo)}</h3>`
+      +     `<span class="today-group-count">${grupo.tareas.length}</span>`
+      +     (grupo.plegable
+              ? `<button type="button" class="today-group-toggle" data-plegar="${grupo.clave}">`
+                + (grupo.colapsado ? 'desplegar' : 'plegar') + '</button>'
+              : '')
+      +   '</div>'
+      +   `<ul class="today-list">${grupo.tareas.map(fichaDeTarea).join('')}</ul>`
+      + '</section>';
+  }
+
+  function pintarVistaHoy(vencidas, delRango) {
+    if (!todayGroups) return;
+
+    const finSemana = sumarDias(HOY, 7);
+    const hoyTareas = [];
+    const semana = [];
+
+    delRango.forEach(function (t) {
+      if (!t.due_date) return;
+      if (t.due_date === HOY) hoyTareas.push(t);
+      else if (t.due_date > HOY && t.due_date <= finSemana) semana.push(t);
+    });
+
+    const grupos = [
+      { clave: 'vencidas', titulo: 'Vencidas', tareas: vencidas, destacado: true, plegable: false, colapsado: false },
+      { clave: 'hoy', titulo: 'Hoy', tareas: hoyTareas, plegable: false, colapsado: false },
+      { clave: 'semana', titulo: 'Esta semana', tareas: semana, plegable: true, colapsado: gruposColapsados.has('semana') }
+    ];
+
+    const html = grupos.map(bloqueDeGrupo).join('');
+    todayGroups.innerHTML = html || '<p class="today-empty">Nada vencido ni pendiente para los proximos siete dias. Usa <strong>Nueva tarea</strong> para anadir trabajo, o abre el calendario para ver mas adelante.</p>';
+    todayGroups.setAttribute('aria-busy', 'false');
+  }
+
+  // 'Esta semana' abre plegada a proposito: la vista de entrada debe responder
+  // que hay que hacer ahora, no mostrar los siete dias de golpe.
+  const gruposColapsados = new Set(['semana']);
+
+  function cargarVistaHoy() {
+    if (!todayGroups || !HOY) return Promise.resolve();
+    todayGroups.setAttribute('aria-busy', 'true');
+
+    const finSemana = sumarDias(HOY, 7);
+    return Promise.all([
+      requestJson('/api/tasks?overdue=1'),
+      requestJson(`/api/tasks?start=${HOY}&end=${finSemana}`)
+    ]).then(function (respuestas) {
+      const vencidas = Array.isArray(respuestas[0]) ? respuestas[0] : [];
+      const rango = Array.isArray(respuestas[1]) ? respuestas[1] : [];
+      pintarVistaHoy(vencidas, rango);
+    }).catch(function () {
+      todayGroups.innerHTML = '<p class="today-empty">No se pudo cargar tu trabajo. Prueba a actualizar.</p>';
+      todayGroups.setAttribute('aria-busy', 'false');
+    });
+  }
+
+  function initVistaHoy() {
+    if (!shell || !todayGroups) return;
+
+    const botones = document.querySelectorAll('.tasks-view-btn');
+    const CLAVE_VISTA = 'nl-vista-tareas';
+
+    const aplicarVista = function (vista) {
+      shell.dataset.vista = vista;
+      botones.forEach(function (b) {
+        b.setAttribute('aria-selected', String(b.dataset.vista === vista));
+      });
+      // FullCalendar mide mal si se dibuja oculto; al volver hay que reajustarlo.
+      if (vista === 'calendario' && typeof calendar !== 'undefined' && calendar) {
+        calendar.updateSize();
+      }
+    };
+
+    let recordada = null;
+    try {
+      recordada = localStorage.getItem(CLAVE_VISTA);
+    } catch (e) {
+      recordada = null;
+    }
+    if (recordada === 'calendario') aplicarVista('calendario');
+
+    botones.forEach(function (boton) {
+      boton.addEventListener('click', function () {
+        aplicarVista(boton.dataset.vista);
+        try {
+          localStorage.setItem(CLAVE_VISTA, boton.dataset.vista);
+        } catch (e) { /* modo privado */ }
+      });
+    });
+
+    todayGroups.addEventListener('click', function (evento) {
+      const plegar = evento.target.closest('[data-plegar]');
+      if (plegar) {
+        const clave = plegar.dataset.plegar;
+        const grupo = todayGroups.querySelector(`[data-grupo="${clave}"]`);
+        if (!grupo) return;
+        const seColapsa = !grupo.classList.contains('is-collapsed');
+        grupo.classList.toggle('is-collapsed', seColapsa);
+        plegar.textContent = seColapsa ? 'desplegar' : 'plegar';
+        if (seColapsa) gruposColapsados.add(clave);
+        else gruposColapsados.delete(clave);
+        return;
+      }
+
+      const ficha = evento.target.closest('[data-tarea]');
+      if (!ficha) return;
+      requestJson(`/api/tasks/${ficha.dataset.tarea}`).then(function (data) {
+        if (data && data.success && data.task) openModal(true, data.task);
+      }).catch(function () {});
+    });
+
+    const btnRefrescar = document.getElementById('btnTodayRefresh');
+    if (btnRefrescar) btnRefrescar.addEventListener('click', cargarVistaHoy);
+
+    // Cualquier cambio que refresque el calendario debe refrescar tambien Hoy,
+    // o las dos vistas se contradicen tras crear o mover una tarea.
+    window.recargarVistaHoy = cargarVistaHoy;
+
+    cargarVistaHoy();
+  }
+
+  initVistaHoy();
   openTaskFromQueryParam();
   loadOverdueCount();
 });
