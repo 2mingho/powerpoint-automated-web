@@ -299,6 +299,55 @@ const initAppFeedback = () => {
 };
 
 // ─── Document Ready ───
+
+/* ─── CONMUTADOR DE ESPACIOS (RED-1) ───
+   El servidor ya deja el espacio correcto abierto segun el endpoint, asi que
+   esto solo anade el cambio sin recargar y recuerda la eleccion. Si el script
+   no llega a cargar, la navegacion sigue siendo la correcta. */
+const initSidebarSpaces = () => {
+  const nav = document.getElementById("sidebarNav");
+  if (!nav) return;
+
+  const botones = nav.querySelectorAll(".sidebar-space-btn");
+  if (!botones.length) return;
+
+  const CLAVE = "nl-espacio-sidebar";
+
+  const aplicar = (espacio) => {
+    nav.dataset.espacio = espacio;
+    botones.forEach((b) => {
+      b.setAttribute("aria-selected", String(b.dataset.espacio === espacio));
+    });
+  };
+
+  // La pagina actual manda sobre lo recordado: si estas dentro de una
+  // herramienta, abrir el sidebar en "Trabajo" solo esconderia donde estas.
+  const enPaginaNeutra = nav.querySelector(".sidebar-item.active") === null;
+  if (enPaginaNeutra) {
+    let recordado = null;
+    try {
+      recordado = localStorage.getItem(CLAVE);
+    } catch (e) {
+      recordado = null;
+    }
+    if (recordado && nav.querySelector('.sidebar-space[data-espacio="' + recordado + '"]')) {
+      aplicar(recordado);
+    }
+  }
+
+  botones.forEach((boton) => {
+    boton.addEventListener("click", () => {
+      const espacio = boton.dataset.espacio;
+      aplicar(espacio);
+      try {
+        localStorage.setItem(CLAVE, espacio);
+      } catch (e) {
+        /* modo privado: el conmutador sigue funcionando, solo no recuerda */
+      }
+    });
+  });
+};
+
 document.addEventListener("DOMContentLoaded", function () {
   // Init Theme
   initTheme();
@@ -310,6 +359,9 @@ document.addEventListener("DOMContentLoaded", function () {
   if (window.Chart) {
     updateChartDefaults();
   }
+
+  // Espacios del sidebar
+  initSidebarSpaces();
 
   // Sidebar Toggle
   const toggle = document.getElementById("sidebarToggle");

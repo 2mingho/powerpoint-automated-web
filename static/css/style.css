@@ -60,6 +60,19 @@
   --c-flash-warning-text: #92400e;
   --c-flash-info-text:    #1e1b4b;
 
+  /* ─── ESTADO vs MARCA (RED-5) ───
+     El amarillo de marca se reserva para identidad: logo, item activo del
+     sidebar, franja de acento. El estado nunca lo usa, para que la marca siga
+     siendo el unico punto brillante de la pantalla. La escala es deliberadamente
+     desaturada; el color acompana a la forma (franja, icono, texto), nunca es
+     el unico portador del significado. */
+  --c-prio-alta:   #8d4d4d;
+  --c-prio-media:  #8a7750;
+  --c-prio-baja:   #7d8794;
+  --c-prio-alta-bg:  #f4eaea;
+  --c-prio-media-bg: #f3efe5;
+  --c-prio-baja-bg:  #eef0f3;
+
   /* Chart Colors */
   --c-chart-grid: rgba(0,0,0,0.05);
   --c-chart-text: #64748b;
@@ -84,6 +97,13 @@
   --c-text-secondary: #a4afbf;
   --c-border:     #2a3240;
   --c-border-light: #202734;
+
+  --c-prio-alta:   #b77d7d;
+  --c-prio-media:  #b7a274;
+  --c-prio-baja:   #8d97a6;
+  --c-prio-alta-bg:  #2a1d1d;
+  --c-prio-media-bg: #2a2519;
+  --c-prio-baja-bg:  #1e242e;
 
   --shadow-sm:  0 1px 2px rgba(0,0,0,0.35);
   --shadow-md:  0 6px 16px rgba(0,0,0,0.42);
@@ -222,15 +242,37 @@ img { max-width: 100%; }
 }
 
 .sidebar-item.active {
-  background: #1a212d;
-  color: #f6f8fb;
+  position: relative;
+  background: var(--c-primary-light);
+  color: var(--c-text);
   font-weight: 600;
 }
 
-.sidebar-item.active:hover {
-  background: #1a212d;
+.sidebar-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--c-primary);
+}
+
+.sidebar-item.active i { color: var(--c-accent); }
+
+[data-theme="dark"] .sidebar-item.active {
   color: #f6f8fb;
-  opacity: 0.92;
+}
+
+[data-theme="dark"] .sidebar-item.active i { color: var(--c-primary); }
+
+.sidebar-item.active:hover {
+  background: var(--c-primary-light);
+  color: var(--c-text);
+}
+
+[data-theme="dark"] .sidebar-item.active:hover {
+  background: var(--c-primary-light);
+  color: #f6f8fb;
 }
 
 .sidebar-footer {
@@ -248,6 +290,89 @@ img { max-width: 100%; }
   background: var(--c-danger-bg);
   color: var(--c-danger);
 }
+
+
+/* ─── CONMUTADOR DE ESPACIOS (RED-1) ─── */
+.sidebar-spaces {
+  display: flex;
+  gap: 2px;
+  margin: var(--sp-md) var(--sp-sm) var(--sp-sm);
+  padding: 3px;
+  background: var(--c-bg);
+  border-radius: var(--r-lg);
+}
+
+[data-theme="dark"] .sidebar-spaces {
+  background: #0b0e13;
+}
+
+.sidebar-space-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-sm);
+  padding: 7px var(--sp-sm);
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--c-text-secondary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.sidebar-space-btn i { font-size: 0.85rem; }
+
+.sidebar-space-btn:hover { color: var(--c-text); }
+
+.sidebar-space-btn[aria-selected="true"] {
+  background: var(--c-white);
+  color: var(--c-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-space-btn:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+/* Solo se pinta el espacio activo. Sin JS, el atributo data-espacio lo fija
+   el servidor a partir del endpoint, asi que la navegacion sigue siendo
+   correcta aunque el script no llegue a cargar. */
+.sidebar-nav[data-espacio="trabajo"] .sidebar-space[data-espacio="herramientas"],
+.sidebar-nav[data-espacio="herramientas"] .sidebar-space[data-espacio="trabajo"] {
+  display: none;
+}
+
+.sidebar-nav-tail {
+  margin-top: var(--sp-lg);
+  padding-top: var(--sp-md);
+  border-top: 1px solid var(--c-border-light);
+}
+
+/* ─── FRANJA DE PRIORIDAD (RED-5) ───
+   La prioridad se lee por posicion y grosor, no solo por color. */
+.prio-stripe {
+  position: relative;
+  padding-left: calc(var(--sp-md) + 3px);
+}
+
+.prio-stripe::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--c-prio-baja);
+}
+
+.prio-stripe.prio-alta::before  { background: var(--c-prio-alta); width: 4px; }
+.prio-stripe.prio-media::before { background: var(--c-prio-media); }
+.prio-stripe.prio-baja::before  { background: var(--c-prio-baja); }
 
 /* ─── TOPBAR ─── */
 .topbar {
@@ -2614,6 +2739,13 @@ body.app-prompt-open {
   }
   .sidebar-item i { margin: 0; }
 
+  .sidebar .sidebar-space-btn span { display: none; }
+  .sidebar .sidebar-spaces {
+    flex-direction: column;
+    margin: var(--sp-sm) 6px;
+  }
+  .sidebar .sidebar-space-btn { padding: 9px 0; }
+
   .topbar { left: var(--sidebar-collapsed); }
   .main-content { margin-left: var(--sidebar-collapsed); }
 
@@ -2633,6 +2765,13 @@ body.app-prompt-open {
   .sidebar .sidebar-section-label {
     display: initial;
   }
+
+  .sidebar .sidebar-space-btn span { display: initial; }
+  .sidebar .sidebar-spaces {
+    flex-direction: row;
+    margin: var(--sp-md) var(--sp-sm) var(--sp-sm);
+  }
+  .sidebar .sidebar-space-btn { padding: 7px var(--sp-sm); }
 
   .sidebar-item {
     justify-content: flex-start;

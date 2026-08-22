@@ -689,15 +689,16 @@
 }
 
 .fc-event-task.task-prio-alta {
-  border-left-color: var(--c-danger);
+  border-left-color: var(--c-prio-alta);
+  border-left-width: 4px;
 }
 
 .fc-event-task.task-prio-media {
-  border-left-color: #d4a017;
+  border-left-color: var(--c-prio-media);
 }
 
 .fc-event-task.task-prio-baja {
-  border-left-color: #9ca3af;
+  border-left-color: var(--c-prio-baja);
 }
 
 .fc-event-task.task-overdue {
