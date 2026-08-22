@@ -11,6 +11,8 @@ from extensions import db
 from models import User, Task, Area
 from services.clock import current_year
 from services.alcance import ambito_unidades
+from services.catalogo import (estados_validos, prioridades_validas,
+                              estado_inicial, es_estado_final)
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -664,7 +666,7 @@ def api_tasks_list():
 
     query = _apply_unit_scope(Task.query)
 
-    if status and status in Task.VALID_STATUSES:
+    if status and status in estados_validos():
         query = query.filter_by(status=status)
 
     if assignee_id:
@@ -761,7 +763,7 @@ def api_tasks_create():
     if not recurrence_end_str and end_date_raw:
         recurrence_end_str = str(end_date_raw)
 
-    if initial_status not in Task.VALID_STATUSES:
+    if initial_status not in estados_validos():
         return jsonify({'success': False, 'error': 'Estado inválido.'}), 400
 
     if not assignee_id:
@@ -984,7 +986,7 @@ def api_tasks_bulk_update():
 
     updates_status = None
     if status:
-        if status not in Task.VALID_STATUSES:
+        if status not in estados_validos():
             return jsonify({'success': False, 'error': 'Estado inválido.'}), 400
         updates_status = status
 
@@ -1094,7 +1096,7 @@ def api_tasks_update(task_id):
             if not parsed_end_date:
                 return jsonify({'success': False, 'error': 'Fecha de finalización inválida.'}), 400
             task.end_date = parsed_end_date
-    if 'status' in data and data['status'] in Task.VALID_STATUSES:
+    if 'status' in data and data['status'] in estados_validos():
         task.status = data['status']
     if 'due_date' in data:
         due_date_raw = (str(data.get('due_date') or '')).strip()
@@ -1229,7 +1231,7 @@ def _apply_admin_task_filters(query, args):
     creator_id = args.get('creator_id', '').strip()
     area = args.get('area', '').strip()
 
-    if status and status in Task.VALID_STATUSES:
+    if status and status in estados_validos():
         query = query.filter_by(status=status)
     if client:
         query = query.filter(Task.client.ilike(f'%{client}%'))
@@ -1279,11 +1281,17 @@ def api_admin_tasks():
     from sqlalchemy import func as _func
     _rows = db.session.query(Task.status, _func.count(Task.id)).group_by(Task.status).all()
     _by_status = {st: n for st, n in _rows}
+    # Las claves fijas se conservan porque el panel las consume por nombre, pero
+    # 'completado' deja de mirar el texto: suma los estados marcados como
+    # finales, para que renombrarlo no vacie el indicador. 'por_estado' lleva el
+    # desglose completo, incluidos los estados que se anadan desde el panel.
+    completadas = sum(n for st, n in _by_status.items() if es_estado_final(st))
     stats = {
         'total': sum(_by_status.values()),
         'pendiente': _by_status.get('Pendiente', 0),
         'en_progreso': _by_status.get('En Progreso', 0),
-        'completado': _by_status.get('Completado', 0),
+        'completado': completadas,
+        'por_estado': _by_status,
     }
 
     return jsonify({
@@ -1502,7 +1510,7 @@ def api_admin_tasks_bulk_update():
     updates = {}
 
     if status:
-        if status not in Task.VALID_STATUSES:
+        if status not in estados_validos():
             return jsonify({'success': False, 'error': 'Estado inválido.'}), 400
         updates['status'] = status
 
@@ -1609,5 +1617,6 @@ def api_admin_tasks_filters():
             for u in users
         ],
         'areas': areas,
-        'statuses': list(Task.VALID_STATUSES),
+        'statuses': list(estados_validos()),
+        'priorities': list(prioridades_validas()),
     })

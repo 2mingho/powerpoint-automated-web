@@ -882,3 +882,236 @@ def plantilla_download(template_id):
         download_name=plantilla.name,
         mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Catalogo de estados y prioridades de tarea
+# ─────────────────────────────────────────────────────────────
+#
+# Editarlos era un despliegue. Las guardas de aqui existen porque el catalogo
+# tiene condiciones que, si se rompen, dejan el sistema en un estado imposible:
+# sin estado inicial no se puede crear una tarea, y sin estado final nada
+# cuenta nunca como terminado.
+
+def _tareas_con(columna, valor):
+    """Cuantas tareas usan ese valor. La columna se pasa como texto controlado."""
+    from sqlalchemy import text as _text
+    try:
+        fila = db.session.execute(
+            _text(f'SELECT COUNT(*) FROM tasks WHERE {columna} = :v'), {'v': valor}
+        ).fetchone()
+        return fila[0] if fila else 0
+    except Exception:
+        return 0
+
+
+@admin_bp.route('/catalogo')
+@admin_required
+def catalogo_list():
+    from models import TaskStatus, TaskPriority
+
+    estados = TaskStatus.query.order_by(TaskStatus.orden, TaskStatus.nombre).all()
+    prioridades = TaskPriority.query.order_by(TaskPriority.orden.desc(), TaskPriority.nombre).all()
+
+    return render_template(
+        'admin_catalogo.html',
+        estados=[(e, _tareas_con('status', e.nombre)) for e in estados],
+        prioridades=[(p, _tareas_con('priority', p.nombre)) for p in prioridades],
+        colores=['neutro', 'info', 'aviso', 'alerta', 'bien'],
+    )
+
+
+@admin_bp.route('/catalogo/estado', methods=['POST'])
+@admin_required
+def catalogo_estado_guardar():
+    from models import TaskStatus
+    from services.catalogo import invalidar_cache_catalogo
+
+    estado_id = (request.form.get('id') or '').strip()
+    nombre = (request.form.get('nombre') or '').strip()[:30]
+    color = (request.form.get('color') or 'neutro').strip()[:20]
+    es_final = request.form.get('es_final') == 'on'
+    es_inicial = request.form.get('es_inicial') == 'on'
+    try:
+        orden = int(request.form.get('orden') or 0)
+    except ValueError:
+        orden = 0
+
+    if not nombre:
+        flash('El nombre es obligatorio.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    duplicado = TaskStatus.query.filter(TaskStatus.nombre == nombre)
+    if estado_id:
+        duplicado = duplicado.filter(TaskStatus.id != int(estado_id))
+    if duplicado.first():
+        flash(f'Ya existe un estado llamado "{nombre}".', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if estado_id:
+        estado = TaskStatus.query.get_or_404(int(estado_id))
+        anterior = estado.nombre
+
+        # Quitar la ultima bandera final dejaria al sistema sin forma de dar una
+        # tarea por terminada: vencimientos, carga e indicadores dependen de ella.
+        if estado.es_final and not es_final:
+            otros_finales = TaskStatus.query.filter(
+                TaskStatus.es_final.is_(True), TaskStatus.id != estado.id).count()
+            if otros_finales == 0:
+                flash('Tiene que quedar al menos un estado que signifique "terminado".', 'error')
+                return redirect(url_for('admin.catalogo_list'))
+
+        estado.nombre, estado.color, estado.orden = nombre, color, orden
+        estado.es_final, estado.es_inicial = es_final, es_inicial
+
+        # La tarea guarda el nombre, no una clave: renombrar sin reescribir las
+        # tareas las dejaria con un estado que ya no existe.
+        movidas = 0
+        if anterior != nombre:
+            from sqlalchemy import text as _text
+            resultado = db.session.execute(
+                _text('UPDATE tasks SET status = :nuevo WHERE status = :viejo'),
+                {'nuevo': nombre, 'viejo': anterior})
+            movidas = resultado.rowcount or 0
+
+        mensaje = f'Estado "{nombre}" actualizado.'
+        if movidas:
+            mensaje += f' Se renombraron {movidas} tarea(s).'
+        accion = 'task_status_edit'
+    else:
+        estado = TaskStatus(nombre=nombre, color=color, orden=orden,
+                            es_final=es_final, es_inicial=es_inicial)
+        db.session.add(estado)
+        mensaje = f'Estado "{nombre}" creado.'
+        accion = 'task_status_create'
+
+    # Inicial hay uno solo: marcar otro apaga el anterior.
+    if es_inicial:
+        db.session.flush()
+        TaskStatus.query.filter(TaskStatus.id != estado.id).update({'es_inicial': False})
+
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity(accion, mensaje)
+    flash(mensaje, 'success')
+    return redirect(url_for('admin.catalogo_list'))
+
+
+@admin_bp.route('/catalogo/estado/<int:estado_id>/eliminar', methods=['POST'])
+@admin_required
+def catalogo_estado_eliminar(estado_id):
+    from models import TaskStatus
+    from services.catalogo import invalidar_cache_catalogo
+
+    estado = TaskStatus.query.get_or_404(estado_id)
+
+    en_uso = _tareas_con('status', estado.nombre)
+    if en_uso:
+        flash(f'No se puede eliminar: {en_uso} tarea(s) están en "{estado.nombre}". '
+              'Muévelas antes de quitarlo.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if estado.es_final and TaskStatus.query.filter(
+            TaskStatus.es_final.is_(True), TaskStatus.id != estado.id).count() == 0:
+        flash('Es el único estado que significa "terminado": no se puede eliminar.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if TaskStatus.query.count() <= 1:
+        flash('Tiene que quedar al menos un estado.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    nombre = estado.nombre
+    db.session.delete(estado)
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity('task_status_delete', f'Estado eliminado: {nombre}')
+    flash(f'Estado "{nombre}" eliminado.', 'success')
+    return redirect(url_for('admin.catalogo_list'))
+
+
+@admin_bp.route('/catalogo/prioridad', methods=['POST'])
+@admin_required
+def catalogo_prioridad_guardar():
+    from models import TaskPriority
+    from services.catalogo import invalidar_cache_catalogo
+
+    prioridad_id = (request.form.get('id') or '').strip()
+    nombre = (request.form.get('nombre') or '').strip()[:30]
+    color = (request.form.get('color') or 'neutro').strip()[:20]
+    es_defecto = request.form.get('es_defecto') == 'on'
+    try:
+        orden = int(request.form.get('orden') or 0)
+    except ValueError:
+        orden = 0
+
+    if not nombre:
+        flash('El nombre es obligatorio.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    duplicado = TaskPriority.query.filter(TaskPriority.nombre == nombre)
+    if prioridad_id:
+        duplicado = duplicado.filter(TaskPriority.id != int(prioridad_id))
+    if duplicado.first():
+        flash(f'Ya existe una prioridad llamada "{nombre}".', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if prioridad_id:
+        prioridad = TaskPriority.query.get_or_404(int(prioridad_id))
+        anterior = prioridad.nombre
+        prioridad.nombre, prioridad.color, prioridad.orden = nombre, color, orden
+        prioridad.es_defecto = es_defecto
+
+        movidas = 0
+        if anterior != nombre:
+            from sqlalchemy import text as _text
+            resultado = db.session.execute(
+                _text('UPDATE tasks SET priority = :nuevo WHERE priority = :viejo'),
+                {'nuevo': nombre, 'viejo': anterior})
+            movidas = resultado.rowcount or 0
+
+        mensaje = f'Prioridad "{nombre}" actualizada.'
+        if movidas:
+            mensaje += f' Se renombraron {movidas} tarea(s).'
+        accion = 'task_priority_edit'
+    else:
+        prioridad = TaskPriority(nombre=nombre, color=color, orden=orden, es_defecto=es_defecto)
+        db.session.add(prioridad)
+        mensaje = f'Prioridad "{nombre}" creada.'
+        accion = 'task_priority_create'
+
+    if es_defecto:
+        db.session.flush()
+        TaskPriority.query.filter(TaskPriority.id != prioridad.id).update({'es_defecto': False})
+
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity(accion, mensaje)
+    flash(mensaje, 'success')
+    return redirect(url_for('admin.catalogo_list'))
+
+
+@admin_bp.route('/catalogo/prioridad/<int:prioridad_id>/eliminar', methods=['POST'])
+@admin_required
+def catalogo_prioridad_eliminar(prioridad_id):
+    from models import TaskPriority
+    from services.catalogo import invalidar_cache_catalogo
+
+    prioridad = TaskPriority.query.get_or_404(prioridad_id)
+
+    en_uso = _tareas_con('priority', prioridad.nombre)
+    if en_uso:
+        flash(f'No se puede eliminar: {en_uso} tarea(s) tienen prioridad "{prioridad.nombre}".',
+              'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    if TaskPriority.query.count() <= 1:
+        flash('Tiene que quedar al menos una prioridad.', 'error')
+        return redirect(url_for('admin.catalogo_list'))
+
+    nombre = prioridad.nombre
+    db.session.delete(prioridad)
+    db.session.commit()
+    invalidar_cache_catalogo()
+    log_activity('task_priority_delete', f'Prioridad eliminada: {nombre}')
+    flash(f'Prioridad "{nombre}" eliminada.', 'success')
+    return redirect(url_for('admin.catalogo_list'))

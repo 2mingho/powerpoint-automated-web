@@ -33,6 +33,51 @@ class Area(db.Model):
         return f"<Area {self.name}>"
 
 
+class TaskStatus(db.Model):
+    """Estados de tarea, editables desde el panel.
+
+    La tarea guarda el NOMBRE, no una clave foranea: la columna tasks.status ya
+    existe como texto con miles de filas detras, y convertirla en relacion es
+    una migracion mucho mayor. A cambio, renombrar un estado tiene que
+    reescribir las tareas que lo usan, y eso lo hace la propia pantalla.
+
+    es_final es lo que de verdad importa. "Completado" no es una etiqueta: es
+    la condicion que decide si una tarea sigue contando como abierta, si esta
+    vencida y si entra en la carga de alguien. Si el codigo comparase contra el
+    nombre, renombrarlo romperia todo eso en silencio.
+    """
+    __tablename__ = 'task_statuses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(30), unique=True, nullable=False)
+    orden = db.Column(db.Integer, nullable=False, default=0)
+    color = db.Column(db.String(20), nullable=False, default='neutro')
+    es_inicial = db.Column(db.Boolean, nullable=False, default=False)
+    es_final = db.Column(db.Boolean, nullable=False, default=False)
+
+    def __repr__(self):
+        return f"<TaskStatus {self.nombre}>"
+
+
+class TaskPriority(db.Model):
+    """Prioridades de tarea, editables desde el panel.
+
+    orden es la urgencia: cuanto mayor, mas urgente. El codigo ordena por el,
+    no por el nombre, para que anadir una cuarta prioridad no obligue a tocar
+    ninguna comparacion.
+    """
+    __tablename__ = 'task_priorities'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(30), unique=True, nullable=False)
+    orden = db.Column(db.Integer, nullable=False, default=0)
+    color = db.Column(db.String(20), nullable=False, default='neutro')
+    es_defecto = db.Column(db.Boolean, nullable=False, default=False)
+
+    def __repr__(self):
+        return f"<TaskPriority {self.nombre}>"
+
+
 class PptxTemplate(db.Model):
     """Plantillas PowerPoint subidas desde el panel.
 
@@ -223,6 +268,8 @@ class Task(db.Model):
     """Task management model for area-based task assignment."""
     __tablename__ = 'tasks'
 
+    # Se conserva como respaldo para bases anteriores a la revision 0007. La
+    # lista viva sale de services/catalogo.py, que lee task_statuses.
     VALID_STATUSES = ('Pendiente', 'En Progreso', 'Completado')
     RECURRENCE_TYPES = ('Diaria', 'Semanal', 'Mensual')
 

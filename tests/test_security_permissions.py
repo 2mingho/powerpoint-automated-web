@@ -957,3 +957,166 @@ def test_los_filtros_sobreviven_al_cambiar_de_pagina(client):
     cuerpo = client.get('/admin/users?q=lote').data.decode()
 
     assert 'q=lote' in cuerpo, 'el enlace a la pagina siguiente debe conservar la busqueda'
+
+
+# ─────────────────────────────────────────────────────────────
+# Catalogo de estados y prioridades
+# ─────────────────────────────────────────────────────────────
+
+def _sembrar_catalogo():
+    """Lo que deja la revision 0007. Las pruebas crean el esquema con
+    create_all(), que no ejecuta el traspaso de la migracion."""
+    from models import TaskStatus, TaskPriority
+
+    if TaskStatus.query.count() == 0:
+        for nombre, orden, color, ini, fin in [
+            ('Pendiente', 10, 'aviso', True, False),
+            ('En Progreso', 20, 'info', False, False),
+            ('Completado', 50, 'bien', False, True),
+        ]:
+            db.session.add(TaskStatus(nombre=nombre, orden=orden, color=color,
+                                      es_inicial=ini, es_final=fin))
+    if TaskPriority.query.count() == 0:
+        for nombre, orden, color, defecto in [
+            ('Alta', 30, 'alerta', False),
+            ('Media', 20, 'aviso', True),
+            ('Baja', 10, 'neutro', False),
+        ]:
+            db.session.add(TaskPriority(nombre=nombre, orden=orden, color=color,
+                                        es_defecto=defecto))
+    db.session.commit()
+
+
+def test_el_catalogo_manda_sobre_la_constante(client):
+    """Anadir un estado deja de ser un despliegue."""
+    from models import TaskStatus
+    from services.catalogo import estados_validos, invalidar_cache_catalogo
+
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        assert 'Archivado' not in estados_validos()
+
+        db.session.add(TaskStatus(nombre='Archivado', orden=60, color='neutro',
+                                  es_inicial=False, es_final=True))
+        db.session.commit()
+        invalidar_cache_catalogo()
+
+        assert 'Archivado' in estados_validos()
+
+
+def test_terminado_es_una_bandera_no_un_nombre(client):
+    """Renombrar "Completado" no puede romper los vencimientos.
+
+    Si el codigo comparase contra el texto, este renombrado dejaria de contar
+    ninguna tarea como terminada.
+    """
+    from models import TaskStatus
+    from services.catalogo import es_estado_final, estados_finales, invalidar_cache_catalogo
+
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        assert es_estado_final('Completado')
+
+        final = TaskStatus.query.filter_by(es_final=True).first()
+        final.nombre = 'Cerrado'
+        db.session.commit()
+        invalidar_cache_catalogo()
+
+        assert es_estado_final('Cerrado')
+        assert not es_estado_final('Completado')
+        assert estados_finales() == ('Cerrado',)
+
+
+def test_renombrar_arrastra_las_tareas(client):
+    """La tarea guarda el nombre: renombrar sin reescribirlas las invalidaria."""
+    from services.clock import today_local
+
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        jefe = _create_user(username='admin-cat', email='admin-cat@example.com', role='admin')
+        tarea_id = _create_task(title='En revision', due_date=today_local(),
+                                area='DI', creator_id=jefe, assignee_id=jefe)
+        db.session.get(Task, tarea_id).status = 'En Progreso'
+        db.session.commit()
+
+        from models import TaskStatus
+        estado = TaskStatus.query.filter_by(nombre='En Progreso').first()
+        estado_id = estado.id
+
+    _login_as(client, jefe)
+    client.post('/admin/catalogo/estado', data={
+        'id': estado_id, 'nombre': 'En curso', 'orden': 20, 'color': 'info',
+    }, follow_redirects=True)
+
+    with app_module.app.app_context():
+        assert db.session.get(Task, tarea_id).status == 'En curso'
+
+
+def test_no_se_puede_quedar_sin_estado_terminal(client):
+    """Sin el, nada contaria nunca como terminado."""
+    from models import TaskStatus
+
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        jefe = _create_user(username='admin-final', email='admin-final@example.com', role='admin')
+        final = TaskStatus.query.filter_by(es_final=True).first()
+        final_id = final.id
+
+    _login_as(client, jefe)
+    respuesta = client.post('/admin/catalogo/estado', data={
+        'id': final_id, 'nombre': 'Completado', 'orden': 50, 'color': 'bien',
+        # sin es_final
+    }, follow_redirects=True)
+
+    assert 'al menos un estado' in respuesta.data.decode()
+    with app_module.app.app_context():
+        assert db.session.get(TaskStatus, final_id).es_final is True
+
+
+def test_no_se_borra_un_estado_en_uso(client):
+    from models import TaskStatus
+    from services.clock import today_local
+
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        jefe = _create_user(username='admin-uso', email='admin-uso@example.com', role='admin')
+        _create_task(title='Ocupa el estado', due_date=today_local(),
+                     area='DI', creator_id=jefe, assignee_id=jefe)
+        estado_id = TaskStatus.query.filter_by(nombre='Pendiente').first().id
+
+    _login_as(client, jefe)
+    respuesta = client.post(f'/admin/catalogo/estado/{estado_id}/eliminar', follow_redirects=True)
+
+    assert 'No se puede eliminar' in respuesta.data.decode()
+    with app_module.app.app_context():
+        assert db.session.get(TaskStatus, estado_id) is not None
+
+
+def test_solo_hay_un_estado_inicial(client):
+    from models import TaskStatus
+
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        jefe = _create_user(username='admin-ini', email='admin-ini@example.com', role='admin')
+        otro = TaskStatus.query.filter_by(nombre='En Progreso').first()
+        otro_id = otro.id
+
+    _login_as(client, jefe)
+    client.post('/admin/catalogo/estado', data={
+        'id': otro_id, 'nombre': 'En Progreso', 'orden': 20, 'color': 'info',
+        'es_inicial': 'on',
+    }, follow_redirects=True)
+
+    with app_module.app.app_context():
+        iniciales = TaskStatus.query.filter_by(es_inicial=True).all()
+        assert len(iniciales) == 1
+        assert iniciales[0].id == otro_id
+
+
+def test_solo_un_admin_edita_el_catalogo(client):
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        normal = _create_user(username='no-admin-cat', email='no-admin-cat@example.com')
+
+    _login_as(client, normal)
+    assert client.get('/admin/catalogo').status_code in (302, 403)
