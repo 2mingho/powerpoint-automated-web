@@ -850,17 +850,27 @@
 .task-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
+  /* La cortina se atenua con el recorrido de la hoja, no con una animacion
+     propia: al arrastrarla hacia abajo el fondo se aclara a la vez, que es lo
+     que hace que la hoja se sienta agarrada al dedo y no reproducida. */
+  --panel-progreso: 1;
+  background: rgba(0, 0, 0, calc(0.45 * var(--panel-progreso)));
+  backdrop-filter: blur(calc(4px * var(--panel-progreso)));
   z-index: 2000;
   display: none;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 0.2s ease;
 }
 
 .task-modal-overlay.open {
   display: flex;
+}
+
+/* #taskModalOverlay lo mueve static/js/muelle.js. La animacion generica del
+   modal tambien escribe transform y pisaria al muelle durante los primeros
+   fotogramas. Los otros dialogos conservan slideUp. */
+#taskModalOverlay .task-modal {
+  animation: none;
 }
 
 .task-modal {
@@ -2337,14 +2347,10 @@
     max-width: 100%;
     max-height: 92vh;
     border-radius: 16px 16px 0 0;
-    animation: sheetUp 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    transform: translate3d(0, 100%, 0);
     border: none;
     border-top: 1px solid var(--c-border);
   }
-
-  @keyframes sheetUp {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0); }
   }
 
   /* Drag handle — visible on mobile */
@@ -3271,7 +3277,9 @@
     border: none;
     border-left: 1px solid var(--c-border);
     box-shadow: -18px 0 48px rgba(16, 19, 23, 0.16);
-    animation: panelIn 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+    /* Sin animation: el transform lo escribe el muelle fotograma a fotograma.
+       Un @keyframes no se puede agarrar a mitad de vuelo. */
+    transform: translate3d(100%, 0, 0);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -3279,11 +3287,6 @@
 
   [data-theme="dark"] #taskModalOverlay .task-modal {
     box-shadow: -18px 0 48px rgba(0, 0, 0, 0.5);
-  }
-
-  @keyframes panelIn {
-    from { transform: translateX(100%); }
-    to   { transform: translateX(0); }
   }
 
   /* La cabecera y el pie quedan fijos; solo el contenido rueda. */
@@ -3301,6 +3304,17 @@
 
 @media (prefers-reduced-motion: reduce) {
   #taskModalOverlay .task-modal { animation: none; }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  #taskModalOverlay {
+    backdrop-filter: none;
+  }
+
+  #taskModalOverlay .task-modal {
+    background: var(--c-white);
+    border-color: var(--c-border);
+  }
 }
 
 /* ─── Ajustes del panel al ancho menor (RED-4) ───
@@ -3685,3 +3699,67 @@
 .td-filters .campo-icono .td-filter-select { padding-left: 31px; }
 
 .td-filters .td-filter-reset { margin-left: auto; }
+
+
+/* ═══════════════════════════════════════════════════════
+   RESPUESTA AL PULSAR
+   La sensacion de mando se cae en cuanto hay latencia. El realce vive en
+   :active —es decir, en el momento de presionar— y no espera al click.
+   ═══════════════════════════════════════════════════════ */
+
+.today-card,
+.tasks-view-btn,
+.task-template-card,
+.td-kpi,
+.status-chip,
+.tasks-filter-pill-quitar {
+  /* Solo transform y opacity: son las dos que el compositor mueve sin
+     repintar. */
+  transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  touch-action: manipulation;   /* sin el retardo de 300 ms al tocar */
+}
+
+.today-card:active,
+.task-template-card:active,
+.td-kpi:not(.is-empty):active {
+  transform: scale(0.985);
+}
+
+.tasks-view-btn:active,
+.status-chip:active {
+  transform: scale(0.96);
+}
+
+.tasks-filter-pill-quitar:active {
+  transform: scale(0.88);
+}
+
+/* El asa de la hoja movil invita a arrastrar y no debe seleccionar texto. */
+.task-modal-handle {
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.task-modal-handle:active { cursor: grabbing; }
+
+@media (prefers-reduced-motion: reduce) {
+  .today-card,
+  .tasks-view-btn,
+  .task-template-card,
+  .td-kpi,
+  .status-chip,
+  .tasks-filter-pill-quitar {
+    transition: none;
+  }
+  /* Movimiento reducido no es "sin respuesta": se conserva el realce, se
+     quita el recorrido. */
+  .today-card:active,
+  .task-template-card:active,
+  .td-kpi:not(.is-empty):active,
+  .tasks-view-btn:active,
+  .status-chip:active,
+  .tasks-filter-pill-quitar:active {
+    transform: none;
+    opacity: 0.7;
+  }
+}

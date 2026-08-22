@@ -1803,14 +1803,142 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     hideContextMenu();
-    overlay.classList.add('open');
+    abrirPanel();
     // El foco lo pone mostrarFormulario(); al crear puede que primero se vea
     // el selector de plantillas y llevar el foco al titulo seria enganoso.
     if (editMode) fTitle.focus();
   }
 
+  /* ─── El panel de detalle, movido por un muelle ───
+     Antes lo animaba un @keyframes: llevaba una duracion fija y no se podia
+     agarrar a mitad de vuelo. Si volvias a pulsar mientras se cerraba, habia
+     que esperar. Ahora el destino cambia y la velocidad se conserva. */
+
+  const panelDeDetalle = (function () {
+    if (!overlay || !window.Muelle) return null;
+
+    const hoja = overlay.querySelector('.task-modal');
+    if (!hoja) return null;
+
+    const esMovil = () => window.matchMedia('(max-width: 768px)').matches;
+    const alto = () => hoja.getBoundingClientRect().height || window.innerHeight;
+
+    // 0 = colocado, 100 = fuera. Un solo eje: en escritorio entra por la
+    // derecha y en movil sube desde abajo, pero el recorrido es el mismo
+    // numero, asi que el muelle no distingue.
+    let cerrandoAlTerminar = false;
+
+    const pintar = (v) => {
+      // Se permite un valor negativo pequeno: es la resistencia visible al
+      // tirar hacia arriba. Solo la cortina se limita a un rango valido.
+      const fuera = v;
+      hoja.style.transform = esMovil()
+        ? `translate3d(0, ${fuera}%, 0)`
+        : `translate3d(${fuera}%, 0, 0)`;
+      // La cortina acompana al recorrido en vez de aparecer de golpe.
+      const progreso = Math.max(0, Math.min(1, 1 - Math.max(0, fuera) / 100));
+      overlay.style.setProperty('--panel-progreso', String(progreso));
+    };
+
+    const muelle = window.Muelle.crear({
+      // Critico al colocarse: un panel que rebota al abrirse distrae. El
+      // rebote se reserva para lo que el usuario ha lanzado con el dedo.
+      amortiguacion: 1,
+      respuesta: 0.4,
+      inicial: 100,
+      alCambiar: pintar,
+      alTerminar: (v) => {
+        if (cerrandoAlTerminar && v >= 99.9) {
+          overlay.classList.remove('open');
+          hoja.style.transform = '';
+          cerrandoAlTerminar = false;
+        }
+        hoja.style.willChange = '';
+      }
+    });
+
+    function abrir() {
+      cerrandoAlTerminar = false;
+      hoja.style.willChange = 'transform';
+      if (!overlay.classList.contains('open')) {
+        muelle.fijar(100);
+        overlay.classList.add('open');
+      }
+      // Si ya estaba cerrandose, esto solo cambia el destino: sigue desde
+      // donde esta y con la velocidad que lleva.
+      muelle.irA(0);
+    }
+
+    function cerrar(velocidadPx) {
+      if (!overlay.classList.contains('open')) return;
+      cerrandoAlTerminar = true;
+      hoja.style.willChange = 'transform';
+      // La velocidad del gesto viene en px/s y el muelle trabaja en
+      // porcentaje del recorrido: se normaliza para que no haya costura
+      // entre arrastrar y soltar.
+      const enPorcentaje = velocidadPx ? (velocidadPx / alto()) * 100 : undefined;
+      muelle.irA(100, enPorcentaje);
+    }
+
+    /* ─── Arrastre ───
+       En movil se agarra la hoja entera por su cabecera; en escritorio, por
+       el borde. Se sigue el dedo 1:1 y al soltar se decide con la velocidad
+       proyectada, no con la posicion. */
+    const asa = hoja.querySelector('.task-modal-handle') || hoja.querySelector('.task-modal-header');
+    if (asa) {
+      let inicio = 0;
+      let dimension = 1;
+
+      window.Muelle.seguirGesto(asa, {
+        eje: 'y',
+        umbral: 8,
+        puedeEmpezar: (e) => {
+          // Solo con el dedo o el raton sobre el asa, y nunca sobre un boton:
+          // arrastrar desde la X no debe mover la hoja.
+          if (e.target.closest('button, a, input, select, textarea')) return false;
+          return esMovil();
+        },
+        alEmpezar: () => {
+          const estado = muelle.agarrar();
+          inicio = estado.valor;
+          dimension = alto();
+          hoja.style.willChange = 'transform';
+        },
+        alMover: (delta) => {
+          let v = inicio + (delta / dimension) * 100;
+          // Tirar hacia arriba no descubre nada: resistencia creciente en vez
+          // de un tope seco.
+          if (v < 0) {
+            const exceso = window.Muelle.gomaElastica(v * dimension / 100, dimension);
+            v = (exceso / dimension) * 100;
+          }
+          muelle.fijar(v);
+        },
+        alSoltar: (velocidad) => {
+          const actualPx = (muelle.valorActual() / 100) * dimension;
+          // A donde IRIA el gesto, no donde se solto: un impulso corto y
+          // rapido debe lanzar la hoja aunque apenas se haya movido.
+          const proyectado = actualPx + window.Muelle.proyectar(velocidad);
+          if (proyectado > dimension * 0.35) cerrar(velocidad);
+          else {
+            hoja.style.willChange = 'transform';
+            muelle.irA(0, (velocidad / dimension) * 100);
+          }
+        }
+      });
+    }
+
+    return { abrir: abrir, cerrar: cerrar };
+  })();
+
+  function abrirPanel() {
+    if (panelDeDetalle) panelDeDetalle.abrir();
+    else overlay.classList.add('open');
+  }
+
   function closeModal() {
-    overlay.classList.remove('open');
+    if (panelDeDetalle) panelDeDetalle.cerrar();
+    else overlay.classList.remove('open');
   }
 
   document.querySelectorAll('.status-chip').forEach(function (chip) {
