@@ -1122,6 +1122,33 @@ def test_solo_un_admin_edita_el_catalogo(client):
     assert client.get('/admin/catalogo').status_code in (302, 403)
 
 
+def test_formularios_de_v2_usan_el_catalogo_editable(client):
+    """Renombrar opciones debe llegar a filtros, tareas y solicitudes."""
+    from models import TaskStatus, TaskPriority
+    from services.catalogo import invalidar_cache_catalogo
+
+    with app_module.app.app_context():
+        _sembrar_catalogo()
+        user_id = _create_user(username='catalogo-ui', email='catalogo-ui@example.com',
+                               tools=['tasks'])
+        TaskStatus.query.filter_by(nombre='En Progreso').first().nombre = 'En curso'
+        prioridad = TaskPriority.query.filter_by(nombre='Media').first()
+        prioridad.nombre = 'Normal'
+        db.session.commit()
+
+    _login_as(client, user_id)
+    with client.application.app_context():
+        invalidar_cache_catalogo()
+
+    tareas = client.get('/tasks').data.decode()
+    solicitudes = client.get('/task-requests').data.decode()
+
+    assert 'value="En curso"' in tareas
+    assert 'value="Normal" selected' in tareas
+    assert 'value="En Progreso"' not in tareas
+    assert 'value="Normal" selected' in solicitudes
+
+
 # Colaboracion en tareas: borrado suave, conflictos, notificaciones,
 # comentarios y observadores
 # ─────────────────────────────────────────────────────────────
@@ -1602,7 +1629,6 @@ def test_solo_la_pertenencia_lee_area_id():
     """
     PERMITIDAS = {
         ('blueprints/tasks.py', 'api_templates_create'),
-        ('blueprints/tasks.py', 'api_templates_instantiate'),
         ('blueprints/task_requests.py', 'api_task_requests_create'),
     }
 

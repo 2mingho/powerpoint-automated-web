@@ -7,7 +7,8 @@ from models import User, Area, Task, TaskWatcher, TaskRequest, UnitLead
 from services.alcance import alcance_unidades, ambito_unidades
 from services.notifications import notify_user, notify_many
 from services.clock import today_local
-from services.catalogo import prioridades_validas, prioridad_por_defecto
+from services.catalogo import (prioridades_validas, prioridad_por_defecto,
+                               estado_inicial)
 from blueprints.admin import log_activity
 from blueprints.tasks import task_access_required, _assignee_in_current_unit
 
@@ -22,7 +23,10 @@ task_requests_bp = Blueprint('task_requests', __name__, template_folder='../temp
 @login_required
 def task_requests_page():
     """Task requests page."""
-    return render_template('task_requests.html')
+    return render_template(
+        'task_requests.html', task_priorities=prioridades_validas(),
+        default_priority=prioridad_por_defecto(),
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -204,7 +208,7 @@ def api_task_requests_accept(request_id):
             client=req.client,
             due_date=parsed_due,
             priority=req.priority,
-            status='Pendiente',
+            status=estado_inicial(),
             visibility='shared',
             area=req.to_area.name if req.to_area else '',
             area_id=req.to_area_id,

@@ -259,10 +259,6 @@ def user_edit(user_id):
         if user.area_id != new_area_id:
             changes.append('area actualizada')
             user.area_id = new_area_id
-        is_lead = request.form.get('is_area_lead') == '1'
-        if user.is_area_lead != is_lead:
-            changes.append(f'lider: {user.is_area_lead} -> {is_lead}')
-            user.is_area_lead = is_lead
         if password:
             user.password = generate_password_hash(password, method='scrypt')
             changes.append('contrasena actualizada')

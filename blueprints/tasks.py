@@ -16,7 +16,7 @@ from services.clock import today_local, current_year
 from services.alcance import alcance_unidades, ambito_unidades, puede_ver_equipo
 from services.catalogo import (estados_validos, prioridades_validas,
                                estado_inicial, prioridad_por_defecto,
-                               es_estado_final)
+                               estados_finales, es_estado_final)
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -208,10 +208,11 @@ def _task_headline_stats(base_query):
     """
     hoy = today_local()
     inicio_semana = _semana_actual_inicio()
+    finales = estados_finales()
 
     vencidas = base_query.filter(
         Task.due_date < hoy,
-        Task.status != 'Completado',
+        ~Task.status.in_(finales),
     ).count()
 
     bloqueadas = base_query.filter(Task.status == 'Bloqueado').count()
@@ -221,14 +222,14 @@ def _task_headline_stats(base_query):
     # alguien edita una tarea completada hace tiempo, e infla el numero, nunca
     # lo reduce. Anadir completed_at es la correccion de fondo.
     completadas_semana = base_query.filter(
-        Task.status == 'Completado',
+        Task.status.in_(finales),
         Task.updated_at >= datetime.combine(inicio_semana, datetime.min.time()),
     ).count()
 
     # Carga: tareas abiertas por persona. A un director le interesa quien va
     # mas cargado, no el reparto completo, que ya esta en el grafico de barras.
     filas = base_query.filter(
-        Task.status != 'Completado',
+        ~Task.status.in_(finales),
         Task.assignee_id.isnot(None),
     ).with_entities(
         Task.assignee_id, func.count(Task.id)
@@ -317,7 +318,7 @@ def ensure_due_notifications(user):
 
     tasks = Task.active_query().filter(
         Task.assignee_id == user.id,
-        Task.status != 'Completado',
+        ~Task.status.in_(estados_finales()),
         Task.due_date.isnot(None),
     ).all()
 
@@ -889,6 +890,7 @@ def tasks_page():
         task_priorities=prioridades_validas(),
         initial_status=estado_inicial(),
         default_priority=prioridad_por_defecto(),
+        final_statuses=estados_finales(),
         hoy=today_local().isoformat(),
     )
 
@@ -921,7 +923,7 @@ def api_tasks_list():
 
     if overdue == '1':
         today_ref = today_local()
-        query = query.filter(Task.due_date < today_ref, Task.status != 'Completado')
+        query = query.filter(Task.due_date < today_ref, ~Task.status.in_(estados_finales()))
 
     if status and status in estados_validos():
         query = query.filter_by(status=status)
@@ -1127,7 +1129,7 @@ def _validate_template_payload(payload):
     title = (payload.get('title') or '').strip()
     if not title:
         return None, 'El título es obligatorio.'
-    priority = (payload.get('priority') or 'Media').strip()
+    priority = (payload.get('priority') or prioridad_por_defecto()).strip()
     if priority not in prioridades_validas():
         return None, 'Prioridad inválida.'
     due_offset = payload.get('due_offset_days')
@@ -1276,6 +1278,9 @@ def api_templates_instantiate(template_id):
     payload = template.get_payload()
     if not payload:
         return jsonify({'success': False, 'error': 'Plantilla inválida.'}), 400
+    template_priority = payload.get('priority')
+    if template_priority not in prioridades_validas():
+        template_priority = prioridad_por_defecto()
 
     due_date_str = data.get('due_date', '').strip()
     if due_date_str:
@@ -1287,15 +1292,16 @@ def api_templates_instantiate(template_id):
         due_date = _business_day_offset(today_local(), payload.get('due_offset_days', 0))
 
     try:
+        area, area_id = _task_area_for_user(assignee)
         task = Task(
             title=payload['title'],
             description=payload.get('description', ''),
             client=payload.get('client', ''),
             due_date=due_date,
-            priority=payload.get('priority', 'Media'),
-            status='Pendiente',
-            area=current_user.area.name if current_user.area else '',
-            area_id=current_user.area_id,
+            priority=template_priority,
+            status=estado_inicial(),
+            area=area,
+            area_id=area_id,
             creator_id=current_user.id,
             assignee_id=assignee_id,
         )
@@ -1393,8 +1399,8 @@ def api_tasks_create():
     is_recurrent = bool(data.get('is_recurrent'))
     recurrence_type = data.get('recurrence_type', '')
     recurrence_end_str = (data.get('recurrence_end', '') or '').strip()
-    initial_status = (data.get('status') or '').strip() or 'Pendiente'
-    priority = (data.get('priority') or 'Media').strip()
+    initial_status = (data.get('status') or '').strip() or estado_inicial()
+    priority = (data.get('priority') or prioridad_por_defecto()).strip()
     if not recurrence_end_str and end_date_raw:
         recurrence_end_str = str(end_date_raw)
 
@@ -1595,7 +1601,8 @@ def api_tasks_bulk_create():
             requested_by=(item.get('requested_by') or '').strip(),
             budget_type=(item.get('budget_type') or '').strip(),
             due_date=due_date_value,
-            status='Pendiente',
+            status=estado_inicial(),
+            priority=prioridad_por_defecto(),
             is_recurrent=False,
             area=area,
             area_id=area_id,
@@ -2100,11 +2107,11 @@ def _apply_admin_task_filters(query, args):
     # Filtros que alimentan los indicadores de cabecera (RED-7): un numero que
     # no lleva a la tabla ya filtrada obliga a reconstruir el filtro a mano.
     if args.get('overdue', '').strip() == '1':
-        query = query.filter(Task.due_date < today_local(), Task.status != 'Completado')
+        query = query.filter(Task.due_date < today_local(), ~Task.status.in_(estados_finales()))
 
     if args.get('completed_this_week', '').strip() == '1':
         query = query.filter(
-            Task.status == 'Completado',
+            Task.status.in_(estados_finales()),
             Task.updated_at >= datetime.combine(_semana_actual_inicio(), datetime.min.time()),
         )
 
@@ -2122,14 +2129,20 @@ def tasks_dashboard():
     if not current_user.is_admin:
         from flask import abort
         abort(403)
-    return render_template('tasks_dashboard.html', scope='admin')
+    return render_template(
+        'tasks_dashboard.html', scope='admin', task_statuses=estados_validos(),
+        task_priorities=prioridades_validas(), final_statuses=estados_finales(),
+    )
 
 
 @tasks_bp.route('/tasks/team-dashboard')
 @area_lead_required
 def team_dashboard():
     """Area lead dashboard scoped to own unit."""
-    return render_template('tasks_dashboard.html', scope='area')
+    return render_template(
+        'tasks_dashboard.html', scope='area', task_statuses=estados_validos(),
+        task_priorities=prioridades_validas(), final_statuses=estados_finales(),
+    )
 
 
 @tasks_bp.route('/api/admin/tasks')
@@ -2179,7 +2192,7 @@ def api_admin_tasks_export_csv():
             task.assignee.username if task.assignee else '',
             task.description or '',
             task.budget_type or '',
-            task.priority or 'Media',
+            task.priority or prioridad_por_defecto(),
             task.recurrence_type if task.is_recurrent and task.recurrence_type else 'No',
         ])
 
@@ -2291,7 +2304,7 @@ def api_team_tasks_export_csv():
             task.assignee.username if task.assignee else '',
             task.description or '',
             task.budget_type or '',
-            task.priority or 'Media',
+            task.priority or prioridad_por_defecto(),
             task.recurrence_type if task.is_recurrent and task.recurrence_type else 'No',
         ])
 

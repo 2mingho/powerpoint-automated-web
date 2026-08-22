@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const inpDesc = document.getElementById('taskRequestDesc');
   const inpCliente = document.getElementById('taskRequestClient');
   const selPrioridad = document.getElementById('taskRequestPriority');
+  const prioridadDefecto = selPrioridad ? selPrioridad.dataset.defaultPriority : '';
   const inpFecha = document.getElementById('taskRequestDueDate');
   const aviso = document.getElementById('taskRequestMessage');
 
@@ -66,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (inpTitulo) inpTitulo.value = '';
     if (inpDesc) inpDesc.value = '';
     if (inpCliente) inpCliente.value = '';
-    if (selPrioridad) selPrioridad.value = 'Media';
+    if (selPrioridad) selPrioridad.value = prioridadDefecto;
     if (inpFecha) inpFecha.value = '';
     if (inpTitulo) inpTitulo.focus();
   }
@@ -101,7 +102,7 @@ document.addEventListener('DOMContentLoaded', function () {
         to_area_id: Number(areaId),
         description: (inpDesc ? inpDesc.value : '') || undefined,
         client: (inpCliente ? inpCliente.value : '') || undefined,
-        priority: selPrioridad ? selPrioridad.value : 'Media',
+        priority: selPrioridad ? selPrioridad.value : prioridadDefecto,
         due_date: inpFecha ? (inpFecha.value || undefined) : undefined
       })
     })

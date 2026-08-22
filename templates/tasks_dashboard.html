@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="td-layout">
+<div class="td-layout" data-final-statuses='{{ final_statuses|tojson }}'>
   {#
     Indicadores de cabecera (RED-7). El dashboard abria con la distribucion
     por estado y dos graficos: informacion, pero no una respuesta. Estos
@@ -58,23 +58,7 @@
         <span class="td-stat-value" id="statTotal">—</span>
         <span class="td-stat-label">Total Tareas</span>
       </div>
-      <div class="td-summary-list">
-        <div class="td-sum-item">
-          <span class="dot st-pendiente"></span>
-          <span class="lbl">Pendientes</span>
-          <span class="val" id="statPending">0</span>
-        </div>
-        <div class="td-sum-item">
-          <span class="dot st-en-progreso"></span>
-          <span class="lbl">En Progreso</span>
-          <span class="val" id="statActive">0</span>
-        </div>
-        <div class="td-sum-item">
-          <span class="dot st-completado"></span>
-          <span class="lbl">Completadas</span>
-          <span class="val" id="statDone">0</span>
-        </div>
-      </div>
+      <div class="td-summary-list" id="statByStatus"></div>
     </div>
 
     <!-- Status Donut -->
@@ -238,9 +222,9 @@
         <label class="form-label">Estado</label>
         <select class="form-select" id="bulkStatus">
           <option value="">No cambiar</option>
-          <option value="Pendiente">Pendiente</option>
-          <option value="En Progreso">En Progreso</option>
-          <option value="Completado">Completado</option>
+          {% for status in task_statuses %}
+          <option value="{{ status }}">{{ status }}</option>
+          {% endfor %}
         </select>
       </div>
 
@@ -703,7 +687,7 @@ document.addEventListener('DOMContentLoaded', function() {
         selCreator.appendChild(o2);
       });
       populateBulkAssignee(allUsers);
-      data.areas.forEach(a => {
+      (data.areas || []).forEach(a => {
         const o = document.createElement('option');
         o.value = a; o.textContent = a;
         selArea.appendChild(o);
@@ -729,13 +713,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // 1. Status Donut
     if (chartStatus) chartStatus.destroy();
     const ctxStatus = document.getElementById('chartStatus').getContext('2d');
+    const porEstado = stats.por_estado || {};
+    const etiquetasEstado = Object.keys(porEstado);
+    const coloresEstado = [
+      token('--c-prio-media'), token('--c-info') || token('--c-text-secondary'),
+      token('--c-danger'), token('--c-success'), token('--c-text-secondary')
+    ];
     chartStatus = new Chart(ctxStatus, {
       type: 'doughnut',
       data: {
-        labels: ['Pendiente', 'En Progreso', 'Completada'],
+        labels: etiquetasEstado,
         datasets: [{
-          data: [stats.pendiente, stats.en_progreso, stats.completado],
-          backgroundColor: [token('--c-prio-media'), token('--c-info') || token('--c-text-secondary'), token('--c-success')],
+          data: etiquetasEstado.map(nombre => porEstado[nombre]),
+          backgroundColor: etiquetasEstado.map((_, i) => coloresEstado[i % coloresEstado.length]),
           borderWidth: 0,
           hoverOffset: 4
         }]
@@ -890,6 +880,18 @@ document.addEventListener('DOMContentLoaded', function() {
     headline.dataset.cargaId = stats.carga_max_id ?? '';
   }
 
+  function pintarResumenEstados(stats) {
+    const contenedor = document.getElementById('statByStatus');
+    if (!contenedor) return;
+    const porEstado = stats.por_estado || {};
+    contenedor.innerHTML = Object.entries(porEstado).map(([nombre, total]) => `
+      <div class="td-sum-item">
+        <span class="dot"></span>
+        <span class="lbl">${escapeHtml(nombre)}</span>
+        <span class="val">${total}</span>
+      </div>`).join('');
+  }
+
   if (headline) {
     headline.addEventListener('click', function (evento) {
       const boton = evento.target.closest('.td-kpi');
@@ -939,9 +941,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update counts
         document.getElementById('statTotal').textContent = data.stats.total;
-        document.getElementById('statPending').textContent = data.stats.pendiente;
-        document.getElementById('statActive').textContent = data.stats.en_progreso;
-        document.getElementById('statDone').textContent = data.stats.completado;
+        pintarResumenEstados(data.stats);
         pintarIndicadores(data.stats);
         pintarPastillasDeFiltro();
 
@@ -957,11 +957,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         grid.innerHTML = currentTasks.map(t => {
           const taskId = Number(t.id);
-          const statusClass = t.status === 'Pendiente'
-            ? 'st-pendiente'
-            : t.status === 'En Progreso'
-              ? 'st-en-progreso'
-              : 'st-completado';
+          const statusClass = t.status === 'Pendiente' ? 'st-pendiente'
+            : t.status === 'En Progreso' ? 'st-en-progreso'
+              : t.status === 'Completado' ? 'st-completado' : '';
 
           const dueDate = t.due_date
             ? new Date(t.due_date + 'T00:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' })

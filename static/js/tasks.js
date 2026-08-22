@@ -50,6 +50,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const filterAssignee = document.getElementById('tasksFilterAssignee');
   const filterClient = document.getElementById('tasksFilterClient');
   const filterArea = document.getElementById('tasksFilterArea');
+  const taskConfigEl = document.getElementById('tasksShell');
+  const INITIAL_STATUS = taskConfigEl.dataset.initialStatus;
+  const DEFAULT_PRIORITY = taskConfigEl.dataset.defaultPriority;
+  const FINAL_STATUSES = JSON.parse(taskConfigEl.dataset.finalStatuses || '[]');
+  const FINAL_STATUS = FINAL_STATUSES[0] || INITIAL_STATUS;
   const tasksSearch = document.getElementById('tasksSearch');
   const tasksSearchResults = document.getElementById('tasksSearchResults');
   const tasksOverdueBadge = document.getElementById('tasksOverdueBadge');
@@ -62,9 +67,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const bulkCount = document.getElementById('tasksBulkCount');
   const btnBulkCopy = document.getElementById('btnBulkCopy');
   const btnBulkMove = document.getElementById('btnBulkMove');
-  const btnBulkPending = document.getElementById('btnBulkPending');
-  const btnBulkProgress = document.getElementById('btnBulkProgress');
-  const btnBulkDone = document.getElementById('btnBulkDone');
   const btnBulkDelete = document.getElementById('btnBulkDelete');
   const btnBulkCancel = document.getElementById('btnBulkCancel');
   const bulkStatusQuick = document.getElementById('bulkStatusQuick');
@@ -130,7 +132,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   ];
 
-  let currentStatus = 'Pendiente';
+  let currentStatus = INITIAL_STATUS;
   let calendar;
   let clientCache = [];
   let filterClientTimer = null;
@@ -630,7 +632,7 @@ document.addEventListener('DOMContentLoaded', function () {
       requested_by: (taskData.requested_by || '').trim(),
       budget_type: (taskData.budget_type || '').trim(),
       description: (taskData.description || '').trim(),
-      priority: (taskData.priority || 'Media').trim(),
+      priority: (taskData.priority || DEFAULT_PRIORITY).trim(),
       assignee_id: parseInt(taskData.assignee_id, 10),
       original_due_date: dueDate,
       weekday_offset: weekdayOffset,
@@ -990,10 +992,10 @@ document.addEventListener('DOMContentLoaded', function () {
     fDesc.value = taskData.description || '';
     fAssignee.value = taskData.assignee_id;
     fDueDate.value = normalizeIsoDate(taskData.due_date);
-    fPriority.value = taskData.priority || 'Media';
+    fPriority.value = taskData.priority || DEFAULT_PRIORITY;
     fStartDate.value = normalizeIsoDate(taskData.start_date);
     fEndDate.value = normalizeIsoDate(taskData.end_date);
-    currentStatus = taskData.status || 'Pendiente';
+    currentStatus = taskData.status || INITIAL_STATUS;
     currentUpdatedAt = taskData.updated_at || '';
     if (taskCommentsCount) taskCommentsCount.textContent = String(taskData.comments_count || 0);
     renderWatchers(taskData);
@@ -1332,12 +1334,12 @@ document.addEventListener('DOMContentLoaded', function () {
           requested_by: item.requested_by || '',
           budget_type: item.budget_type || '',
           description: item.description || '',
-          priority: item.priority || 'Media',
+          priority: item.priority || DEFAULT_PRIORITY,
           start_date: item.start_offset === null || item.start_offset === undefined ? '' : shiftIsoDate(dueDate, item.start_offset),
           end_date: item.end_offset === null || item.end_offset === undefined ? '' : shiftIsoDate(dueDate, item.end_offset),
           assignee_id: parseInt(item.assignee_id, 10),
           due_date: dueDate,
-          status: 'Pendiente',
+          status: INITIAL_STATUS,
           is_recurrent: false,
           recurrence_type: '',
           recurrence_end: ''
@@ -1381,7 +1383,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function openTaskContextMenu(x, y, taskData) {
-    const isCompleted = taskData.status === 'Completado';
+    const isCompleted = FINAL_STATUSES.includes(taskData.status);
 
     openContextMenu(x, y, [
       {
@@ -1394,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', function () {
         icon: 'fa-circle-check',
         disabled: isCompleted,
         action: function () {
-          updateTask(taskData.id, { status: 'Completado' }, null, {
+          updateTask(taskData.id, { status: FINAL_STATUS }, null, {
             successMessage: 'Tarea marcada como completada.'
           });
         }
@@ -1661,7 +1663,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (fTitle) fTitle.value = payload.title || '';
     if (fClient) fClient.value = payload.client || '';
     if (fDesc) fDesc.value = payload.description || '';
-    if (fPriority) fPriority.value = payload.priority || 'Media';
+    if (fPriority) fPriority.value = payload.priority || DEFAULT_PRIORITY;
     if (fBudgetType) fBudgetType.value = payload.budget_type || '';
     sincronizarGrupos(true);
   }
@@ -1737,7 +1739,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fBudgetType.value = '';
     fDesc.value = '';
     fDueDate.value = '';
-    fPriority.value = 'Media';
+    fPriority.value = DEFAULT_PRIORITY;
     fStartDate.value = '';
     fEndDate.value = '';
     fRecType.value = 'Semanal';
@@ -1745,7 +1747,7 @@ document.addEventListener('DOMContentLoaded', function () {
     recFields.classList.remove('visible');
     deleteSeriesCb.checked = false;
     deleteSeriesWrap.classList.add('modal-hidden');
-    currentStatus = 'Pendiente';
+    currentStatus = INITIAL_STATUS;
     currentUpdatedAt = '';
     currentTaskDetail = null;
     if (taskCommentBody) taskCommentBody.value = '';
@@ -1765,7 +1767,7 @@ document.addEventListener('DOMContentLoaded', function () {
     updateRecurrencePreview();
 
     document.querySelectorAll('.status-chip').forEach(function (chip) {
-      chip.classList.toggle('selected', chip.dataset.status === 'Pendiente');
+      chip.classList.toggle('selected', chip.dataset.status === INITIAL_STATUS);
     });
 
     if (editMode && taskData) {
@@ -1991,7 +1993,7 @@ document.addEventListener('DOMContentLoaded', function () {
         title: fTitle ? fTitle.value : '',
         description: fDesc ? fDesc.value : '',
         client: fClient ? fClient.value : '',
-        priority: fPriority ? fPriority.value : 'Media',
+        priority: fPriority ? fPriority.value : DEFAULT_PRIORITY,
         budget_type: fBudgetType ? fBudgetType.value : '',
         due_offset_days: 7,
         checklist: [],
@@ -2378,9 +2380,6 @@ document.addEventListener('DOMContentLoaded', function () {
   if (btnBulkCancel) btnBulkCancel.addEventListener('click', function () { setSelectionMode(false); });
   if (btnBulkCopy) btnBulkCopy.addEventListener('click', function () { copySelectedTasks(); setSelectionMode(false); });
   if (btnBulkMove) btnBulkMove.addEventListener('click', bulkMoveSelectedToDate);
-  if (btnBulkPending) btnBulkPending.addEventListener('click', function () { bulkUpdateStatus('Pendiente'); });
-  if (btnBulkProgress) btnBulkProgress.addEventListener('click', function () { bulkUpdateStatus('En Progreso'); });
-  if (btnBulkDone) btnBulkDone.addEventListener('click', function () { bulkUpdateStatus('Completado'); });
   if (bulkStatusQuick) bulkStatusQuick.addEventListener('change', function () {
     if (!bulkStatusQuick.value) return;
     bulkUpdateStatus(bulkStatusQuick.value);
@@ -2455,8 +2454,12 @@ document.addEventListener('DOMContentLoaded', function () {
     selectable: true,
     dayMaxEvents: 4,
     eventOrder: function (a, b) {
-      const statusPriority = { Pendiente: 1, 'En Progreso': 2, 'Bloqueado': 3, 'En Revisión': 4, Completado: 5 };
-      const taskPriority = { Alta: 1, Media: 2, Baja: 3 };
+      const statusPriority = Object.fromEntries(
+        Array.from(filterStatus.options).filter(o => o.value).map((o, i) => [o.value, i])
+      );
+      const taskPriority = Object.fromEntries(
+        Array.from(filterPriority.options).filter(o => o.value).map((o, i) => [o.value, i])
+      );
       const p1 = statusPriority[a.extendedProps.status] || 99;
       const p2 = statusPriority[b.extendedProps.status] || 99;
       if (p1 !== p2) return p1 - p2;
@@ -2486,9 +2489,9 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .then(function (tasks) {
           const events = tasks.map(function (task) {
-            const colors = statusColorMap[task.status] || statusColorMap.Pendiente;
-            const statusSlug = slugifyToken(task.status || 'Pendiente');
-            const prioritySlug = slugifyToken(task.priority || 'Media');
+            const colors = statusColorMap[task.status] || { bg: 'var(--c-bg)', border: 'var(--c-border)', text: 'var(--c-text-secondary)' };
+            const statusSlug = slugifyToken(task.status || INITIAL_STATUS);
+            const prioritySlug = slugifyToken(task.priority || DEFAULT_PRIORITY);
             return {
               id: String(task.id),
               title: task.title,
@@ -2515,8 +2518,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const task = info.event.extendedProps;
       const lines = [
         task.title,
-        `Estado: ${task.status || 'Pendiente'}`,
-        `Prioridad: ${task.priority || 'Media'}`,
+        `Estado: ${task.status || INITIAL_STATUS}`,
+        `Prioridad: ${task.priority || DEFAULT_PRIORITY}`,
         task.client ? `Cliente: ${task.client}` : '',
         task.directorate ? `Director/Gerencia: ${task.directorate}` : '',
         task.requested_by ? `Solicitado por: ${task.requested_by}` : '',
@@ -2722,7 +2725,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function fichaDeTarea(tarea) {
     const clases = ['today-card', claseDePrioridad(tarea.priority)];
     if (tarea.is_overdue) clases.push('is-overdue');
-    if (tarea.status === 'Completado') clases.push('is-done');
+    if (FINAL_STATUSES.includes(tarea.status)) clases.push('is-done');
 
     const meta = [tarea.client, tarea.assignee_name, tarea.status]
       .filter(Boolean)
@@ -2736,7 +2739,7 @@ document.addEventListener('DOMContentLoaded', function () {
       +     (meta ? `<span class="today-card-meta">${meta}</span>` : '')
       +   '</span>'
       +   `<span class="today-card-when">${escapeHtml(etiquetaVencimiento(tarea.due_date))}</span>`
-      +   `<span class="today-card-prio">${escapeHtml(tarea.priority || 'Media')}</span>`
+      +   `<span class="today-card-prio">${escapeHtml(tarea.priority || DEFAULT_PRIORITY)}</span>`
       + '</button></li>';
   }
 

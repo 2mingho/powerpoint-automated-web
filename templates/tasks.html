@@ -5,7 +5,9 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
 
-<div class="tasks-shell" id="tasksShell" data-vista="hoy" data-hoy="{{ hoy }}">
+<div class="tasks-shell" id="tasksShell" data-vista="hoy" data-hoy="{{ hoy }}"
+     data-initial-status="{{ initial_status }}" data-default-priority="{{ default_priority }}"
+     data-final-statuses='{{ final_statuses|tojson }}'>
   {#
     Barra unica de pagina. Antes habia un hero de 152px cuyo <h1> repetia
     literalmente el nombre que la barra superior ya muestra, mas una linea de
@@ -92,11 +94,9 @@
             <i class="fa-regular fa-circle-dot" aria-hidden="true"></i>
             <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
               <option value="">Estado</option>
-              <option value="Pendiente">Pendiente</option>
-              <option value="En Progreso">En Progreso</option>
-              <option value="Bloqueado">Bloqueado</option>
-              <option value="En Revisión">En Revisión</option>
-              <option value="Completado">Completado</option>
+              {% for status in task_statuses %}
+              <option value="{{ status }}">{{ status }}</option>
+              {% endfor %}
             </select>
           </div>
 
@@ -104,9 +104,9 @@
             <i class="fa-solid fa-flag" aria-hidden="true"></i>
             <select class="form-select" id="tasksFilterPriority" aria-label="Filtrar por prioridad">
               <option value="">Prioridad</option>
-              <option value="Alta">Alta</option>
-              <option value="Media">Media</option>
-              <option value="Baja">Baja</option>
+              {% for priority in task_priorities %}
+              <option value="{{ priority }}">{{ priority }}</option>
+              {% endfor %}
             </select>
           </div>
 
@@ -192,16 +192,11 @@
     <div class="tasks-bulk-count" id="tasksBulkCount">0 seleccionadas</div>
     <button class="btn btn-secondary" id="btnBulkCopy" type="button" title="Copiar" disabled><i class="fa-regular fa-copy"></i></button>
     <button class="btn btn-secondary" id="btnBulkMove" type="button" title="Mover" disabled><i class="fa-regular fa-calendar"></i></button>
-    <button class="btn btn-secondary" id="btnBulkPending" type="button" title="Pendiente" disabled><i class="fa-regular fa-clock"></i></button>
-    <button class="btn btn-secondary" id="btnBulkProgress" type="button" title="En progreso" disabled><i class="fa-solid fa-spinner"></i></button>
-    <button class="btn btn-secondary" id="btnBulkDone" type="button" title="Completado" disabled><i class="fa-solid fa-check"></i></button>
     <select class="form-select tasks-bulk-status-select" id="bulkStatusQuick" aria-label="Cambiar estado masivo" disabled>
       <option value="">Estado...</option>
-      <option value="Pendiente">Pendiente</option>
-      <option value="En Progreso">En Progreso</option>
-      <option value="Bloqueado">Bloqueado</option>
-      <option value="En Revisión">En Revisión</option>
-      <option value="Completado">Completado</option>
+      {% for status in task_statuses %}
+      <option value="{{ status }}">{{ status }}</option>
+      {% endfor %}
     </select>
     <button class="btn btn-secondary" id="btnBulkDelete" type="button" title="Eliminar" disabled><i class="fa-regular fa-trash-can"></i></button>
     <button class="btn btn-secondary" id="btnBulkCancel" type="button" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>
@@ -286,9 +281,9 @@
       <div class="form-group form-group-tight">
         <label class="form-label" for="taskPriority">Prioridad</label>
         <select class="form-select" id="taskPriority">
-          <option value="Alta">Alta</option>
-          <option value="Media" selected>Media</option>
-          <option value="Baja">Baja</option>
+          {% for priority in task_priorities %}
+          <option value="{{ priority }}"{% if priority == default_priority %} selected{% endif %}>{{ priority }}</option>
+          {% endfor %}
         </select>
       </div>
 
@@ -296,11 +291,9 @@
       <div class="form-group form-group-tight modal-hidden" id="statusGroup">
         <label class="form-label">Estado</label>
         <div class="status-select-group">
-          <div class="status-chip selected" data-status="Pendiente">Pendiente</div>
-          <div class="status-chip" data-status="En Progreso">En Progreso</div>
-          <div class="status-chip" data-status="Bloqueado">Bloqueado</div>
-          <div class="status-chip" data-status="En Revisión">En Revisión</div>
-          <div class="status-chip" data-status="Completado">Completado</div>
+          {% for status in task_statuses %}
+          <div class="status-chip{% if status == initial_status %} selected{% endif %}" data-status="{{ status }}">{{ status }}</div>
+          {% endfor %}
         </div>
       </div>
 
