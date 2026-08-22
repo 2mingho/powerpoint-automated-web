@@ -3546,3 +3546,16 @@
   .td-kpi-value { font-size: 1.5rem; }
   .td-hero-actions .btn { flex: 0 0 auto; }
 }
+
+/* Un fallo de carga no puede parecerse a una agenda vacia. */
+.today-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-sm);
+  margin: 0;
+  padding: var(--sp-md);
+  font-size: 0.88rem;
+  color: var(--c-prio-alta);
+  background: var(--c-prio-alta-bg);
+  border-radius: var(--r-lg);
+}

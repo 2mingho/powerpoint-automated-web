@@ -36,7 +36,7 @@
 
     <div class="tasks-bar-actions">
       <span class="tasks-overdue-badge modal-hidden" id="tasksOverdueBadge" role="button" tabindex="0">0 vencidas</span>
-      <button class="btn btn-secondary btn-sm" id="btnRequestTask" type="button" aria-label="Solicitar a otra unidad">
+      <button class="btn btn-secondary btn-sm" id="btnRequestTask" type="button" data-abrir-solicitud aria-label="Solicitar a otra unidad">
         <i class="fa-solid fa-arrow-right-arrow-left"></i> <span class="btn-label-desktop">Solicitar</span>
       </button>
       <button class="btn btn-primary btn-sm" id="btnNewTask" aria-label="Nueva tarea">
@@ -427,54 +427,7 @@
 </div>
 
 <!-- ═══ Request Task Modal ═══ -->
-<div class="task-modal-overlay modal-hidden" id="taskRequestModal">
-  <div class="task-modal" role="dialog" aria-labelledby="taskRequestModalTitle" style="max-width:500px;">
-    <div class="task-modal-header">
-      <h2 id="taskRequestModalTitle">Solicitar a otra unidad</h2>
-      <button class="task-modal-close" id="taskRequestClose">&times;</button>
-    </div>
-    <div class="task-modal-body">
-      <div class="task-form-message" id="taskRequestMessage" role="status" aria-live="polite"></div>
-      <p class="tasks-modal-intro">Completa solo lo necesario. El resto puede venir después.</p>
-      <div class="form-group form-group-tight">
-        <label class="form-label">Unidad destino *</label>
-        <select class="form-select" id="taskRequestArea">
-          <option value="">Selecciona unidad...</option>
-        </select>
-      </div>
-      <div class="form-group form-group-tight">
-        <label class="form-label">Título *</label>
-        <input type="text" class="form-input" id="taskRequestTitle" placeholder="Título de la solicitud" maxlength="255">
-      </div>
-      <div class="form-group form-group-tight">
-        <label class="form-label">Descripción</label>
-        <textarea class="form-textarea" id="taskRequestDesc" rows="2" placeholder="Descripción opcional"></textarea>
-      </div>
-      <div class="form-group form-group-tight">
-        <label class="form-label">Cliente</label>
-        <input type="text" class="form-input" id="taskRequestClient" placeholder="Cliente" maxlength="100">
-      </div>
-      <div class="form-row mb-0">
-        <div class="form-group form-group-tight">
-          <label class="form-label">Prioridad</label>
-          <select class="form-select" id="taskRequestPriority">
-            <option value="Alta">Alta</option>
-            <option value="Media" selected>Media</option>
-            <option value="Baja">Baja</option>
-          </select>
-        </div>
-        <div class="form-group form-group-tight">
-          <label class="form-label">Fecha sugerida</label>
-          <input type="date" class="form-input" id="taskRequestDueDate">
-        </div>
-      </div>
-    </div>
-    <div class="task-modal-footer">
-      <button class="btn btn-secondary" id="taskRequestCancel">Cancelar</button>
-      <button class="btn btn-primary" id="btnTaskRequestSend">Enviar Solicitud</button>
-    </div>
-  </div>
-</div>
+{% include "_solicitud_modal.html" %}
 
 <!-- FullCalendar JS -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
@@ -482,4 +435,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+<script src="{{ url_for('static', filename='js/task_request_form.js') }}"></script>
 {% endblock %}

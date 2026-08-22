@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (sentBadgeInline) sentBadgeInline.textContent = String(data.requests.length);
         sentList.innerHTML = data.requests.length
           ? data.requests.map(function (r) { return renderRequestCard(r, false); }).join('')
-          : '<div class="task-comments-empty">No has pedido trabajo a otra unidad. Usa Solicitar en Mis tareas para derivar algo sin asignarlo tu.</div>';
+          : '<div class="task-comments-empty">No has pedido trabajo a otra unidad. Usa Nueva solicitud para derivar algo sin asignarlo tu.</div>';
       });
   }
 
@@ -266,6 +266,10 @@ document.addEventListener('DOMContentLoaded', function () {
   if (rejectCancel) rejectCancel.addEventListener('click', closeRejectModal);
   if (rejectConfirm) rejectConfirm.addEventListener('click', confirmReject);
   if (rejectModal) rejectModal.addEventListener('click', function (e) { if (e.target === rejectModal) closeRejectModal(); });
+
+  // El formulario de solicitud es un modulo aparte y no conoce esta pagina:
+  // avisa por un evento y aqui se decide que hacer con el.
+  document.addEventListener('solicitud:enviada', loadRequests);
 
   /* ── Initial load ── */
   loadRequests();

@@ -1787,68 +1787,9 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   /* ── Request modal ── */
-  const reqModal = document.getElementById('taskRequestModal');
-  const reqBtn = document.getElementById('btnRequestTask');
-  const reqClose = document.getElementById('taskRequestClose');
-  const reqCancel = document.getElementById('taskRequestCancel');
-  const reqSend = document.getElementById('btnTaskRequestSend');
-  const reqArea = document.getElementById('taskRequestArea');
-  const reqTitle = document.getElementById('taskRequestTitle');
-  const reqDesc = document.getElementById('taskRequestDesc');
-  const reqClient = document.getElementById('taskRequestClient');
-  const reqPriority = document.getElementById('taskRequestPriority');
-  const reqDueDate = document.getElementById('taskRequestDueDate');
-  const reqMessage = document.getElementById('taskRequestMessage');
-
-  function clearReqMessage() { if (reqMessage) reqMessage.textContent = ''; }
-  function openReqModal() {
-    if (reqModal) window.abrirModal(reqModal);
-    clearReqMessage();
-    if (reqArea) {
-      reqArea.innerHTML = '<option value="">Cargando...</option>';
-      fetch('/api/areas').then(function (r) { return r.json(); }).then(function (data) {
-        if (!data.success || !Array.isArray(data.areas)) { reqArea.innerHTML = '<option value="">Error</option>'; return; }
-        reqArea.innerHTML = '<option value="">Selecciona unidad...</option>';
-        data.areas.forEach(function (a) { var o = document.createElement('option'); o.value = a.id; o.textContent = a.name; reqArea.appendChild(o); });
-      }).catch(function () { reqArea.innerHTML = '<option value="">Error al cargar</option>'; });
-    }
-    if (reqTitle) reqTitle.value = '';
-    if (reqDesc) reqDesc.value = '';
-    if (reqClient) reqClient.value = '';
-    if (reqPriority) reqPriority.value = 'Media';
-    if (reqDueDate) reqDueDate.value = '';
-  }
-  function closeReqModal() { if (reqModal) window.cerrarModal(reqModal); }
-  function sendRequest() {
-    if (!reqArea || !reqTitle) return;
-    var areaId = reqArea.value;
-    var title = (reqTitle.value || '').trim();
-    if (!areaId) { if (reqMessage) reqMessage.textContent = 'Selecciona una unidad destino.'; return; }
-    if (!title) { if (reqMessage) reqMessage.textContent = 'El título es obligatorio.'; return; }
-    reqSend.disabled = true;
-    var payload = {
-      title: title,
-      to_area_id: Number(areaId),
-      description: (reqDesc ? reqDesc.value : '') || undefined,
-      client: (reqClient ? reqClient.value : '') || undefined,
-      priority: reqPriority ? reqPriority.value : 'Media',
-      due_date: reqDueDate ? (reqDueDate.value || undefined) : undefined,
-    };
-    fetch('/api/task-requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); }).then(function (data) {
-      if (!data.success) {
-        if (reqMessage) reqMessage.textContent = data.error || 'Error al enviar solicitud.';
-        return;
-      }
-      closeReqModal();
-      notify('success', 'Solicitud enviada.');
-    }).catch(function () {
-      if (reqMessage) reqMessage.textContent = 'Error de conexión.';
-    }).finally(function () { reqSend.disabled = false; });
-  }
+  /* El formulario de solicitud vive en static/js/task_request_form.js: lo
+     comparten Mis tareas y la pagina de Solicitudes. Aqui solo queda el
+     disparador, marcado con data-abrir-solicitud en la plantilla. */
 
   /* ── Templates ── */
   if (btnSaveAsTemplate) {
@@ -1894,12 +1835,6 @@ document.addEventListener('DOMContentLoaded', function () {
       notify('success', 'Plantilla guardada.');
     }).catch(function () { notify('error', 'Error de conexión.'); });
   }
-
-  if (reqBtn) reqBtn.addEventListener('click', openReqModal);
-  if (reqClose) reqClose.addEventListener('click', closeReqModal);
-  if (reqCancel) reqCancel.addEventListener('click', closeReqModal);
-  if (reqSend) reqSend.addEventListener('click', sendRequest);
-  if (reqModal) reqModal.addEventListener('click', function (e) { if (e.target === reqModal) closeReqModal(); });
 
   btnNew.addEventListener('click', function () { openModal(false); });
   btnClose.addEventListener('click', closeModal);
@@ -2685,21 +2620,46 @@ document.addEventListener('DOMContentLoaded', function () {
   // que hay que hacer ahora, no mostrar los siete dias de golpe.
   const gruposColapsados = new Set(['semana']);
 
+  function mostrarFalloDeCarga(motivo) {
+    todayGroups.innerHTML = '<p class="today-error">'
+      + '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> '
+      + escapeHtml(motivo)
+      + '</p>';
+    todayGroups.setAttribute('aria-busy', 'false');
+  }
+
+  /* Una peticion caida no es una agenda vacia. Sin esta distincion, un 429 o un
+     500 pintaban "Nada vencido ni pendiente": el peor estado vacio posible,
+     porque tranquiliza al usuario justo cuando no se le pudo preguntar nada al
+     servidor. */
+  function pedirTareas(url) {
+    return fetch(url).then(function (respuesta) {
+      if (!respuesta.ok) {
+        const error = new Error('http ' + respuesta.status);
+        error.estado = respuesta.status;
+        throw error;
+      }
+      return respuesta.json();
+    }).then(function (datos) {
+      if (!Array.isArray(datos)) throw new Error('respuesta inesperada');
+      return datos;
+    });
+  }
+
   function cargarVistaHoy() {
     if (!todayGroups || !HOY) return Promise.resolve();
     todayGroups.setAttribute('aria-busy', 'true');
 
     const finSemana = sumarDias(HOY, 7);
     return Promise.all([
-      requestJson('/api/tasks?overdue=1'),
-      requestJson(`/api/tasks?start=${HOY}&end=${finSemana}`)
+      pedirTareas('/api/tasks?overdue=1'),
+      pedirTareas(`/api/tasks?start=${HOY}&end=${finSemana}`)
     ]).then(function (respuestas) {
-      const vencidas = Array.isArray(respuestas[0]) ? respuestas[0] : [];
-      const rango = Array.isArray(respuestas[1]) ? respuestas[1] : [];
-      pintarVistaHoy(vencidas, rango);
-    }).catch(function () {
-      todayGroups.innerHTML = '<p class="today-empty">No se pudo cargar tu trabajo. Prueba a actualizar.</p>';
-      todayGroups.setAttribute('aria-busy', 'false');
+      pintarVistaHoy(respuestas[0], respuestas[1]);
+    }).catch(function (error) {
+      mostrarFalloDeCarga(error && error.estado === 429
+        ? 'Demasiadas peticiones seguidas. Espera unos segundos y pulsa Actualizar.'
+        : 'No se pudo cargar tu trabajo. Comprueba la conexión y pulsa Actualizar.');
     });
   }
 

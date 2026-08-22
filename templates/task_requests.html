@@ -15,6 +15,14 @@
   <span class="visually-hidden" id="trReceivedBadge">0</span>
   <span class="visually-hidden" id="trSentCount">0</span>
 
+  {# La pagina mostraba solicitudes pero no dejaba crear ninguna: habia que ir
+     a Mis tareas y buscar el boton alli. #}
+  <div class="page-actions">
+    <button class="btn btn-primary btn-sm" type="button" data-abrir-solicitud>
+      <i class="fa-solid fa-plus"></i> Nueva solicitud
+    </button>
+  </div>
+
   <section class="tr-panel">
     <div class="tr-tabs">
       <button type="button" class="task-tab active" data-tab="received">Recibidas <span class="task-tab-count" id="trReceivedBadgeInline">0</span></button>
@@ -36,6 +44,8 @@
     </div>
   </section>
 </div>
+
+{% include "_solicitud_modal.html" %}
 
 <!-- Accept Modal -->
 <div class="task-modal-overlay modal-hidden" id="trAcceptModal">
@@ -84,4 +94,5 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/task_requests.js') }}"></script>
+<script src="{{ url_for('static', filename='js/task_request_form.js') }}"></script>
 {% endblock %}
