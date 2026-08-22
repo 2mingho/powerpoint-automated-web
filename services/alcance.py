@@ -97,6 +97,26 @@ def unidades_lideradas(user):
     return {fila.area_id for fila in filas}
 
 
+def ambito_unidades(user):
+    """Unidades con las que el usuario trabaja: la suya mas las que lidera.
+
+    No es lo mismo que alcance_unidades(). El alcance responde "que puedo
+    supervisar" y para un empleado es vacio; esto responde "con quien trabajo"
+    y para un empleado es su propia unidad. Confundirlos deja a quien no lidera
+    nada sin poder asignar una tarea a un companero.
+
+    Un admin alcanza todas, asi que la union no anade nada.
+    """
+    if user is None:
+        return set()
+
+    unidades = set(alcance_unidades(user))
+    propia = getattr(user, 'area_id', None)
+    if propia is not None:
+        unidades.add(propia)
+    return unidades
+
+
 def puede_ver_equipo(user):
     """Si tiene algo de equipo que mirar.
 

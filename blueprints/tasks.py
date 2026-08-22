@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload
 from extensions import db
 from models import User, Task, Area
 from services.clock import current_year
+from services.alcance import ambito_unidades
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -68,7 +69,17 @@ def task_access_required(f):
 
 
 def _unit_user_query(active_only=False):
-    """Return a base query of users belonging to current user's unit scope."""
+    """Usuarios con los que el actual puede trabajar.
+
+    Es su propia unidad mas las que lidera, resuelto en services/alcance.py: un
+    manager de dos unidades ve a la gente de las dos, y un director ve la de
+    todos sus managers.
+
+    El respaldo por rol que habia aqui desaparece. Con el modelo nuevo no era
+    un respaldo sino un desvio: alguien sin unidad veia a todos los de su rol,
+    que no es una unidad. Sin unidades queda solo el propio usuario, para que
+    pueda seguir asignandose trabajo a si mismo.
+    """
     query = User.query
     if active_only:
         query = query.filter_by(is_active=True)
@@ -76,11 +87,11 @@ def _unit_user_query(active_only=False):
     if current_user.is_admin:
         return query
 
-    if current_user.area_id:
-        return query.filter_by(area_id=current_user.area_id)
+    unidades = ambito_unidades(current_user)
+    if not unidades:
+        return query.filter(User.id == current_user.id)
 
-    # Legacy fallback where unit is still represented by role
-    return query.filter_by(role=current_user.role)
+    return query.filter(User.area_id.in_(unidades))
 
 
 def _unit_user_ids():
@@ -113,15 +124,19 @@ def _apply_unit_scope(query):
 
 
 def _assignee_in_current_unit(assignee):
-    """Validate assignee belongs to current user's unit scope."""
+    """Si el actual puede asignarle trabajo a esa persona.
+
+    Misma regla que _unit_user_query, y por el mismo motivo: cierra en falso.
+    Sin unidades en el ambito solo puede asignarse a si mismo.
+    """
     if current_user.is_admin:
         return True
 
-    if current_user.area_id:
-        return assignee.area_id == current_user.area_id
+    unidades = ambito_unidades(current_user)
+    if not unidades:
+        return assignee.id == current_user.id
 
-    # Legacy fallback where users have no area_id and unit is role-based
-    return assignee.role == current_user.role
+    return assignee.area_id in unidades
 
 
 def _task_area_key_for_user(user):

@@ -649,3 +649,70 @@ def test_tras_el_traspaso_el_alcance_es_el_de_hoy(client):
         db.session.commit()
 
         assert alcance_unidades(db.session.get(User, lider)) == {area}
+
+
+def test_el_empleado_conserva_su_unidad_para_trabajar(client):
+    """Ambito y alcance no son lo mismo.
+
+    Un empleado no supervisa nada —su alcance es vacio— pero sigue trabajando
+    con su unidad. Confundirlos lo dejaria sin poder asignar una tarea a un
+    companero, que es una regresion silenciosa.
+    """
+    from services.alcance import alcance_unidades, ambito_unidades
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        ana = db.session.get(User, o['ana'])
+        ana.area_id = o['uno']
+        db.session.commit()
+
+        assert alcance_unidades(ana) == set(), 'no supervisa nada'
+        assert ambito_unidades(ana) == {o['uno']}, 'pero trabaja en su unidad'
+
+
+def test_el_manager_trabaja_con_las_unidades_que_lidera(client):
+    from services.alcance import ambito_unidades
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        marta = db.session.get(User, o['marta'])
+        marta.area_id = o['uno']
+        db.session.commit()
+
+        assert ambito_unidades(marta) == {o['uno']}
+
+
+def test_el_director_trabaja_con_las_de_sus_managers(client):
+    """Sara no pertenece a ninguna unidad y aun asi trabaja con las dos."""
+    from services.alcance import ambito_unidades
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        assert ambito_unidades(db.session.get(User, o['sara'])) == {o['uno'], o['dos']}
+
+
+def test_sin_unidad_ni_liderazgo_solo_queda_uno_mismo(client):
+    """Cierra en falso, pero sin dejar a nadie sin poder trabajar.
+
+    El respaldo por rol que habia antes era un desvio: alguien sin unidad veia
+    a todos los de su rol, que no es una unidad.
+    """
+    with app_module.app.app_context():
+        huerfano = _create_user(username='sin-unidad', email='sin-unidad@example.com')
+        db.session.get(User, huerfano).area_id = None
+        _create_user(username='mismo-rol', email='mismo-rol@example.com')
+        db.session.commit()
+
+    _login_as(client, huerfano)
+
+    with app_module.app.test_request_context('/'):
+        from flask_login import login_user
+        import blueprints.tasks as tareas
+        login_user(db.session.get(User, huerfano))
+
+        visibles = {u.id for u in tareas._unit_user_query().all()}
+        assert visibles == {huerfano}, 'no debe ver a los de su rol'
+
+        otro = User.query.filter_by(username='mismo-rol').first()
+        assert tareas._assignee_in_current_unit(otro) is False
+        assert tareas._assignee_in_current_unit(db.session.get(User, huerfano)) is True
