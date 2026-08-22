@@ -82,10 +82,12 @@
           <span>Analisis Rapido</span>
         </a>
         {% endif %}
+        {% if has_tool_access('tasks') %}
         <a href="{{ url_for('tasks.tasks_page') }}" class="sidebar-item {% if request.endpoint == 'tasks.tasks_page' %}active{% endif %}" aria-label="Gestion de Tareas">
           <i class="fa-solid fa-calendar-check"></i>
           <span>Gestión de Tareas</span>
         </a>
+        {% endif %}
 
         <div class="sidebar-section-label">Cuenta</div>
         <a href="{{ url_for('mis_reportes') }}" class="sidebar-item {% if request.endpoint == 'mis_reportes' %}active{% endif %}" aria-label="Mis Reportes">
