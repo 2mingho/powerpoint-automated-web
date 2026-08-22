@@ -179,11 +179,17 @@ if _is_production_mode():
 # NOTE: Do NOT use content_security_policy_nonce_in — it causes browsers to ignore 'unsafe-inline'
 Talisman(app,
          force_https=_is_production_mode(),
+         permissions_policy={
+             'camera': '()',
+             'geolocation': '()',
+             'microphone': '()',
+         },
          content_security_policy={
              'default-src': "'self'",
              'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
              'style-src':  ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-             'font-src':   ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+             # FullCalendar inyecta su fuente fcicons como data URI.
+             'font-src':   ["'self'", "data:", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
              'img-src':    ["'self'", "data:"],
              'connect-src': "'self'",
          })

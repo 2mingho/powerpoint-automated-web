@@ -358,6 +358,16 @@ def test_startup_writes_allowed_in_production():
     assert _with_uri('postgresql://u:p@ep-x.neon.tech/main', production=True) is True
 
 
+def test_security_headers_allow_calendar_icons_without_unknown_policy(client):
+    response = client.get('/login')
+    csp = response.headers['Content-Security-Policy']
+    permissions = response.headers['Permissions-Policy']
+
+    assert "font-src 'self' data:" in csp
+    assert 'browsing-topics' not in permissions
+    assert 'camera=()' in permissions
+
+
 # ─────────────────────────────────────────────────────────────
 # FUN-01: zona horaria de negocio
 # ─────────────────────────────────────────────────────────────

@@ -822,7 +822,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const label = `${count} seleccionada(s)`;
     if (bulkCount) bulkCount.textContent = label;
 
-    [btnBulkCopy, btnBulkMove, btnBulkPending, btnBulkProgress, btnBulkDone, btnBulkDelete, bulkStatusQuick].forEach(function (btn) {
+    [btnBulkCopy, btnBulkMove, btnBulkDelete, bulkStatusQuick].forEach(function (btn) {
       if (btn) btn.disabled = count === 0;
     });
 
