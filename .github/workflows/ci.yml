@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    name: Tests y migraciones
+    runs-on: ubuntu-latest
+
+    env:
+      SECRET_KEY: ci-secret-key-not-used-in-production
+      FLASK_ENV: development
+      ALLOW_SELF_REGISTRATION: 'false'
+      APP_TZ: America/Santo_Domingo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest ruff
+
+      - name: Lint (no bloquea todavia)
+        continue-on-error: true
+        run: ruff check .
+
+      - name: Tests
+        run: pytest tests/ -q
+
+      # Verifica que las migraciones reproducen exactamente lo que declara
+      # models.py. Si alguien anade una columna y olvida la migracion, el
+      # autogenerate detecta la diferencia y este paso falla.
+      - name: Las migraciones coinciden con los modelos
+        env:
+          FLASK_APP: app.py
+          SKIP_STARTUP_TASKS: '1'
+          SQLALCHEMY_DATABASE_URI: sqlite:///ci_migrations.db
+        run: |
+          flask db upgrade
+          flask db migrate -m "deteccion de deriva" 2>&1 | tee migrate.log
+          if grep -q "No changes in schema detected" migrate.log; then
+            echo "OK: el esquema migrado coincide con models.py"
+          else
+            echo "FALLO: hay diferencias entre las migraciones y models.py"
+            grep -i "detected" migrate.log || true
+            exit 1
+          fi
