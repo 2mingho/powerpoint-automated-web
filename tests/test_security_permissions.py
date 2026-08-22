@@ -1480,3 +1480,148 @@ def test_startup_writes_allowed_on_local_sqlite():
 def test_startup_writes_allowed_in_production():
     """En produccion el arranque si siembra el admin en el primer despliegue."""
     assert _with_uri('postgresql://u:p@ep-x.neon.tech/main', production=True) is True
+
+
+# ─────────────────────────────────────────────────────────────
+# Las puertas del panel de equipo
+# ─────────────────────────────────────────────────────────────
+
+def test_el_director_entra_al_panel_sin_liderar_ninguna_unidad(client):
+    """El caso que motivo la migracion entera.
+
+    Con is_area_lead, un director recibia 403 antes de ejecutar consulta
+    alguna: el booleano significaba "lidero la unidad a la que pertenezco".
+    """
+    from models import UnitLead
+
+    with app_module.app.app_context():
+        area = _create_area('Unidad del manager')
+        manager = _create_user(username='mgr-puerta', email='mgr-puerta@example.com',
+                               tools=['tasks'])
+        director = _create_user(username='dir-puerta', email='dir-puerta@example.com',
+                                tools=['tasks'])
+        db.session.add(UnitLead(user_id=manager, area_id=area))
+        db.session.get(User, manager).manager_id = director
+        db.session.commit()
+
+    _login_as(client, director)
+    respuesta = client.get('/api/team/tasks')
+
+    assert respuesta.status_code == 200, respuesta.data
+    assert respuesta.get_json()['success'] is True
+
+
+def test_el_empleado_sigue_fuera_del_panel(client):
+    """Cierra en falso: sin nada que supervisar, no se entra."""
+    with app_module.app.app_context():
+        area = _create_area('Unidad ajena')
+        empleado = _create_user(username='empleado-puerta', email='empleado-puerta@example.com',
+                                tools=['tasks'])
+        db.session.get(User, empleado).area_id = area
+        db.session.commit()
+
+    _login_as(client, empleado)
+
+    assert client.get('/api/team/tasks').status_code == 403
+    assert client.get('/tasks/team-dashboard').status_code == 403
+
+
+def test_aceptar_una_solicitud_exige_liderar_la_unidad_destino(client):
+    """La comprobacion mas sensible de las cuarenta.
+
+    Pertenecer a la unidad destino no basta: hay que liderarla. Y debe fallar
+    aunque la interfaz no muestre el boton, porque un POST llega igual.
+    """
+    from models import TaskRequest, UnitLead
+
+    with app_module.app.app_context():
+        origen = _create_area('Unidad origen')
+        destino = _create_area('Unidad destino')
+
+        solicitante = _create_user(username='pide', email='pide@example.com', tools=['tasks'])
+        db.session.get(User, solicitante).area_id = origen
+
+        # Pertenece al destino pero no lo lidera.
+        miembro = _create_user(username='miembro', email='miembro@example.com', tools=['tasks'])
+        db.session.get(User, miembro).area_id = destino
+
+        lider = _create_user(username='lidera-destino', email='lidera-destino@example.com',
+                             tools=['tasks'])
+        db.session.add(UnitLead(user_id=lider, area_id=destino))
+
+        req = TaskRequest(title='Piezas', requester_id=solicitante,
+                          from_area_id=origen, to_area_id=destino, status='Pendiente')
+        db.session.add(req)
+        db.session.commit()
+        req_id = req.id
+
+    _login_as(client, miembro)
+    assert client.post(f'/api/task-requests/{req_id}/accept', json={}).status_code == 403
+
+    # Quien lidera si acepta, y asigna a alguien de la unidad destino. El lider
+    # no pertenece a ella —lidera sin ser miembro—, asi que no puede asignarse
+    # la tarea a si mismo: eso lo decide el endpoint, no el alcance.
+    _login_as(client, lider)
+    respuesta = client.post(f'/api/task-requests/{req_id}/accept',
+                            json={'assignee_id': miembro, 'due_date': '2026-09-01'})
+    assert respuesta.status_code == 200, respuesta.data
+
+
+# ─────────────────────────────────────────────────────────────
+# La lista blanca: que nadie vuelva a resolver el alcance a mano
+# ─────────────────────────────────────────────────────────────
+
+def _funciones_que_leen(patron, ficheros):
+    """Devuelve (fichero, funcion) por cada lectura del patron.
+
+    Se ancla a la funcion y no al numero de linea, para que no chille cada vez
+    que alguien anade una linea encima.
+    """
+    import re
+    encontrados = set()
+    for ruta in ficheros:
+        with open(ruta, encoding='utf-8') as fh:
+            actual = '<modulo>'
+            for linea in fh:
+                m = re.match(r'^\s*def (\w+)', linea)
+                if m:
+                    actual = m.group(1)
+                sin_comentario = linea.split('#', 1)[0]
+                if patron in sin_comentario:
+                    encontrados.add((ruta, actual))
+    return encontrados
+
+
+def test_solo_la_pertenencia_lee_area_id():
+    """Leer current_user.area_id significa pertenencia, nunca alcance.
+
+    Si esta prueba falla por una funcion nueva, no esta rota: alguien resolvio
+    un alcance a mano y debe pasar por services/alcance.py. Y falla en los dos
+    sentidos: tambien avisa si una de las permitidas deja de leerla, que suele
+    significar que se migro algo que no tocaba.
+    """
+    PERMITIDAS = {
+        ('blueprints/tasks.py', 'api_templates_create'),
+        ('blueprints/tasks.py', 'api_templates_instantiate'),
+        ('blueprints/task_requests.py', 'api_task_requests_create'),
+    }
+
+    encontradas = _funciones_que_leen(
+        'current_user.area_id',
+        ['blueprints/tasks.py', 'blueprints/task_requests.py', 'app.py'],
+    )
+
+    assert encontradas == PERMITIDAS, (
+        f'sobran: {sorted(encontradas - PERMITIDAS)} | faltan: {sorted(PERMITIDAS - encontradas)}')
+
+
+def test_nadie_decide_permisos_con_is_area_lead():
+    """La columna sobrevive para que la lea la migracion, no el codigo.
+
+    Se retirara en su propia migracion cuando ya no quede ninguna lectura.
+    """
+    encontradas = _funciones_que_leen(
+        'is_area_lead',
+        ['blueprints/tasks.py', 'blueprints/task_requests.py', 'templates/base.html'],
+    )
+    assert encontradas == set(), f'siguen leyendola: {sorted(encontradas)}'

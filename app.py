@@ -767,7 +767,17 @@ def inject_tool_access():
         if current_user.is_authenticated:
             return current_user.has_tool_access(tool_key)
         return False
-    return dict(has_tool_access=_has_tool_access)
+    def _puede_ver_equipo(user=None):
+        # Lo usa la barra lateral para decidir si ensena la entrada del panel.
+        # Antes era `current_user.is_admin or current_user.is_area_lead`, que a
+        # un director le escondia el menu de un equipo que si puede ver.
+        from services.alcance import puede_ver_equipo
+        objetivo = user if user is not None else current_user
+        if not getattr(objetivo, 'is_authenticated', False):
+            return False
+        return puede_ver_equipo(objetivo)
+
+    return dict(has_tool_access=_has_tool_access, puede_ver_equipo=_puede_ver_equipo)
 
 
 @app.route('/menu')

@@ -13,9 +13,9 @@ from extensions import db
 from models import User, Task, Area, Notification, TaskComment, ActivityLog, TaskWatcher, TaskChecklistItem, TaskTemplate
 from services.notifications import notify_user, notify_many
 from services.clock import today_local, current_year
-from services.alcance import ambito_unidades
+from services.alcance import alcance_unidades, ambito_unidades, puede_ver_equipo
 from services.catalogo import (estados_validos, prioridades_validas,
-                              estado_inicial, es_estado_final)
+                               estado_inicial, es_estado_final)
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -81,7 +81,10 @@ def area_lead_required(f):
     @login_required
     def decorated(*args, **kwargs):
         if not current_user.is_admin:
-            if not (current_user.is_area_lead and current_user.has_tool_access('tasks')):
+            # No se pregunta si lideras, sino si tienes algo que ver. Un
+            # director no lidera ninguna unidad directamente: el booleano le
+            # cerraba la puerta antes de ejecutar ninguna consulta.
+            if not (puede_ver_equipo(current_user) and current_user.has_tool_access('tasks')):
                 abort(403)
         return f(*args, **kwargs)
     return decorated
@@ -121,8 +124,8 @@ def _unit_user_ids():
 def _unidades_del_panel():
     """Unidades que el panel de equipo debe mostrar, o None si no hay ninguna.
 
-    Sustituye a la pareja `if not current_user.area_id` + `filter_by(area_id=)`
-    que se repetia en los cinco puntos del panel. Devuelve el alcance de
+    Sustituye a la guarda por unidad propia mas el filtro por igualdad que se
+    repetia en los cinco puntos del panel. Devuelve el alcance de
     supervision, no el ambito: aqui la pregunta es que superviso, y la unidad a
     la que uno pertenece no da derecho a ver a sus companeros en el panel.
     """
@@ -2114,7 +2117,7 @@ def api_admin_tasks_export_csv():
 @login_required
 def api_team_tasks():
     """Team lead endpoint: tasks scoped to own area."""
-    if not current_user.is_area_lead and not current_user.is_admin:
+    if not puede_ver_equipo(current_user):
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
     unidades = _unidades_del_panel()
     if unidades is None:
@@ -2138,7 +2141,7 @@ def api_team_tasks():
 @login_required
 def api_team_tasks_filters():
     """Filter options scoped to current area."""
-    if not current_user.is_area_lead and not current_user.is_admin:
+    if not puede_ver_equipo(current_user):
         return jsonify({'success': False}), 403
     unidades = _unidades_del_panel()
     if unidades is None:
@@ -2173,7 +2176,7 @@ def api_team_tasks_filters():
 @login_required
 def api_team_tasks_export_csv():
     """Export filtered team tasks to CSV."""
-    if not current_user.is_area_lead and not current_user.is_admin:
+    if not puede_ver_equipo(current_user):
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
     unidades = _unidades_del_panel()
     if unidades is None:
@@ -2372,7 +2375,7 @@ def api_admin_tasks_import_csv_commit():
 @login_required
 def api_team_tasks_import_csv_preview():
     """Validate CSV preview scoped to team users."""
-    if not current_user.is_area_lead and not current_user.is_admin:
+    if not puede_ver_equipo(current_user):
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
     if _unidades_del_panel() is None:
         return jsonify({'success': False, 'error': 'No lideras ninguna unidad.'}), 400
@@ -2403,7 +2406,7 @@ def api_team_tasks_import_csv_preview():
 @login_required
 def api_team_tasks_import_csv_commit():
     """Import CSV rows scoped to team users."""
-    if not current_user.is_area_lead and not current_user.is_admin:
+    if not puede_ver_equipo(current_user):
         return jsonify({'success': False, 'error': 'Acceso denegado.'}), 403
     if _unidades_del_panel() is None:
         return jsonify({'success': False, 'error': 'No lideras ninguna unidad.'}), 400
