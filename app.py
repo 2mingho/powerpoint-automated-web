@@ -191,6 +191,11 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA busy_timeout=5000")
+        # SQLite ignora las claves foraneas salvo que se le pida lo contrario, y
+        # lo hace en silencio. Sin esto, ninguna restriccion se cumple en local
+        # ni en las pruebas mientras que en PostgreSQL si: un ON DELETE CASCADE
+        # que aqui no dispara deja creer que el modelo se limpia solo.
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
 # Registrar blueprints

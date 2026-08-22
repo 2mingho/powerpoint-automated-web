@@ -1,7 +1,7 @@
 """retirar los server_default de tasks.priority, tasks.visibility y users.is_area_lead
 
-Revision ID: 0003_drop_server_defaults
-Revises: 0002_tasks_collab
+Revision ID: 0005_drop_server_defaults
+Revises: 0004_jerarquia_de_mando
 Create Date: 2026-08-21
 
 EJECUTAR SOLO DESPUES DE DESPLEGAR v2.
@@ -18,8 +18,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0003_drop_server_defaults'
-down_revision = '0002_tasks_collab'
+revision = '0005_drop_server_defaults'
+down_revision = '0004_jerarquia_de_mando'
 branch_labels = None
 depends_on = None
 

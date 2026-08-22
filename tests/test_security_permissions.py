@@ -378,3 +378,79 @@ def test_business_timezone_is_behind_utc():
 def test_today_local_is_consistent_with_now_local():
     from services.clock import now_local, today_local
     assert today_local() == now_local().date()
+
+
+# ─────────────────────────────────────────────────────────────
+# Jerarquia de mando: liderazgo multiple y herencia por director
+# ─────────────────────────────────────────────────────────────
+
+def test_unit_lead_allows_leading_several_units(client):
+    """Un manager puede llevar mas de una unidad.
+
+    Es justo lo que el modelo anterior no sabia expresar: users.area_id es una
+    sola unidad, y is_area_lead un si o no.
+    """
+    from models import UnitLead
+
+    with app_module.app.app_context():
+        uno = _create_area('Unidad uno')
+        dos = _create_area('Unidad dos')
+        manager = _create_user(username='manager-doble', email='manager-doble@example.com')
+
+        db.session.add(UnitLead(user_id=manager, area_id=uno))
+        db.session.add(UnitLead(user_id=manager, area_id=dos))
+        db.session.commit()
+
+        lideradas = {fila.area_id for fila in db.session.get(User, manager).unidades_lideradas}
+
+    assert lideradas == {uno, dos}
+
+
+def test_manager_chain_is_traversable(client):
+    """El director llega a las unidades a traves de sus managers.
+
+    No tiene ninguna fila en unit_leads: su alcance se deriva recorriendo la
+    cadena de mando hacia abajo.
+    """
+    from models import UnitLead
+
+    with app_module.app.app_context():
+        area_uno = _create_area('Area uno')
+        area_dos = _create_area('Area dos')
+
+        manager_uno = _create_user(username='mgr-uno', email='mgr-uno@example.com')
+        manager_dos = _create_user(username='mgr-dos', email='mgr-dos@example.com')
+        director = _create_user(username='dir', email='dir@example.com')
+
+        db.session.add(UnitLead(user_id=manager_uno, area_id=area_uno))
+        db.session.add(UnitLead(user_id=manager_dos, area_id=area_dos))
+        db.session.get(User, manager_uno).manager_id = director
+        db.session.get(User, manager_dos).manager_id = director
+        db.session.commit()
+
+        jefe = db.session.get(User, director)
+        assert jefe.unidades_lideradas.count() == 0, 'el director no lidera ninguna directamente'
+
+        heredadas = set()
+        for reporte in jefe.reportes:
+            heredadas.update(fila.area_id for fila in reporte.unidades_lideradas)
+
+    assert heredadas == {area_uno, area_dos}
+
+
+def test_deleting_a_unit_clears_its_leadership(client):
+    """Borrar una unidad no puede dejar filas de liderazgo huerfanas."""
+    from models import UnitLead
+
+    with app_module.app.app_context():
+        area = _create_area('Unidad efimera')
+        manager = _create_user(username='mgr-efimero', email='mgr-efimero@example.com')
+        db.session.add(UnitLead(user_id=manager, area_id=area))
+        db.session.commit()
+
+        db.session.execute(db.text('DELETE FROM areas WHERE id = :id'), {'id': area})
+        db.session.commit()
+
+        restantes = db.session.query(UnitLead).filter_by(area_id=area).count()
+
+    assert restantes == 0

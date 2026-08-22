@@ -33,6 +33,28 @@ class Area(db.Model):
         return f"<Area {self.name}>"
 
 
+class UnitLead(db.Model):
+    """Quien lidera cada unidad, de forma directa.
+
+    Es una relacion de muchos a muchos a proposito: un manager puede llevar
+    varias unidades. Lo que un director hereda de sus reportes NO se guarda
+    aqui — se deriva recorriendo la cadena de mando, para que cambiar de jefe
+    no obligue a reescribir filas que podrian quedarse obsoletas.
+    """
+    __tablename__ = 'unit_leads'
+
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+                        primary_key=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='CASCADE'),
+                        primary_key=True, index=True)
+
+    usuario = db.relationship('User', back_populates='unidades_lideradas')
+    unidad = db.relationship('Area')
+
+    def __repr__(self):
+        return f"<UnitLead user={self.user_id} area={self.area_id}>"
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
@@ -48,7 +70,15 @@ class User(UserMixin, db.Model):
     force_logout = db.Column(db.Boolean, default=False)
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
 
+    # Cadena de mando. Un director no lidera unidades directamente: llega a
+    # ellas a traves de los managers que le reportan.
+    manager_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
     area = db.relationship('Area', backref='users')
+    manager = db.relationship('User', remote_side=[id], backref='reportes')
+    unidades_lideradas = db.relationship(
+        'UnitLead', back_populates='usuario', cascade='all, delete-orphan', lazy='dynamic'
+    )
 
     # All available tools that can be gated
     ALL_TOOLS = {
