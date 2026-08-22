@@ -98,7 +98,7 @@
           <i class="fa-solid fa-folder-open"></i>
           <span>Mis Reportes</span>
         </a>
-        {% if current_user.is_admin or current_user.is_area_lead %}
+        {% if (current_user.is_admin or current_user.is_area_lead) and has_tool_access('tasks') %}
         <a href="{{ url_for('tasks.tasks_dashboard') if current_user.is_admin else url_for('tasks.team_dashboard') }}" class="sidebar-item {% if request.endpoint in ('tasks.tasks_dashboard', 'tasks.team_dashboard') %}active{% endif %}" aria-label="Dashboard Tareas">
           <i class="fa-solid fa-clipboard-list"></i>
           <span>Dashboard {{ 'Tareas' if current_user.is_admin else 'de mi equipo' }}</span>
