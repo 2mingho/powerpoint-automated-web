@@ -5,6 +5,7 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import User, Area, Task, TaskWatcher, TaskRequest
 from services.notifications import notify_user, notify_many
+from services.clock import today_local
 from blueprints.admin import log_activity
 from blueprints.tasks import task_access_required, _assignee_in_current_unit
 
@@ -180,7 +181,7 @@ def api_task_requests_accept(request_id):
         except (ValueError, TypeError):
             return jsonify({'success': False, 'error': 'Fecha de entrega no válida.'}), 400
     if not parsed_due:
-        parsed_due = req.due_date or date.today()
+        parsed_due = req.due_date or today_local()
 
     try:
         # Create task

@@ -12,7 +12,7 @@ from sqlalchemy.orm import joinedload
 from extensions import db
 from models import User, Task, Area, Notification, TaskComment, ActivityLog, TaskWatcher, TaskChecklistItem, TaskTemplate
 from services.notifications import notify_user, notify_many
-from services.clock import current_year
+from services.clock import today_local, current_year
 from services.alcance import ambito_unidades
 from services.catalogo import (estados_validos, prioridades_validas,
                               estado_inicial, es_estado_final)
@@ -150,6 +150,31 @@ def _can_edit_task(task):
     return current_user.is_admin or _task_in_current_unit(task)
 
 
+# FUN-04: to_dict() resuelve creator.username y assignee.username de forma
+# perezosa, dos consultas extra por tarea. Con el calendario de un admin sin
+# filtros eso son cientos de consultas por peticion.
+TASK_FEED_MAX_ROWS = 500
+
+
+def _with_task_relations(query):
+    """Carga creador y asignado en la misma consulta (evita el N+1)."""
+    return query.options(joinedload(Task.creator), joinedload(Task.assignee))
+
+
+def _task_status_stats(base_query):
+    """Cuenta tareas por estado en el motor, sin traerlas todas a memoria."""
+    rows = base_query.with_entities(Task.status, func.count(Task.id)).group_by(Task.status).all()
+    by_status = {status: count for status, count in rows}
+    completadas = sum(count for status, count in by_status.items() if es_estado_final(status))
+    return {
+        'total': sum(by_status.values()),
+        'pendiente': by_status.get('Pendiente', 0),
+        'en_progreso': by_status.get('En Progreso', 0),
+        'completado': completadas,
+        'por_estado': by_status,
+    }
+
+
 def _apply_unit_scope(query):
     """Apply unit isolation to task queries."""
     if current_user.is_admin:
@@ -205,7 +230,7 @@ def _mentioned_unit_users(body):
 
 def ensure_due_notifications(user):
     """Create daily due/overdue notifications for current user's assigned tasks."""
-    today = date.today()
+    today = today_local()
     tomorrow = today + timedelta(days=1)
     created = 0
 
@@ -801,7 +826,7 @@ def api_tasks_list():
         return jsonify([])
 
     if overdue == '1':
-        today_ref = date.today()
+        today_ref = today_local()
         query = query.filter(Task.due_date < today_ref, Task.status != 'Completado')
 
     if status and status in estados_validos():
@@ -844,7 +869,8 @@ def api_tasks_watching():
     tasks = Task.active_query().join(TaskWatcher, TaskWatcher.task_id == Task.id).filter(
         TaskWatcher.user_id == current_user.id,
         Task.visibility == 'shared',
-    ).order_by(Task.due_date.asc()).all()
+    )
+    tasks = _with_task_relations(tasks).order_by(Task.due_date.asc()).limit(TASK_FEED_MAX_ROWS).all()
     return jsonify({'success': True, 'tasks': [task.to_dict() for task in tasks]})
 
 
@@ -1155,7 +1181,7 @@ def api_templates_instantiate(template_id):
         except (ValueError, TypeError):
             return jsonify({'success': False, 'error': 'Fecha de entrega no válida.'}), 400
     else:
-        due_date = _business_day_offset(date.today(), payload.get('due_offset_days', 0))
+        due_date = _business_day_offset(today_local(), payload.get('due_offset_days', 0))
 
     try:
         task = Task(
@@ -2001,24 +2027,10 @@ def api_admin_tasks():
 
     query = _apply_admin_task_filters(Task.active_query(), request.args)
 
-    tasks = query.order_by(Task.due_date.desc()).all()
+    tasks = _with_task_relations(query).order_by(Task.due_date.desc()).limit(TASK_FEED_MAX_ROWS).all()
 
     # Summary stats
-    # Contar por estado en el motor, sin traer todas las tareas a memoria.
-    _rows = db.session.query(Task.status, func.count(Task.id)).group_by(Task.status).all()
-    _by_status = {st: n for st, n in _rows}
-    # Las claves fijas se conservan porque el panel las consume por nombre, pero
-    # 'completado' deja de mirar el texto: suma los estados marcados como
-    # finales, para que renombrarlo no vacie el indicador. 'por_estado' lleva el
-    # desglose completo, incluidos los estados que se anadan desde el panel.
-    completadas = sum(n for st, n in _by_status.items() if es_estado_final(st))
-    stats = {
-        'total': sum(_by_status.values()),
-        'pendiente': _by_status.get('Pendiente', 0),
-        'en_progreso': _by_status.get('En Progreso', 0),
-        'completado': completadas,
-        'por_estado': _by_status,
-    }
+    stats = _task_status_stats(Task.active_query())
 
     return jsonify({
         'success': True,
@@ -2085,16 +2097,9 @@ def api_team_tasks():
     query = Task.active_query().filter_by(area_id=current_user.area_id)
     query = _apply_admin_task_filters(query, request.args)
 
-    tasks = query.order_by(Task.due_date.desc()).all()
+    tasks = _with_task_relations(query).order_by(Task.due_date.desc()).limit(TASK_FEED_MAX_ROWS).all()
 
-    base_query = Task.active_query().filter_by(area_id=current_user.area_id)
-    all_tasks = base_query.all()
-    stats = {
-        'total': len(all_tasks),
-        'pendiente': sum(1 for t in all_tasks if t.status == 'Pendiente'),
-        'en_progreso': sum(1 for t in all_tasks if t.status == 'En Progreso'),
-        'completado': sum(1 for t in all_tasks if t.status == 'Completado'),
-    }
+    stats = _task_status_stats(Task.active_query().filter_by(area_id=current_user.area_id))
 
     return jsonify({
         'success': True,

@@ -319,7 +319,7 @@ class Task(db.Model):
 
     def to_dict(self, include_counts=False):
         """Serialize task to a dictionary for JSON responses."""
-        from datetime import date as dt_date
+        from services.clock import today_local
         payload = {
             'id': self.id,
             'title': self.title,
@@ -345,7 +345,7 @@ class Task(db.Model):
             'assignee_id': self.assignee_id,
             'assignee_name': self.assignee.username if self.assignee else '',
             'updated_at': self.updated_at.isoformat() if self.updated_at else '',
-            'is_overdue': bool(self.due_date and self.due_date < dt_date.today() and self.status != 'Completado'),
+            'is_overdue': bool(self.due_date and self.due_date < today_local() and self.status != 'Completado'),
         }
         if include_counts:
             payload['comments_count'] = self.comments.filter_by(deleted_at=None).count()

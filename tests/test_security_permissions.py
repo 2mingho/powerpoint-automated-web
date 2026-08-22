@@ -1400,3 +1400,48 @@ def test_add_cross_area_watcher_sets_shared_visibility(client):
     with app_module.app.app_context():
         task = db.session.get(Task, task_id)
         assert task.visibility == 'shared'
+
+
+# ─────────────────────────────────────────────────────────────
+# FUN-01: el vencimiento se mide con el reloj del equipo, no del servidor
+# ─────────────────────────────────────────────────────────────
+
+
+def test_overdue_uses_business_timezone_not_server_utc():
+    """
+    Republica Dominicana es UTC-4 todo el ano. A las 02:00 UTC del dia D en el
+    servidor, para el equipo son las 22:00 del dia D-1: aun les quedan dos horas
+    de ese dia. Con date.today() (UTC) una tarea que vence el dia D-1 ya contaba
+    como vencida; con la zona de negocio, no.
+    """
+    from datetime import datetime, timezone, timedelta
+    from services.clock import APP_TIMEZONE
+
+    utc_moment = datetime(2026, 3, 11, 2, 0, tzinfo=timezone.utc)
+    local_moment = utc_moment.astimezone(APP_TIMEZONE)
+
+    assert local_moment.date() == utc_moment.date() - timedelta(days=1), (
+        'La zona de negocio deberia ir por detras de UTC en la madrugada; '
+        f'APP_TIMEZONE resolvio a {APP_TIMEZONE}'
+    )
+    assert local_moment.hour == 22
+
+    # El comportamiento anterior (fecha del servidor) marcaba vencida una tarea
+    # que para el equipo todavia vence hoy.
+    due = local_moment.date()
+    assert due < utc_moment.date(), 'con UTC salia vencida'
+    assert not (due < local_moment.date()), 'con la zona de negocio, no'
+
+
+def test_task_is_overdue_respects_local_today(client):
+    from services.clock import today_local
+
+    with app_module.app.app_context():
+        user_id = _create_user(username='tz-user', email='tz-user@example.com', tools=['tasks'])
+        # Vence hoy segun el reloj del equipo: nunca debe salir como vencida
+        task_id = _create_task(title='Vence hoy', due_date=today_local(),
+                               area='DI', creator_id=user_id, assignee_id=user_id)
+
+    with app_module.app.app_context():
+        task = db.session.get(Task, task_id)
+        assert task.to_dict()['is_overdue'] is False
