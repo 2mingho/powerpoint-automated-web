@@ -141,6 +141,24 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
+        # SQLite no sabe alterar una columna: Alembic recrea la tabla entera
+        # (crear, copiar, borrar la original, renombrar). Con las claves
+        # foraneas activas —lo estan desde que la aplicacion fija el PRAGMA—,
+        # ese borrado dispara los ON DELETE CASCADE y vacia las tablas hijas.
+        # Le costo las filas de unit_leads a la migracion 0005.
+        #
+        # El PRAGMA es inerte dentro de una transaccion, asi que se fija antes
+        # de que Alembic abra la suya. En PostgreSQL no aplica: alli las
+        # columnas se alteran en el sitio y no se recrea nada.
+        if connection.dialect.name == 'sqlite':
+            connection.exec_driver_sql('PRAGMA foreign_keys=OFF')
+            # exec_driver_sql abre una transaccion implicita. Si se deja
+            # abierta, la que Alembic abre despues queda anidada y el DDL no
+            # llega a confirmarse: las migraciones dicen que corrieron y la
+            # base se queda igual. El PRAGMA es de conexion, no de
+            # transaccion, asi que sobrevive al commit.
+            connection.commit()
+
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),

@@ -454,3 +454,198 @@ def test_deleting_a_unit_clears_its_leadership(client):
         restantes = db.session.query(UnitLead).filter_by(area_id=area).count()
 
     assert restantes == 0
+
+
+# ─────────────────────────────────────────────────────────────
+# El resolvedor de alcance
+# ─────────────────────────────────────────────────────────────
+
+def _montar_organizacion():
+    """Marta lleva la unidad 1, Luis la 2 y Sara manda sobre los dos.
+
+    Es el caso que el modelo anterior no sabia expresar: Sara no aparece en
+    ninguna fila de liderazgo y aun asi debe ver las dos unidades.
+    """
+    from models import UnitLead
+
+    uno = _create_area('Unidad uno')
+    dos = _create_area('Unidad dos')
+
+    marta = _create_user(username='marta', email='marta@example.com')
+    luis = _create_user(username='luis', email='luis@example.com')
+    sara = _create_user(username='sara', email='sara@example.com')
+    ana = _create_user(username='ana', email='ana@example.com')
+
+    db.session.add(UnitLead(user_id=marta, area_id=uno))
+    db.session.add(UnitLead(user_id=luis, area_id=dos))
+    db.session.get(User, marta).manager_id = sara
+    db.session.get(User, luis).manager_id = sara
+    db.session.get(User, ana).manager_id = marta  # empleada, no lidera nada
+    db.session.commit()
+
+    return {'uno': uno, 'dos': dos, 'marta': marta, 'luis': luis, 'sara': sara, 'ana': ana}
+
+
+def test_director_hereda_las_unidades_de_sus_managers(client):
+    from services.alcance import alcance_unidades, unidades_lideradas
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        sara = db.session.get(User, o['sara'])
+
+        assert unidades_lideradas(sara) == set(), 'no lidera ninguna directamente'
+        assert alcance_unidades(sara) == {o['uno'], o['dos']}
+
+
+def test_manager_solo_ve_la_suya(client):
+    from services.alcance import alcance_unidades
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        assert alcance_unidades(db.session.get(User, o['marta'])) == {o['uno']}
+
+
+def test_empleado_no_hereda_de_su_manager(client):
+    """Ana pertenece a la unidad de Marta pero no la lidera.
+
+    La herencia baja por la cadena de mando, no sube.
+    """
+    from services.alcance import alcance_unidades, puede_ver_equipo
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        ana = db.session.get(User, o['ana'])
+
+        assert alcance_unidades(ana) == set()
+        assert puede_ver_equipo(ana) is False
+
+
+def test_la_cadena_de_mando_es_transitiva(client):
+    """Quien manda sobre Sara ve lo mismo que ella, sin filas nuevas."""
+    from services.alcance import alcance_unidades
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        jefa = _create_user(username='jefa', email='jefa@example.com')
+        db.session.get(User, o['sara']).manager_id = jefa
+        db.session.commit()
+
+        assert alcance_unidades(db.session.get(User, jefa)) == {o['uno'], o['dos']}
+
+
+def test_un_ciclo_en_la_cadena_no_cuelga(client):
+    """Un ciclo no es un dato raro: es un bucle infinito en cada peticion."""
+    from services.alcance import personas_a_cargo
+
+    with app_module.app.app_context():
+        uno = _create_user(username='ciclo-uno', email='ciclo-uno@example.com')
+        dos = _create_user(username='ciclo-dos', email='ciclo-dos@example.com')
+        db.session.get(User, uno).manager_id = dos
+        db.session.get(User, dos).manager_id = uno
+        db.session.commit()
+
+        assert personas_a_cargo(db.session.get(User, uno)) == {uno, dos}
+
+
+def test_el_admin_alcanza_todas_las_unidades(client):
+    from services.alcance import alcance_unidades, puede_ver_equipo
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        admin_id = _create_user(username='jefe-todo', email='jefe-todo@example.com', role='admin')
+        admin = db.session.get(User, admin_id)
+
+        assert alcance_unidades(admin) == {o['uno'], o['dos']}
+        assert puede_ver_equipo(admin) is True
+
+
+def test_el_papel_se_deduce_de_los_datos(client):
+    from services.alcance import papel
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        assert papel(db.session.get(User, o['ana'])) == 'empleado'
+        assert papel(db.session.get(User, o['marta'])) == 'manager'
+        assert papel(db.session.get(User, o['sara'])) == 'director'
+
+
+def test_quitar_el_liderazgo_vacia_el_alcance_del_director(client):
+    """Cierra en falso: sin liderazgo debajo, el director deja de ver nada.
+
+    Un conjunto vacio tiene que producir cero filas, nunca todas.
+    """
+    from models import UnitLead
+    from services.alcance import alcance_unidades, puede_ver_equipo
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        db.session.query(UnitLead).delete()
+        db.session.commit()
+
+        sara = db.session.get(User, o['sara'])
+        assert alcance_unidades(sara) == set()
+        assert puede_ver_equipo(sara) is False
+
+
+def test_el_cache_dura_una_peticion_y_no_mas(client):
+    """Un alcance memorizado de mas es un fallo de permisos.
+
+    Dentro de una peticion se reutiliza; entre peticiones se vuelve a calcular,
+    de modo que quitarle el liderazgo a alguien surte efecto en la siguiente.
+    """
+    from models import UnitLead
+    from services.alcance import alcance_unidades, invalidar_cache_alcance
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        sara_id, uno, dos = o['sara'], o['uno'], o['dos']
+
+    with app_module.app.test_request_context('/'):
+        sara = db.session.get(User, sara_id)
+        assert alcance_unidades(sara) == {uno, dos}
+
+        # Se retira el liderazgo en la MISMA peticion: el cache aun lo recuerda.
+        db.session.query(UnitLead).delete()
+        db.session.commit()
+        assert alcance_unidades(sara) == {uno, dos}, 'deberia venir del cache'
+
+        # Y se puede invalidar a mano cuando la peticion cambia el reparto.
+        invalidar_cache_alcance()
+        assert alcance_unidades(sara) == set()
+
+    # Peticion nueva: se calcula de cero, sin arrastrar nada.
+    with app_module.app.test_request_context('/'):
+        assert alcance_unidades(db.session.get(User, sara_id)) == set()
+
+
+def test_el_resolvedor_funciona_sin_peticion(client):
+    """Los comandos de consola y las tareas de arranque no tienen peticion."""
+    from services.alcance import alcance_unidades
+
+    with app_module.app.app_context():
+        o = _montar_organizacion()
+        assert alcance_unidades(db.session.get(User, o['sara'])) == {o['uno'], o['dos']}
+
+
+def test_tras_el_traspaso_el_alcance_es_el_de_hoy(client):
+    """La propiedad que hace segura a 0004.
+
+    El traspaso crea, para cada lider actual, una fila hacia la unidad a la que
+    pertenece. Sin directores asignados el alcance resultante debe ser
+    exactamente esa unidad: ni una mas. Si esto falla, la migracion amplia
+    permisos en silencio.
+    """
+    from models import UnitLead
+    from services.alcance import alcance_unidades
+
+    with app_module.app.app_context():
+        area = _create_area('Unidad heredada')
+        lider = _create_user(username='lider-actual', email='lider-actual@example.com')
+        usuario = db.session.get(User, lider)
+        usuario.area_id = area
+        usuario.is_area_lead = True
+        # Lo que escribe el traspaso de 0004:
+        db.session.add(UnitLead(user_id=lider, area_id=area))
+        db.session.commit()
+
+        assert alcance_unidades(db.session.get(User, lider)) == {area}
