@@ -1,7 +1,7 @@
 """plantillas PowerPoint guardadas en la base y no en disco
 
 Revision ID: 0006_plantillas_pptx
-Revises: 0005_drop_server_defaults
+Revises: 0004_jerarquia_de_mando
 Create Date: 2026-08-22
 
 El contenedor tiene almacenamiento efimero: una plantilla dejada en
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 
 revision = '0006_plantillas_pptx'
-down_revision = '0005_drop_server_defaults'
+down_revision = '0004_jerarquia_de_mando'
 branch_labels = None
 depends_on = None
 

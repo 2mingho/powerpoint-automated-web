@@ -3,6 +3,7 @@ from flask_login import UserMixin
 from extensions import db
 from extensions import login_manager
 from datetime import datetime
+from sqlalchemy import false
 import json
 
 
@@ -136,7 +137,7 @@ class User(UserMixin, db.Model):
     allowed_tools = db.Column(db.Text, nullable=True)  # JSON list, None = all
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
-    is_area_lead = db.Column(db.Boolean, default=False)
+    is_area_lead = db.Column(db.Boolean, default=False, server_default=false())
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
 
     # Cadena de mando. Un director no lidera unidades directamente: llega a
@@ -290,12 +291,14 @@ class Task(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     due_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(30), nullable=False, default='Pendiente')
-    priority = db.Column(db.String(10), nullable=False, default='Media', index=True)
+    priority = db.Column(db.String(10), nullable=False, default='Media',
+                         server_default='Media', index=True)
     is_recurrent = db.Column(db.Boolean, default=False)
     recurrence_type = db.Column(db.String(20), nullable=True)
     parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
     area = db.Column(db.String(20), nullable=False)
-    visibility = db.Column(db.String(15), nullable=False, default='unit')
+    visibility = db.Column(db.String(15), nullable=False, default='unit',
+                           server_default='unit')
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
     deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     deleted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
