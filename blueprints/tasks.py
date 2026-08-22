@@ -15,7 +15,8 @@ from services.notifications import notify_user, notify_many
 from services.clock import today_local, current_year
 from services.alcance import alcance_unidades, ambito_unidades, puede_ver_equipo
 from services.catalogo import (estados_validos, prioridades_validas,
-                               estado_inicial, es_estado_final)
+                               estado_inicial, prioridad_por_defecto,
+                               es_estado_final)
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -660,15 +661,16 @@ def _validate_task_csv_row(row_fields, users):
         add_issue('error', 'recurrence', 'invalid_recurrence', 'Valor inválido. Usa: No, Diaria, Semanal o Mensual.')
         recurrence_type = ''
 
-    priority = clean_fields['priority'] or 'Media'
-    if priority not in Task.VALID_PRIORITIES:
+    prioridad_default = prioridad_por_defecto()
+    priority = clean_fields['priority'] or prioridad_default
+    if priority not in prioridades_validas():
         add_issue(
             'warning',
             'priority',
             'invalid_priority_fallback',
-            'Prioridad inválida. Se usará Media.',
+            f'Prioridad inválida. Se usará {prioridad_default}.',
         )
-        priority = 'Media'
+        priority = prioridad_default
 
     if due_date and _is_weekend(due_date):
         add_issue('error', 'due_date', 'weekend_not_allowed', 'Sábado y domingo solo se permiten para tareas manuales, no por CSV.')
@@ -776,7 +778,7 @@ def _create_tasks_from_validated_csv(validation):
         requested_by=clean['requested_by'],
         budget_type=clean['budget_type'],
         due_date=due_date,
-        status='Pendiente',
+        status=estado_inicial(),
         priority=priority,
         is_recurrent=False,
         recurrence_type=None,
@@ -815,7 +817,15 @@ def tasks_page():
         }
         area_options = sorted(area_names.union(task_areas))
 
-    return render_template('tasks.html', area_users=area_users, area_options=area_options)
+    return render_template(
+        'tasks.html',
+        area_users=area_users,
+        area_options=area_options,
+        task_statuses=estados_validos(),
+        task_priorities=prioridades_validas(),
+        initial_status=estado_inicial(),
+        default_priority=prioridad_por_defecto(),
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -850,7 +860,7 @@ def api_tasks_list():
 
     if status and status in estados_validos():
         query = query.filter_by(status=status)
-    if priority and priority in Task.VALID_PRIORITIES:
+    if priority and priority in prioridades_validas():
         query = query.filter_by(priority=priority)
 
     if assignee_id:
@@ -1053,7 +1063,7 @@ def _validate_template_payload(payload):
     if not title:
         return None, 'El título es obligatorio.'
     priority = (payload.get('priority') or 'Media').strip()
-    if priority not in Task.VALID_PRIORITIES:
+    if priority not in prioridades_validas():
         return None, 'Prioridad inválida.'
     due_offset = payload.get('due_offset_days')
     try:
@@ -1325,7 +1335,7 @@ def api_tasks_create():
 
     if initial_status not in estados_validos():
         return jsonify({'success': False, 'error': 'Estado inválido.'}), 400
-    if priority not in Task.VALID_PRIORITIES:
+    if priority not in prioridades_validas():
         return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
 
     if not assignee_id:
@@ -1577,7 +1587,7 @@ def api_tasks_bulk_update():
 
     updates_priority = None
     if priority:
-        if priority not in Task.VALID_PRIORITIES:
+        if priority not in prioridades_validas():
             return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
         updates_priority = priority
 
@@ -2167,8 +2177,8 @@ def api_team_tasks_filters():
             }
             for u in users
         ],
-        'statuses': list(Task.VALID_STATUSES),
-        'priorities': list(Task.VALID_PRIORITIES),
+        'statuses': list(estados_validos()),
+        'priorities': list(prioridades_validas()),
     })
 
 
@@ -2545,7 +2555,7 @@ def api_admin_tasks_bulk_update():
             return jsonify({'success': False, 'error': 'Estado inválido.'}), 400
         updates['status'] = status
     if priority:
-        if priority not in Task.VALID_PRIORITIES:
+        if priority not in prioridades_validas():
             return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
         updates['priority'] = priority
 

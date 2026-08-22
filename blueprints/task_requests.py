@@ -7,6 +7,7 @@ from models import User, Area, Task, TaskWatcher, TaskRequest, UnitLead
 from services.alcance import alcance_unidades, ambito_unidades
 from services.notifications import notify_user, notify_many
 from services.clock import today_local
+from services.catalogo import prioridades_validas, prioridad_por_defecto
 from blueprints.admin import log_activity
 from blueprints.tasks import task_access_required, _assignee_in_current_unit
 
@@ -68,8 +69,8 @@ def api_task_requests_create():
     if not to_area:
         return jsonify({'success': False, 'error': 'Área destino no encontrada.'}), 404
 
-    priority = (data.get('priority') or 'Media').strip()
-    if priority not in Task.VALID_PRIORITIES:
+    priority = (data.get('priority') or prioridad_por_defecto()).strip()
+    if priority not in prioridades_validas():
         return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
 
     # Check destination area has at least one lead
