@@ -156,6 +156,10 @@ login_manager.init_app(app)
 csrf.init_app(app)
 limiter.init_app(app)
 
+# Un CSS y un JS no son trafico que haya que limitar, pero contaban igual: solo
+# entre esos dos, cada carga de /tasks gastaba dos peticiones de la cuota.
+limiter.exempt(app.view_functions['static'])
+
 # SEC-05: detras de un proxy inverso (Render, nginx) request.remote_addr es la
 # IP del proxy, no la del cliente. Sin esto el limite de 5 intentos de login por
 # minuto se aplica a todos los usuarios en conjunto: un atacante podria bloquear

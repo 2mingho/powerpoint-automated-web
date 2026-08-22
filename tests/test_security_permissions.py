@@ -1732,3 +1732,74 @@ def test_overdue_filter_narrows_the_dashboard_table(client):
 
     assert len(todas) == 2
     assert [t['title'] for t in vencidas] == ['Ya vencio']
+
+
+# ─────────────────────────────────────────────────────────────
+# Limite de peticiones: no debe echar a los propios usuarios
+# ─────────────────────────────────────────────────────────────
+
+def test_rate_limit_counts_per_user_not_per_ip():
+    """Dos usuarios detras de la misma IP no comparten contador.
+
+    Con get_remote_address a secas, una oficina entera tras una sola IP publica
+    se repartia el limite de una persona: un compañero trabajando dejaba fuera
+    a los demas.
+    """
+    import extensions
+
+    with app_module.app.test_request_context('/'):
+        anonima = extensions._rate_limit_key()
+
+    with app_module.app.app_context():
+        primero = _create_user(username='rl-uno', email='rl-uno@example.com')
+        segundo = _create_user(username='rl-dos', email='rl-dos@example.com')
+
+    claves = []
+    for user_id in (primero, segundo):
+        with app_module.app.test_request_context('/'):
+            from flask_login import login_user
+            from models import User as UserModel
+            login_user(db.session.get(UserModel, user_id))
+            claves.append(extensions._rate_limit_key())
+
+    assert claves[0] != claves[1], 'dos usuarios distintos comparten contador'
+    assert all(c != anonima for c in claves), 'la clave autenticada cae a la IP'
+
+
+def test_static_files_do_not_consume_rate_limit():
+    """Un CSS no es trafico que limitar.
+
+    Cada carga de /tasks pedia al menos dos estaticos; contarlos gastaba cuota
+    que hace falta para las llamadas de verdad. Se mira el registro interno de
+    Flask-Limiter porque no expone otra forma de comprobarlo sin agotar el
+    limite a peticiones reales.
+    """
+    exentas = list(app_module.limiter._route_exemptions)
+    vista = app_module.app.view_functions['static']
+
+    # La clave que compone Flask-Limiter mezcla modulo, __name__ y __qualname__
+    # en un formato privado; se compara por el qualname, que es lo que
+    # identifica a la vista sin depender de como lo prefije la libreria.
+    assert any(vista.__qualname__ in clave for clave in exentas), \
+        f'los estaticos siguen contando: {exentas}'
+
+
+def test_rate_limit_allows_a_normal_working_hour():
+    """El limite por hora debe caber en una hora de trabajo real.
+
+    Una carga de /tasks son ~9 peticiones contadas y las notificaciones sondean
+    cada 90s (~40/hora). Con 60/hora el usuario se quedaba fuera en cinco
+    cargas, y el 429 llegaba en mitad de su trabajo.
+    """
+    import re
+    import extensions
+
+    hora = int(re.search(r'\d+', extensions._LIMITE_HORA).group())
+    dia = int(re.search(r'\d+', extensions._LIMITE_DIA).group())
+
+    coste_por_carga = 9
+    sondeo_por_hora = 40
+
+    assert hora >= sondeo_por_hora + coste_por_carga * 20, (
+        f'{hora}/hora no cubre veinte cargas mas el sondeo')
+    assert dia >= hora * 4, f'el limite diario ({dia}) estrangula al horario ({hora})'
