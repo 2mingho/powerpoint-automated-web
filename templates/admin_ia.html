@@ -1,0 +1,288 @@
+{% extends 'base.html' %}
+{% block title %}Conexiones de IA | Admin{% endblock %}
+{% block page_name %}Conexiones de IA{% endblock %}
+
+{% block content %}
+
+<div class="admin-shell view-start">
+
+<section class="admin-panel">
+  <div class="card-title">
+    <i class="fa-solid fa-plug-circle-bolt"></i> Nueva conexión
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">La conexión activa se usa para traducir los AI Clusters de Meltwater y enriquecer el análisis. Sin ninguna activa, el reporte se genera igual pero esa parte queda en su idioma original.</span>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('admin.ia_save') }}" id="formConexion">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="conexion_id" id="conexion_id" value="">
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="name">Nombre</label>
+        <input type="text" id="name" name="name" class="form-input" required
+               placeholder="Ej: Groq producción">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="provider">Proveedor</label>
+        <select id="provider" name="provider" class="form-select" required>
+          {% for p in proveedores %}
+          <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="model">Modelo</label>
+        <input type="text" id="model" name="model" class="form-input" required
+               placeholder="Ej: llama-3.3-70b-versatile / claude-sonnet-5 / gpt-4o">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="api_key">Clave API</label>
+        <input type="password" id="api_key" name="api_key" class="form-input"
+               autocomplete="new-password" placeholder="sk-…">
+        <small id="ayudaClave" style="color: var(--c-text-secondary);">
+          Se guarda en la base de datos y nunca se muestra completa en la interfaz.
+        </small>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="price_in_per_1m">Precio entrada (USD / 1M tokens)</label>
+        <input type="text" inputmode="decimal" id="price_in_per_1m" name="price_in_per_1m"
+               class="form-input" placeholder="Ej: 3.00" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="price_out_per_1m">Precio salida (USD / 1M tokens)</label>
+        <input type="text" inputmode="decimal" id="price_out_per_1m" name="price_out_per_1m"
+               class="form-input" placeholder="Ej: 15.00" />
+        <small style="color: var(--c-text-secondary);">
+          Se usan para calcular el coste. Los modelos de Anthropic se rellenan solos;
+          para Groq y OpenAI consulta la tarifa de tu proveedor.
+        </small>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">
+      <i class="fa-solid fa-floppy-disk"></i> <span id="btnGuardarTexto">Guardar conexión</span>
+    </button>
+    <button type="button" class="btn btn-secondary" id="btnCancelar" style="display:none;"
+            onclick="cancelarEdicion()">Cancelar</button>
+  </form>
+</section>
+
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title"><i class="fa-solid fa-robot"></i> Conexiones configuradas</div>
+
+  {% if conexiones | length == 0 %}
+    <p class="admin-empty">
+      No hay ninguna conexión configurada.
+      {% if hay_fallback_env %}
+        Se está usando la variable de entorno <code>GROQ_API_KEY</code> como respaldo.
+      {% else %}
+        Las funciones de IA (traducción de temas) están desactivadas.
+      {% endif %}
+    </p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
+      <thead>
+        <tr><th>Estado</th><th>Nombre</th><th>Proveedor</th><th>Modelo</th><th>Tarifa in/out</th><th>Clave</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for c in conexiones %}
+        <tr>
+          <td>
+            {% if c.is_active %}
+              <span class="badge badge-success">Activa</span>
+            {% else %}
+              <span class="badge">Inactiva</span>
+            {% endif %}
+          </td>
+          <td><strong>{{ c.name }}</strong></td>
+          <td>{{ c.provider }}</td>
+          <td><code>{{ c.model }}</code></td>
+          <td>
+            {% if c.price_in_per_1m or c.price_out_per_1m %}
+              <span style="white-space:nowrap;">${{ '%.2f'|format(c.price_in_per_1m) }} / ${{ '%.2f'|format(c.price_out_per_1m) }}</span>
+            {% else %}
+              <span style="color: var(--c-text-secondary);">sin tarifa</span>
+            {% endif %}
+          </td>
+          <td><code>{{ c.masked_key() }}</code></td>
+          <td>
+            <div class="pl-acciones">
+              <form method="POST" action="{{ url_for('admin.ia_test', conexion_id=c.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-secondary btn-sm" title="Enviar una petición de prueba">
+                  <i class="fa-solid fa-vial"></i> Probar
+                </button>
+              </form>
+
+              {% if c.is_active %}
+              <form method="POST" action="{{ url_for('admin.ia_deactivate', conexion_id=c.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-secondary btn-sm">
+                  <i class="fa-solid fa-pause"></i> Desactivar
+                </button>
+              </form>
+              {% else %}
+              <form method="POST" action="{{ url_for('admin.ia_activate', conexion_id=c.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-primary btn-sm">
+                  <i class="fa-solid fa-play"></i> Activar
+                </button>
+              </form>
+              {% endif %}
+
+              <button type="button" class="btn btn-secondary btn-sm"
+                      onclick="editarConexion({{ c.id }}, {{ c.name | tojson }}, {{ c.provider | tojson }}, {{ c.model | tojson }}, {{ c.price_in_per_1m | tojson }}, {{ c.price_out_per_1m | tojson }})">
+                <i class="fa-solid fa-pen"></i> Editar
+              </button>
+
+              <form method="POST" action="{{ url_for('admin.ia_delete', conexion_id=c.id) }}" style="display:inline;"
+                    onsubmit="return confirm('¿Eliminar la conexión {{ c.name }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="pl-ayuda">
+    Solo una conexión puede estar activa a la vez: es la que atiende todas las peticiones de IA.
+  </p>
+  {% endif %}
+</section>
+
+<!-- ─── Consumo ─── -->
+<section class="admin-panel admin-panel-tight">
+  <div class="card-title">
+    <i class="fa-solid fa-gauge-high"></i> Consumo por modelo
+    <div class="tooltip">
+      <i class="fa-solid fa-circle-question"></i>
+      <span class="tooltip-text">Tokens reales devueltos por cada proveedor. El coste se calcula con la tarifa que tenía la conexión en el momento de la llamada.</span>
+    </div>
+  </div>
+
+  {% if not consumo %}
+    <p class="admin-empty">Todavía no se ha registrado ninguna llamada.</p>
+  {% else %}
+  <div class="editor-grid cols-4" style="margin-bottom: 20px;">
+    <div class="card">
+      <div class="card-title">Coste acumulado</div>
+      <div class="stat-value" style="color: var(--c-primary);">${{ '%.2f'|format(totales.coste) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Llamadas</div>
+      <div class="stat-value">{{ '{:,}'.format(totales.llamadas) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tokens de entrada</div>
+      <div class="stat-value">{{ '{:,}'.format(totales.tokens_in) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tokens de salida</div>
+      <div class="stat-value">{{ '{:,}'.format(totales.tokens_out) }}</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="stats-table admin-table-full">
+      <thead>
+        <tr>
+          <th>Proveedor</th><th>Modelo</th>
+          <th style="text-align:right;">Llamadas</th>
+          <th style="text-align:right;">Tokens in</th>
+          <th style="text-align:right;">Tokens out</th>
+          <th style="text-align:right;">Coste</th>
+          <th>Última</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in consumo %}
+        <tr>
+          <td>{{ c.provider }}</td>
+          <td><code>{{ c.model }}</code></td>
+          <td style="text-align:right;">
+            {{ c.llamadas }}
+            {% if c.fallos %}<span class="badge badge-warning" title="Llamadas fallidas">{{ c.fallos }} err</span>{% endif %}
+          </td>
+          <td style="text-align:right;">{{ '{:,}'.format(c.tokens_in) }}</td>
+          <td style="text-align:right;">{{ '{:,}'.format(c.tokens_out) }}</td>
+          <td style="text-align:right;"><strong>${{ '%.4f'|format(c.coste) }}</strong></td>
+          <td>{{ c.ultima.strftime('%d/%m/%Y %H:%M') if c.ultima else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if por_uso %}
+  <p class="pl-ayuda" style="margin-top:14px;">
+    Reparto por función:
+    {% for feature, llamadas, coste in por_uso %}
+      <strong>{{ feature or 'sin etiqueta' }}</strong> {{ llamadas }} llamadas (${{ '%.4f'|format(coste or 0) }}){% if not loop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+
+  <p class="pl-ayuda">
+    Una conexión sin tarifa registra los tokens con coste 0. El coste queda congelado al
+    valor del momento: cambiar la tarifa no reescribe el histórico.
+  </p>
+  {% endif %}
+</section>
+
+</div>
+
+<script>
+  // Tarifas de referencia de Anthropic, para no teclearlas a mano. Groq y
+  // OpenAI no están: es preferible dejarlo en blanco a precargar un precio
+  // sin verificar y calcular un coste equivocado.
+  var PRECIOS = {{ precios_conocidos | tojson }};
+
+  document.getElementById('model').addEventListener('input', function (e) {
+    var p = PRECIOS[e.target.value.trim()];
+    var inp = document.getElementById('price_in_per_1m');
+    var out = document.getElementById('price_out_per_1m');
+    if (p && !inp.value && !out.value) {
+      inp.value = p[0].toFixed(2);
+      out.value = p[1].toFixed(2);
+    }
+  });
+
+  function editarConexion(id, nombre, proveedor, modelo, precioIn, precioOut) {
+    document.getElementById('conexion_id').value = id;
+    document.getElementById('name').value = nombre;
+    document.getElementById('provider').value = proveedor;
+    document.getElementById('model').value = modelo;
+    document.getElementById('price_in_per_1m').value = precioIn ? Number(precioIn).toFixed(2) : '';
+    document.getElementById('price_out_per_1m').value = precioOut ? Number(precioOut).toFixed(2) : '';
+    document.getElementById('api_key').value = '';
+    document.getElementById('api_key').required = false;
+    document.getElementById('ayudaClave').textContent = 'Déjala vacía para conservar la clave actual.';
+    document.getElementById('btnGuardarTexto').textContent = 'Actualizar conexión';
+    document.getElementById('btnCancelar').style.display = 'inline-flex';
+    document.getElementById('formConexion').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function cancelarEdicion() {
+    document.getElementById('formConexion').reset();
+    document.getElementById('conexion_id').value = '';
+    document.getElementById('ayudaClave').textContent = 'Se guarda cifrada en la base y nunca se muestra completa.';
+    document.getElementById('btnGuardarTexto').textContent = 'Guardar conexión';
+    document.getElementById('btnCancelar').style.display = 'none';
+  }
+</script>
+{% endblock %}
