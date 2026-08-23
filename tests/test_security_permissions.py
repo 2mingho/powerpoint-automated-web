@@ -138,7 +138,7 @@ def test_inactive_user_is_logged_out_on_request(client):
         assert '_user_id' not in session
 
 
-def test_upload_csv_requires_reports_tool_permission(client):
+def test_upload_meltwater_requires_reports_tool_permission(client):
     with app_module.app.app_context():
         user = _create_user(
             username='no-reports-upload',
@@ -148,28 +148,11 @@ def test_upload_csv_requires_reports_tool_permission(client):
 
     _login_as(client, user)
     response = client.post(
-        '/upload_csv',
+        '/upload_meltwater',
         data={
-            'csv_file': (io.BytesIO(b'columna\nvalor\n'), 'test.csv'),
+            'widget_files': (io.BytesIO(b'no importa el contenido'), 'widget.xlsx'),
         },
         content_type='multipart/form-data',
-    )
-
-    assert response.status_code == 403
-
-
-def test_generate_pptx_requires_reports_tool_permission(client):
-    with app_module.app.app_context():
-        user = _create_user(
-            username='no-reports-pptx',
-            email='no-reports-pptx@example.com',
-            tools=['classification'],
-        )
-
-    _login_as(client, user)
-    response = client.post(
-        '/generate_pptx',
-        json={'meta': {'client_name': 'Cliente de prueba'}},
     )
 
     assert response.status_code == 403
@@ -303,28 +286,6 @@ def test_classification_finalize_cannot_hijack_another_session(client):
 # ─────────────────────────────────────────────────────────────
 # SEC-02 / FUN-06: /generate_pptx valida y no escribe fuera de scratch
 # ─────────────────────────────────────────────────────────────
-
-def test_generate_pptx_rejects_missing_client_name(client):
-    with app_module.app.app_context():
-        user_id = _create_user(username='ppt-user', email='ppt-user@example.com',
-                               tools=['reports'])
-    _login_as(client, user_id)
-    response = client.post('/generate_pptx', json={'meta': {}})
-    assert response.status_code == 400
-    assert response.get_json()['success'] is False
-
-
-def test_generate_pptx_does_not_write_outside_scratch(client):
-    with app_module.app.app_context():
-        user_id = _create_user(username='ppt-user2', email='ppt-user2@example.com',
-                               tools=['reports'])
-    _login_as(client, user_id)
-    client.post('/generate_pptx', json={'meta': {'client_name': '../../pwned'}})
-    scratch_root = os.path.abspath(app_module.app.config['UPLOAD_FOLDER'])
-    escaped = os.path.join(os.path.dirname(os.path.dirname(scratch_root)),
-                           'Reporte_pwned.pptx')
-    assert not os.path.exists(escaped)
-
 
 # ─────────────────────────────────────────────────────────────
 # Proteccion de la base de produccion en arranques locales

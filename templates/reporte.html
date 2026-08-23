@@ -1,0 +1,374 @@
+{% extends 'base.html' %}
+{% block title %}{{ context.meta.client_name }} | Reporte{% endblock %}
+{% block page_name %}Reporte de escucha social{% endblock %}
+
+{% block head %}
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/reporte.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="rep">
+
+  <!-- ── Barra de acciones (fuera del PDF) ──────────────────────────── -->
+  <div class="rep-actions">
+    <div class="rep-actions-meta">
+      Reporte de <strong>{{ context.meta.client_name }}</strong> · {{ context.meta.date_generated }}
+      {% if context.insights_source == 'ia' %}
+        <span class="rep-flag"><i class="fa-solid fa-wand-magic-sparkles"></i> Textos por IA</span>
+      {% else %}
+        <span class="rep-flag"><i class="fa-solid fa-ruler"></i> Textos por reglas</span>
+      {% endif %}
+    </div>
+    <div class="rep-actions-btns">
+      <button type="button" class="rep-btn rep-btn-ghost" onclick="location.href='{{ url_for('index') }}'">
+        <i class="fa-solid fa-arrow-left"></i> Nuevo reporte
+      </button>
+      <button type="button" class="rep-btn" onclick="window.print()">
+        <i class="fa-solid fa-file-pdf"></i> Descargar PDF
+      </button>
+    </div>
+  </div>
+
+  {% if context.warnings %}
+  <div class="rep-warnings">
+    <b>Avisos de carga</b>
+    <ul>{% for w in context.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <!-- ── Portada ────────────────────────────────────────────────────── -->
+  <header class="rep-cover">
+    <p class="rep-cover-mark">Newlink · Escucha social</p>
+    <div class="rep-cover-rule"></div>
+    <h1 contenteditable="true" class="rep-edit" id="repTitle">{{ context.meta.client_name }}</h1>
+    <p class="rep-cover-meta">
+      {{ context.charts.evolution.labels | first }} – {{ context.charts.evolution.labels | last }}
+      · {{ '{:,}'.format(context.kpis.total_mentions) }} menciones
+    </p>
+  </header>
+
+  <!-- ── 01 ¿Cuánto? ────────────────────────────────────────────────── -->
+  <section class="rep-section">
+    <div class="rep-q"><span class="rep-q-n">01</span><span class="rep-q-t">¿Cuánto?</span></div>
+
+    <h2 class="rep-headline rep-edit" contenteditable="true" data-slot="volume_title">{{ context.insights.volume_title }}</h2>
+    <p class="rep-take rep-edit" contenteditable="true" data-slot="volume_take">{{ context.insights.volume_take }}</p>
+
+    <div class="rep-kpis">
+      <div class="rep-kpi">
+        <div class="rep-kpi-v">{{ '{:,}'.format(context.kpis.total_mentions) }}</div>
+        <div class="rep-kpi-l">Menciones totales</div>
+        {% if context.kpis.mentions_change_pct is not none %}
+        <div class="rep-kpi-d {{ 'rep-up' if context.kpis.mentions_change_pct >= 0 else 'rep-down' }}">
+          {{ '▲' if context.kpis.mentions_change_pct >= 0 else '▼' }}
+          {{ (context.kpis.mentions_change_pct | abs) | string }}%
+        </div>
+        {% endif %}
+      </div>
+      <div class="rep-kpi">
+        <div class="rep-kpi-v">{{ context.kpis.estimated_reach_fmt }}</div>
+        <div class="rep-kpi-l">Alcance estimado</div>
+        {% if context.kpis.reach_change_pct is not none %}
+        <div class="rep-kpi-d {{ 'rep-up' if context.kpis.reach_change_pct >= 0 else 'rep-down' }}">
+          {{ '▲' if context.kpis.reach_change_pct >= 0 else '▼' }}
+          {{ (context.kpis.reach_change_pct | abs) | string }}%
+        </div>
+        {% endif %}
+      </div>
+      {% if context.kpis.unique_authors %}
+      <div class="rep-kpi">
+        <div class="rep-kpi-v">{{ '{:,}'.format(context.kpis.unique_authors) }}</div>
+        <div class="rep-kpi-l">Autores únicos</div>
+      </div>
+      {% endif %}
+      <div class="rep-kpi">
+        <div class="rep-kpi-v">{{ '{:,}'.format(context.kpis.mentions_redes) }}</div>
+        <div class="rep-kpi-l">En redes sociales</div>
+        <div class="rep-kpi-d rep-flat">{{ pct_redes }}% del total</div>
+      </div>
+      <div class="rep-kpi">
+        <div class="rep-kpi-v">{{ '{:,}'.format(context.kpis.mentions_prensa) }}</div>
+        <div class="rep-kpi-l">En noticias digitales</div>
+        <div class="rep-kpi-d rep-flat">{{ pct_prensa }}% del total</div>
+      </div>
+    </div>
+
+    <div class="rep-panel">
+      <p class="rep-label">Menciones por día</p>
+      <div class="rep-chart" id="chartTrend"></div>
+      <div class="rep-legend">
+        <span><i style="background: var(--r-gold)"></i>Este periodo</span>
+        <span><i class="dash"></i>Periodo anterior</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 02 ¿Cómo se sintió? ────────────────────────────────────────── -->
+  <section class="rep-section">
+    <div class="rep-q"><span class="rep-q-n">02</span><span class="rep-q-t">¿Cómo se sintió?</span></div>
+
+    <h2 class="rep-headline rep-edit" contenteditable="true" data-slot="sentiment_title">{{ context.insights.sentiment_title }}</h2>
+    <p class="rep-take rep-edit" contenteditable="true" data-slot="sentiment_take">{{ context.insights.sentiment_take }}</p>
+
+    <div class="rep-grid rep-grid-32">
+      <div class="rep-panel">
+        <p class="rep-label">Sentimiento</p>
+        <div class="rep-chart" id="chartSentiment" style="display:flex;justify-content:center"></div>
+        <div class="rep-legend" style="justify-content:center" id="legendSentiment"></div>
+      </div>
+      <div class="rep-panel">
+        <p class="rep-label">Emociones dominantes</p>
+        <div class="rep-chart" id="chartEmotions"></div>
+      </div>
+    </div>
+
+    {% if context.charts.sentiment_by_source %}
+    <div style="margin-top: var(--r-gap)">
+      <h2 class="rep-headline rep-edit" contenteditable="true" data-slot="by_source_title"
+          style="font-size: clamp(20px, 2.6vw, 28px)">{{ context.insights.by_source_title }}</h2>
+      <p class="rep-take rep-edit" contenteditable="true" data-slot="by_source_take">{{ context.insights.by_source_take }}</p>
+      <div class="rep-panel">
+        <p class="rep-label">Reparto de sentimiento dentro de cada red</p>
+        <div class="rep-chart" id="chartBySource"></div>
+        <div class="rep-legend">
+          <span><i style="background: var(--r-pos)"></i>Positivo</span>
+          <span><i style="background: var(--r-neu)"></i>Neutro</span>
+          <span><i style="background: var(--r-neg)"></i>Negativo</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- ── 03 ¿De qué se habló? ───────────────────────────────────────── -->
+  <section class="rep-section">
+    <div class="rep-q"><span class="rep-q-n">03</span><span class="rep-q-t">¿De qué se habló?</span></div>
+
+    <h2 class="rep-headline rep-edit" contenteditable="true" data-slot="topics_title">{{ context.insights.topics_title }}</h2>
+    <p class="rep-take rep-edit" contenteditable="true" data-slot="topics_take">{{ context.insights.topics_take }}</p>
+
+    {% if context.content.clusters %}
+    <div class="rep-panel-plain" style="margin-bottom: var(--r-gap)">
+      <p class="rep-label">Temas detectados</p>
+      <div class="rep-table-wrap">
+        <table class="rep-table">
+          <tbody>
+            {% for c in context.content.clusters[:8] %}
+            <tr>
+              <td class="rank">{{ loop.index }}</td>
+              <td>{{ c.summary }}</td>
+              <td class="num">{{ '{:,}'.format(c.mentions) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="rep-grid rep-grid-2">
+      {% if context.content.hashtags %}
+      <div class="rep-panel">
+        <p class="rep-label">Hashtags más usados</p>
+        <div class="rep-chart" id="chartHashtags"></div>
+      </div>
+      {% endif %}
+      {% if context.content.keywords %}
+      <div class="rep-panel">
+        <p class="rep-label">Palabras clave</p>
+        <div class="rep-chart" id="chartKeywords"></div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── 04 ¿Quién habló? ───────────────────────────────────────────── -->
+  <section class="rep-section">
+    <div class="rep-q"><span class="rep-q-n">04</span><span class="rep-q-t">¿Quién habló?</span></div>
+
+    <h2 class="rep-headline rep-edit" contenteditable="true" data-slot="authors_title">{{ context.insights.authors_title }}</h2>
+    <p class="rep-take rep-edit" contenteditable="true" data-slot="authors_take">{{ context.insights.authors_take }}</p>
+
+    <div class="rep-grid rep-grid-32">
+      <div class="rep-panel">
+        <p class="rep-label">Reparto por red</p>
+        <div class="rep-chart" id="chartSources"></div>
+      </div>
+      {% if context.content.top_authors %}
+      <div class="rep-panel">
+        <p class="rep-label">Autores más activos</p>
+        <div class="rep-table-wrap">
+          <table class="rep-table">
+            <thead>
+              <tr><th>Autor</th><th class="num">Posts</th><th class="num">Seguidores</th></tr>
+            </thead>
+            <tbody>
+              {% for a in top_authors %}
+              <tr>
+                <td>{{ a.author }}</td>
+                <td class="num">{{ a.posts }}</td>
+                <td class="num">{{ '{:,}'.format(a.followers) if a.followers else '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── 05 Conclusiones ────────────────────────────────────────────── -->
+  <section class="rep-close">
+    <h2>Conclusiones</h2>
+    <div class="rep-close-list">
+      <div class="rep-close-item rep-edit" contenteditable="true" data-slot="conclusion_1">{{ context.insights.conclusion_1 }}</div>
+      <div class="rep-close-item rep-edit" contenteditable="true" data-slot="conclusion_2">{{ context.insights.conclusion_2 }}</div>
+      <div class="rep-close-item rep-edit" contenteditable="true" data-slot="conclusion_3">{{ context.insights.conclusion_3 }}</div>
+    </div>
+  </section>
+
+  <div class="rep-foot">
+    <span>Fuente: Meltwater · Generado por Newlink el {{ context.meta.date_generated }}</span>
+    <span>{{ context.meta.client_name }}</span>
+  </div>
+</div>
+
+<script id="repData" type="application/json">{{ context | tojson }}</script>
+<script src="{{ url_for('static', filename='js/reporte-charts.js') }}"></script>
+<script>
+(function () {
+  var ctx = JSON.parse(document.getElementById('repData').textContent);
+  var root = document.querySelector('.rep');
+  var css = function (n, f) { return (getComputedStyle(root).getPropertyValue(n) || '').trim() || f; };
+
+  var CHART_IDS = ['chartTrend', 'chartSentiment', 'chartEmotions', 'chartBySource',
+                   'chartHashtags', 'chartKeywords', 'chartSources'];
+
+  function draw() {
+  // Cada redibujado parte de cero: si no, el cambio de tema apilaría un SVG
+  // nuevo sobre el viejo dentro del mismo contenedor.
+  CHART_IDS.forEach(function (id) {
+    var n = document.getElementById(id);
+    if (n) n.innerHTML = '';
+  });
+
+  // ── 01 Tendencia ──
+  RepCharts.trend(document.getElementById('chartTrend'), {
+    labels: ctx.charts.evolution.labels,
+    current: ctx.charts.evolution.mentions,
+    previous: ctx.charts.evolution.mentions_prev
+  });
+
+  // ── 02 Sentimiento ──
+  var sentColors = {
+    'Positive': css('--r-pos', '#0f8a5f'),
+    'Neutral':  css('--r-neu', '#8a8f98'),
+    'Negative': css('--r-neg', '#c2352f'),
+    'Not Rated': css('--r-ghost', '#cdc7b8')
+  };
+  var order = ['Positive', 'Neutral', 'Negative', 'Not Rated'];
+  var sent = (ctx.charts.sentiment || []).slice().sort(function (a, b) {
+    return order.indexOf(a.key) - order.indexOf(b.key);
+  }).map(function (s) {
+    return { label: s.label, value: s.value, color: sentColors[s.key] || s.color };
+  });
+
+  if (sent.length) {
+    RepCharts.donut(document.getElementById('chartSentiment'), sent);
+    var total = sent.reduce(function (a, s) { return a + s.value; }, 0);
+    document.getElementById('legendSentiment').innerHTML = sent.map(function (s) {
+      var p = total ? (Math.round(s.value / total * 1000) / 10).toString() : '0';
+      return '<span><i style="background:' + s.color + '"></i>' + s.label + ' ' + p + '%</span>';
+    }).join('');
+  }
+
+  if ((ctx.charts.emotions || []).length) {
+    RepCharts.ranked(document.getElementById('chartEmotions'),
+      ctx.charts.emotions.map(function (e) { return { label: e.label, value: e.value }; }),
+      { labelW: 104, aria: 'Emociones por número de menciones' });
+  }
+
+  // ── Sentimiento por red ──
+  var bySource = (ctx.charts.sentiment_by_source || [])
+    .filter(function (s) { return (s.neutral + s.negative + s.positive) > 0; })
+    .sort(function (a, b) {
+      return (b.neutral + b.negative + b.positive) - (a.neutral + a.negative + a.positive);
+    })
+    .slice(0, 5);
+
+  if (bySource.length && document.getElementById('chartBySource')) {
+    RepCharts.stacked100(
+      document.getElementById('chartBySource'),
+      bySource.map(function (s) {
+        return { label: s.source, positive: s.positive, neutral: s.neutral, negative: s.negative };
+      }),
+      [
+        { key: 'positive', label: 'Positivo', color: css('--r-pos', '#0f8a5f') },
+        { key: 'neutral',  label: 'Neutro',   color: css('--r-neu', '#8a8f98') },
+        { key: 'negative', label: 'Negativo', color: css('--r-neg', '#c2352f') }
+      ]
+    );
+  }
+
+  // ── 03 Hashtags y keywords ──
+  if ((ctx.content.hashtags || []).length && document.getElementById('chartHashtags')) {
+    RepCharts.ranked(document.getElementById('chartHashtags'),
+      ctx.content.hashtags.slice(0, 8).map(function (h) {
+        return { label: '#' + h.hashtag, value: h.mentions };
+      }), { labelW: 168, aria: 'Hashtags por número de menciones' });
+  }
+  if ((ctx.content.keywords || []).length && document.getElementById('chartKeywords')) {
+    RepCharts.ranked(document.getElementById('chartKeywords'),
+      ctx.content.keywords.slice(0, 8).map(function (k) {
+        return { label: k.keyword, value: k.mentions };
+      }), { labelW: 190, aria: 'Palabras clave por número de menciones' });
+  }
+
+  // ── 04 Reparto por red: top 5 y el resto plegado en "Otras" ──
+  // Se muestra el nombre traducido; la clave cruda de Meltwater solo vive en
+  // el backend, donde decide el reparto prensa/redes.
+  var srcLabels = ctx.kpis.source_labels || {};
+  var srcEntries = Object.keys(ctx.kpis.mentions_by_source || {})
+    .map(function (k) { return { label: srcLabels[k] || k, value: ctx.kpis.mentions_by_source[k] }; })
+    .filter(function (s) { return s.value > 0; })
+    .sort(function (a, b) { return b.value - a.value; });
+
+  var top5 = srcEntries.slice(0, 5);
+  var rest = srcEntries.slice(5);
+  if (rest.length) {
+    top5.push({
+      label: 'Otras ' + rest.length + ' redes',
+      value: rest.reduce(function (a, s) { return a + s.value; }, 0),
+      muted: true,
+      note: rest.map(function (s) { return s.label; }).join(', ')
+    });
+  }
+  if (top5.length) {
+    RepCharts.ranked(document.getElementById('chartSources'), top5,
+      { labelW: 150, aria: 'Menciones por red social' });
+  }
+  }
+
+  draw();
+  // Los SVG fijan su color al dibujarse, así que hay que rehacerlos cuando
+  // cambia el tema para que no queden con la paleta anterior.
+  RepCharts.onThemeChange(draw);
+
+  // ── Los textos editados se conservan al imprimir; sin guardado en servidor,
+  //    así que se avisa antes de abandonar la página con cambios. ──
+  var dirty = false;
+  document.querySelectorAll('.rep-edit').forEach(function (n) {
+    n.addEventListener('input', function () { dirty = true; });
+  });
+  window.addEventListener('beforeunload', function (e) {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+})();
+</script>
+{% endblock %}

@@ -1,121 +1,107 @@
-import unittest
-import pandas as pd
-import sys
 import os
-from io import StringIO
+import sys
+import unittest
 
-# --- MAGIC: Permitir importar desde el directorio padre ---
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from services import calculation
+from services import calculation, meltwater_ingest
 
-# Simulación de TU archivo real (Tab-separated)
-# He alineado las columnas clave: Source, Reach, Sentiment, Alternate Date Format, Hit Sentence
-CSV_DATA = """Date\tHeadline\tURL\tOpening Text\tHit Sentence\tSource\tInfluencer\tCountry\tSubregion\tLanguage\tReach\tDesktop Reach\tMobile Reach\tTwitter Social Echo\tFacebook Social Echo\tReddit Social Echo\tNational Viewership\tEngagement\tAVE\tSentiment\tKey Phrases\tInput Name\tKeywords\tTwitter Authority\tTweet Id\tTwitter Id\tTwitter Client\tTwitter Screen Name\tUser Profile Url\tTwitter Bio\tTwitter Followers\tTwitter Following\tAlternate Date Format\tTime\tState\tCity\tSocial Echo Total\tEditorial Echo\tViews\tEstimated Views\tLikes\tReplies\tRetweets\tComments\tShares\tReactions\tThreads\tIs Verified\tParent URL\tDocument Tags\tDocument ID\tCustom Categories
-06-Feb-2026 03:03PM\tEn Farma Extra, creemos en un Amor Único\thttps://t.co/example\tTexto apertura\tEn Farma Extra, creemos en un Amor Único: ese que buscas, ese que está cuando más lo necesitas...\tTwitter\t@farmaextrado\tUnknown\t\tSpanish\t15\t\t\t\t\t\t\t\t0.14\tPositive\t\tFarma_Extra\tFarma Extra\t1\t2019849392560165115\t1767999239286603776\t\tFarma Extra RD\thttps://twitter.com/Farmaextrado\tBio...\t15\t8\t06-Feb-26\t3:03 PM\t\t\t\t\t\t\t\t\t\t\t\t\tfalse\t\t\t\t
-05-Feb-2026 10:11AM\tCon pequeños hábitos diarios puedes construir una Vida Extra Sana\thttps://t.co/example2\tTexto apertura\tCon pequeños hábitos diarios puedes construir una Vida Extra Sana. Lo importante es la constancia...\tTwitter\t@farmaextrado\tUnknown\t\tSpanish\t15\t\t\t\t\t\t\t\t0.14\tNeutral\tpequeños hábitos\tFarma_Extra\tFarma Extra\t1\t2019413486686581083\t1767999239286603776\t\tFarma Extra RD\thttps://twitter.com/Farmaextrado\tBio...\t15\t8\t05-Feb-26\t10:11 AM\t\t\t\t\t\t\t\t\t\t\t\t\tfalse\t\t\t\t
-03-Feb-2026 05:05PM\tFarma extra fue la primera\thttps://youtube.com/example\tTexto apertura\tFarma extra fue la primera Cuanto te estan pagando para decir ese disparate?\tYoutube\tComment on Panorama Social\tUnknown\t\t\t0\t\t\t\t\t\t\t\t0.00\tNeutral\t\tfarma extra\tFarma_Extra\t\t\t\t\t\t\t\t\t\t03-Feb-26\t5:05 PM\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t
-03-Feb-2026 04:06PM\tLa guerra farmacéutica en RD GBC vs Farma Extra\thttps://t.co/example3\tTexto apertura\tLa guerra farmacéutica en RD GBC vs Farma Extra y el misterio del 20%\tTwitter\t@panoramasocial3\tUnknown\t\tSpanish\t284\t\t\t\t\t\t2\t2.63\tNeutral\t\tFarma_Extra\tFarma Extra\t5\t2018778221504794735\t1549169894087966721\t\tPanoramasocialtw\thttps://twitter.com/Panoramasocial3\tBio...\t284\t24\t03-Feb-26\t4:06 PM\t\t\t23\t\t2\t\t\t\t2\tfalse\t\t\t\t
-"""
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures', 'meltwater_widgets')
 
-class TestCalculation(unittest.TestCase):
-    
-    def setUp(self):
-        pass
+FIXTURE_FILES = [
+    '00.Evolucion_y_cantidad_de_menciones.xlsx',
+    '01.Alcance.xlsx',
+    '02.AI-Powered_Clusters.xlsx',
+    '03.Keywords.xlsx',
+    '04.Sentimiento.xlsx',
+    '05.Menciones_por_source.xlsx',
+    '06.Sentiment_By_Source_Type.xlsx',
+    '07.Top_Hashtags.xlsx',
+    '08.Emotional_Comparison.xlsx',
+    '09.Top_X_Authors.xlsx',
+]
 
-    def test_clean_dataframe_logic(self):
-        """Prueba que el DF procesa correctamente TU muestra de datos"""
-        temp_csv_name = "tests/temp_real_data.csv"
-        
-        # Guardamos el string CSV_DATA como un archivo físico temporal
-        with open(temp_csv_name, "w", encoding="utf-16") as f:
-            # Usamos StringIO para simular la lectura y luego escribirlo correctamente
-            df_raw = pd.read_csv(StringIO(CSV_DATA), sep='\t')
-            df_raw.to_csv(f, sep='\t', index=False)
-            
-        try:
-            df = calculation.clean_dataframe(temp_csv_name)
-            
-            # --- Validaciones Específicas para tus datos ---
-            
-            # 1. Debería haber 4 filas en total
-            self.assertEqual(len(df), 4, "El DataFrame debería tener 4 filas")
-            
-            # 2. Verificar clasificación de Plataforma
-            # Tus 4 filas son de Twitter (3) y Youtube (1) -> Todas son 'Redes Sociales'
-            conteo_plataformas = df['Plataforma'].value_counts()
-            self.assertEqual(conteo_plataformas.get('Redes Sociales'), 4, "Todas las entradas deberían ser Redes Sociales")
-            self.assertTrue('Prensa Digital' not in conteo_plataformas or conteo_plataformas['Prensa Digital'] == 0)
 
-            # 3. Verificar que la columna Hit Sentence existe y tiene datos
-            self.assertIn('Hit Sentence', df.columns)
-            self.assertTrue(df.iloc[0]['Hit Sentence'].startswith("En Farma Extra"))
+def _build_full_context(report_title="Cliente Real"):
+    files = []
+    for name in FIXTURE_FILES:
+        with open(os.path.join(FIXTURES_DIR, name), 'rb') as f:
+            files.append((name, f.read()))
+    widgets, warnings = meltwater_ingest.load_widget_files(files)
+    parsed = meltwater_ingest.parse_widgets(widgets)
+    return calculation.create_report_context_from_widgets(parsed, report_title=report_title, warnings=warnings)
 
-        finally:
-            if os.path.exists(temp_csv_name):
-                os.remove(temp_csv_name)
 
-    def test_create_report_context_structure(self):
-        """Valida los cálculos de KPIs con tus números reales"""
-        temp_csv_name = "tests/temp_real_context.csv"
-        
-        with open(temp_csv_name, "w", encoding="utf-16") as f:
-            df_raw = pd.read_csv(StringIO(CSV_DATA), sep='\t')
-            df_raw.to_csv(f, sep='\t', index=False)
+class TestCreateReportContextFromWidgets(unittest.TestCase):
 
-        try:
-            context = calculation.create_report_context(temp_csv_name, "Cliente Real")
-            
-            # --- Validaciones de Negocio (KPIs) ---
-            
-            # Total Menciones: 4
-            self.assertEqual(context['kpis']['total_mentions'], 4)
-            
-            # Total Reach: 15 + 15 + 0 + 284 = 314
-            # (Nota: calculation.py suma el MAX reach por influencer.
-            # Influencers: @farmaextrado (15), Comment... (0), @panoramasocial3 (284).
-            # @farmaextrado aparece 2 veces con 15. Max = 15.
-            # Total esperado = 15 + 0 + 284 = 299)
-            self.assertEqual(context['kpis']['estimated_reach'], 299, "El alcance estimado debería sumar los máximos por autor")
-            
-            # Verificar Sentimientos (Chart Data)
-            # Positive: 1, Neutral: 3 (Twitter 2 + Youtube 1)
-            sentiments = {item['label']: item['value'] for item in context['charts']['sentiment']}
-            self.assertEqual(sentiments.get('Positive'), 1)
-            # En tu data hay 2 "Neutral" explícitos y 1 que podría ser nulo/neutral en Youtube
-            # Dependiendo de cómo pandas lea el CSV string, verificamos que exista al menos 'Neutral'
-            self.assertIn('Neutral', sentiments)
+    def test_context_structure_and_kpis(self):
+        context = _build_full_context()
 
-        finally:
-             if os.path.exists(temp_csv_name):
-                os.remove(temp_csv_name)
+        # Top-level shape
+        for key in ('meta', 'kpis', 'charts', 'content', 'narrative', 'warnings'):
+            self.assertIn(key, context)
 
-def run_test():
-    """
-    Test 4: Calculation Engine (KPIs)
-    Adapter for run_diagnostic.py
-    """
-    import unittest
-    from io import StringIO
-    
-    # Create a test suite
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestCalculation)
-    result = unittest.TextTestRunner(stream=StringIO()).run(suite)
-    
-    success = result.wasSuccessful()
-    details = f"Pruebas de cálculo: {result.testsRun} ejecutadas, {len(result.failures)} fallos, {len(result.errors)} errores."
-    
-    # Extract some data points if possible
-    data_points = {
-        "Tests Run": result.testsRun,
-        "Failures": len(result.failures),
-        "Errors": len(result.errors),
-        "Detalle": [
-            {"name": "Cálculos de KPIs y Limpieza", "status": success, "diag": "Revisar lógica en calculation.py si hay fallos"}
-        ]
-    }
-    
-    return success, details, data_points
+        self.assertEqual(context['meta']['client_name'], "Cliente Real")
+
+        # Menciones: suma de la columna "Mentions" del fixture 00
+        # (2158+3521+6398+5951+4615+6811+3692)
+        self.assertEqual(context['kpis']['total_mentions'], 33146)
+        self.assertIsInstance(context['kpis']['mentions_change_pct'], float)
+
+        # Alcance: suma de la columna "Reach" del fixture 01
+        self.assertGreater(context['kpis']['estimated_reach'], 0)
+
+        # Prensa vs redes, derivado de "Mentions Trend by Source Type"
+        self.assertGreater(context['kpis']['mentions_prensa'], 0)
+        self.assertGreater(context['kpis']['mentions_redes'], 0)
+
+    def test_charts_present(self):
+        context = _build_full_context()
+        charts = context['charts']
+        self.assertEqual(len(charts['evolution']['labels']), 7)
+        self.assertEqual(len(charts['reach_evolution']['labels']), 7)
+        self.assertTrue(len(charts['sentiment']) > 0)
+        self.assertTrue(len(charts['sentiment_by_source']) > 0)
+        self.assertTrue(len(charts['emotions']) > 0)
+
+    def test_content_present(self):
+        context = _build_full_context()
+        content = context['content']
+        self.assertTrue(len(content['clusters']) > 0)
+        self.assertTrue(len(content['keywords']) > 0)
+        self.assertTrue(len(content['hashtags']) > 0)
+        self.assertTrue(len(content['top_authors']) > 0)
+
+    def test_narrative_is_generated(self):
+        context = _build_full_context()
+        narrative = context['narrative']
+        self.assertTrue(narrative['overview'])
+        # La narrativa usa formato español (33.146), así que se comparan dígitos.
+        solo_digitos = ''.join(c for c in narrative['overview'] if c.isdigit())
+        self.assertIn(str(context['kpis']['total_mentions']), solo_digitos)
+
+    def test_narrative_number_format(self):
+        """Coma para miles, punto para decimales (convención dominicana)."""
+        context = _build_full_context()
+        overview = context['narrative']['overview']
+        self.assertIn('33,146', overview)   # coma como separador de miles
+        self.assertIn('13.6', overview)     # punto como separador decimal
+        self.assertNotIn('33.146', overview)
+
+    def test_missing_widgets_do_not_crash(self):
+        """A partial upload (missing widgets) should still build a valid context."""
+        files = []
+        for name in FIXTURE_FILES[:2]:  # only mentions_trend + reach_trend
+            with open(os.path.join(FIXTURES_DIR, name), 'rb') as f:
+                files.append((name, f.read()))
+        widgets, warnings = meltwater_ingest.load_widget_files(files)
+        parsed = meltwater_ingest.parse_widgets(widgets)
+        context = calculation.create_report_context_from_widgets(parsed, report_title="Parcial", warnings=warnings)
+
+        self.assertGreater(len(context['warnings']), 0)
+        self.assertEqual(context['content']['clusters'], [])
+        self.assertGreaterEqual(context['kpis']['total_mentions'], 0)
+
 
 if __name__ == '__main__':
     unittest.main()

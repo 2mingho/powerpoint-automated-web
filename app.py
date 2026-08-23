@@ -35,10 +35,10 @@ from blueprints.task_requests import task_requests_bp
 from extensions import db, login_manager, csrf, limiter, migrate
 from models import User, Report, ActivityLog, ClassificationPreset, Task, TempArtifact
 from services import calculation as report
+from services import meltwater_ingest
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
-from pptx_builder import engine as ppt_engine
-from pptx_builder import native_charts
-from pptx_builder.engine import set_text_style
+# El reporte se renderiza en la web y se exporta a PDF desde el navegador; el
+# paquete pptx_builder/ queda en el repositorio pero ya no entra en el flujo.
 from services.csv_analysis import analyze_csv, generate_summary_csv
 
 # Load environment variables
@@ -796,335 +796,127 @@ def menu():
     return render_template('menu.html')
 
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
 @tool_required('reports')
 def index():
-    available_templates = get_available_templates()
-    default_template = DEFAULT_TEMPLATE_FILENAME if DEFAULT_TEMPLATE_FILENAME in available_templates else (available_templates[0] if available_templates else None)
+    return render_template('index.html', slots=meltwater_ingest.slot_fields())
 
-    if request.method == 'POST':
-        csv_file = request.files.get('csv_file')
-        wordcloud_file = request.files.get('wordcloud_file')
-        report_title = request.form.get('report_title', '').strip()
-        description = request.form.get('description', '').strip()
-        selected_template = request.form.get('template_name', default_template)
-        fallback_default = bool(request.form.get('fallback_default'))
 
-        if not csv_file or not csv_file.filename.endswith('.csv'):
-            return redirect(url_for('error_archivo_invalido'))
+def _parse_unique_authors(crudo):
+    """El total de autores lo teclea el analista: no viene en ningún widget.
 
-        # Validar plantilla seleccionada
-        if not available_templates:
-            flash("No hay plantillas disponibles en el servidor. Contacta al administrador.", "error")
-            return render_template('index.html',
-                                   available_templates=[],
-                                   default_template=None)
+    Devuelve (valor, error). None sin error significa que no lo indicó, que es
+    legítimo: el KPI simplemente no se muestra.
+    """
+    crudo = (crudo or '').strip().replace('.', '').replace(',', '').replace(' ', '')
+    if not crudo:
+        return None, None
+    if not crudo.isdigit():
+        return None, 'La cantidad de autores debe ser un número entero.'
+    return int(crudo), None
 
-        if selected_template not in available_templates:
-            if fallback_default and default_template:
-                flash(f"La plantilla seleccionada no existe. Se usará la predeterminada: {default_template}.", "warning")
-                selected_template = default_template
-            else:
-                flash("La plantilla seleccionada no existe. Por favor elige otra o marca 'Usar la plantilla predeterminada'.", "error")
-                return render_template('index.html',
-                                       available_templates=available_templates,
-                                       default_template=default_template)
 
-        unique_id = uuid.uuid4().hex[:6]
-        csv_filename = secure_filename(csv_file.filename)
-        csv_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_{csv_filename}")
-        csv_file.save(csv_path)
+@app.route('/upload_meltwater', methods=['POST'])
+@login_required
+@tool_required('reports')
+def upload_meltwater():
+    """
+    Recibe los widgets .xlsx de Meltwater en casillas nombradas, una por tipo.
 
-        wordcloud_path = None
-        if wordcloud_file and wordcloud_file.filename.endswith('.png'):
-            wordcloud_path = os.path.join(app.config['UPLOAD_FOLDER'], 'Wordcloud.png')
-            wordcloud_file.save(wordcloud_path)
+    Cada archivo se valida contra la casilla en la que se cargó, así un export
+    equivocado se señala por su nombre en vez de fallar más adelante.
+    """
+    modo = 'avanzado' if request.form.get('modo') == 'avanzado' else 'simple'
+    titulo = request.form.get('report_title', 'Mi Reporte')
+    autores, error_autores = _parse_unique_authors(request.form.get('unique_authors'))
+    # Solo llega con texto si el analista activó el interruptor.
+    analisis = (request.form.get('meltwater_analysis') or '').strip()
 
-        try:
-            zip_path, missing_fields, used_template = process_report(
-                csv_path=csv_path,
-                wordcloud_path=wordcloud_path,
-                unique_id=unique_id,
-                template_filename=selected_template,
-                report_title=report_title,
-                description=description
-            )
-            log_activity('generate_report', f'Reporte generado: {report_title or csv_filename} (plantilla: {selected_template})')
-        except Exception as e:
-            app.logger.error(f"Error generando el reporte: {e}")
-            abort(500)
+    def volver_al_formulario(errores=None, problemas=None):
+        return render_template('index.html',
+                               slots=meltwater_ingest.slot_fields(),
+                               errores=errores or {},
+                               problemas=problemas or [],
+                               modo=modo,
+                               report_title=titulo,
+                               unique_authors=request.form.get('unique_authors', ''),
+                               meltwater_analysis=analisis)
 
-        if missing_fields:
-            faltantes = ", ".join(sorted(set(missing_fields)))
-            flash(f"Advertencia: La plantilla '{used_template}' no contiene algunos campos esperados y fueron omitidos: {faltantes}.", "warning")
+    if error_autores:
+        flash(error_autores, 'error')
+        return volver_al_formulario()
 
-        zip_filename = os.path.basename(zip_path)
-        file_size_mb = round(os.path.getsize(zip_path) / (1024 * 1024), 2)
-        current_time = datetime.now()
-        formatted_datetime = format_datetime(current_time, "d 'de' MMMM, yyyy - HH:mm", locale='es')
+    try:
+        if modo == 'avanzado':
+            # Una casilla por widget: el usuario decide qué es cada archivo.
+            slot_files = {}
+            for slot in meltwater_ingest.slot_fields():
+                subido = request.files.get(slot['field'])
+                if subido and subido.filename:
+                    slot_files[slot['key']] = (subido.filename, subido.read())
 
-        return render_template(
-            'download.html',
-            zip_path=zip_filename,
-            file_size=file_size_mb,
-            formatted_datetime=formatted_datetime,
-            template_used=used_template
+            if not slot_files:
+                flash('Carga al menos un archivo para generar el reporte.', 'error')
+                return volver_al_formulario()
+
+            widgets, errores, warnings = meltwater_ingest.load_widget_slots(slot_files)
+
+            # Un archivo en la casilla equivocada se corrige, no se ignora: se
+            # devuelve el formulario con el fallo señalado en su casilla.
+            if errores:
+                flash(f'Revisa {len(errores)} archivo(s): la estructura no es la esperada.', 'error')
+                return volver_al_formulario(errores=errores)
+        else:
+            # Modo por defecto: todo junto, y la app reparte por nombre de hoja.
+            sueltos = [f for f in request.files.getlist('widget_files') if f and f.filename]
+            if not sueltos:
+                flash('Carga al menos un archivo para generar el reporte.', 'error')
+                return volver_al_formulario()
+
+            widgets, detectados, problemas, warnings = meltwater_ingest.load_widget_bulk(sueltos)
+
+            # Si nada se reconoció, el formulario explica archivo por archivo.
+            if problemas and not widgets:
+                flash('No se reconoció ninguno de los archivos.', 'error')
+                return volver_al_formulario(problemas=problemas)
+
+            # Con parte reconocida se sigue adelante, pero el reporte avisa de
+            # lo que quedó fuera para que no pase inadvertido.
+            warnings = problemas + warnings
+
+        if not widgets:
+            flash('Ningún archivo válido: no se puede generar el reporte.', 'error')
+            return volver_al_formulario()
+
+        parsed = meltwater_ingest.parse_widgets(widgets)
+        report_context = report.create_report_context_from_widgets(
+            parsed, report_title=titulo, warnings=warnings, unique_authors=autores,
+            meltwater_analysis=analisis
         )
 
-    # GET
-    return render_template('index.html',
-                           available_templates=available_templates,
-                           default_template=default_template)
+        # Porcentajes de reparto: se calculan aqui y no en la plantilla para
+        # que Jinja no tenga que hacer aritmetica ni protegerse del cero.
+        total = report_context['kpis']['total_mentions'] or 1
+        pct_redes = round(report_context['kpis']['mentions_redes'] / total * 100)
+        pct_prensa = round(report_context['kpis']['mentions_prensa'] / total * 100)
 
+        top_authors = sorted(
+            report_context['content'].get('top_authors', []),
+            key=lambda a: a['posts'], reverse=True
+        )[:8]
 
-def process_report(csv_path, wordcloud_path, unique_id, template_filename, report_title=None, description=None):
-    """
-    Genera el zip del reporte usando la plantilla indicada.
-    Devuelve: (zip_path, missing_fields_list, used_template_filename)
-    """
-    missing_fields = []
+        return render_template('reporte.html',
+                               context=report_context,
+                               pct_redes=pct_redes,
+                               pct_prensa=pct_prensa,
+                               top_authors=top_authors)
 
-    # Carga y limpieza
-    df_cleaned = report.load_and_clean_data(csv_path)
-    df_cleaned['Influencer'] = df_cleaned.apply(report.update_influencer, axis=1)
-    df_cleaned['Sentiment'] = df_cleaned.apply(report.update_sentiment, axis=1)
+    except Exception as e:
+        app.logger.error(f"ERROR procesando widgets de Meltwater: {e}")
+        flash("No se pudo generar el reporte con esos archivos. "
+              "Comprueba que son los export .xlsx de Meltwater sin modificar.", 'error')
+        return volver_al_formulario()
 
-    total_mentions, count_of_authors, estimated_reach = report.calculate_summary_metrics(df_cleaned)
-    processed_csv_path = report.save_cleaned_csv(df_cleaned, csv_path, unique_id)
-
-    solo_fecha = request.form.get('solo_fecha') is not None
-    evolution_data = report.get_evolution_data(df_cleaned, use_date_only=not solo_fecha)
-    sentiment_data = report.get_sentiment_data(df_cleaned)
-
-    platform_counts, _ = report.distribucion_plataforma(df_cleaned)
-    top_sentences = report.get_top_hit_sentences(df_cleaned)
-    top_influencers_prensa = report.get_top_influencers(df_cleaned, 'Prensa Digital', sort_by='Posts')
-    top_influencers_redes_posts = report.get_top_influencers(df_cleaned, 'Redes Sociales', sort_by='Posts', include_source=True)
-    top_influencers_redes_reach = report.get_top_influencers(df_cleaned, 'Redes Sociales', sort_by='Max Reach')
-
-    current_date = datetime.now().strftime('%d-%b-%Y')
-    client_name = report_title if report_title else os.path.basename(csv_path).split()[0]
-
-    # Abrir plantilla seleccionada
-    prs = Presentation(open_template(template_filename))
-
-    # --- OPTIMIZED: Single-pass placeholder indexing (P3) ---
-    # Build index once instead of scanning slides multiple times
-    placeholder_index = {}
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            try:
-                if shape.has_text_frame and shape.text.strip():
-                    placeholder_index[shape.text.strip()] = (slide, shape)
-            except Exception:
-                continue
-
-    def find_shape_for_key(key):
-        """Fast lookup using pre-built index"""
-        return placeholder_index.get(key, (None, None))
-
-    # Reemplazo de textos genéricos
-    text_mapping = {
-        "REPORT_CLIENT": client_name,
-        "REPORT_DATE": current_date,
-        "NUMB_MENTIONS": str(total_mentions),
-        "NUMB_ACTORS": str(count_of_authors),
-        "EST_REACH": estimated_reach
-    }
-
-    # Apply text replacements using index
-    found_text_keys = set()
-    for key, value in text_mapping.items():
-        slide, shape = find_shape_for_key(key)
-        if shape:
-            try:
-                # Custom color for REPORT_DATE (white)
-                text_color = RGBColor(255, 255, 255) if key == "REPORT_DATE" else RGBColor(0, 0, 0)
-                set_text_style(shape, str(value), 'Effra Heavy', Pt(28), 
-                               False if key not in ("NUMB_MENTIONS", "NUMB_ACTORS", "EST_REACH") else True,
-                               color=text_color)
-                found_text_keys.add(key)
-            except Exception:
-                pass
-    
-    for key in text_mapping.keys():
-        if key not in found_text_keys:
-            missing_fields.append(key)
-
-    # Charts / imágenes: buscar placeholder y añadir imagen en la ubicación del placeholder
-    def place_image_at_placeholder(key, image_path, default_size=None):
-        slide, shape = find_shape_for_key(key)
-        if slide and shape:
-            try:
-                left = shape.left
-                top = shape.top
-                width = shape.width
-                height = shape.height
-                # eliminar texto para evitar superposición
-                try:
-                    shape.text = ""
-                except Exception:
-                    pass
-                if default_size:
-                    width, height = default_size
-                slide.shapes.add_picture(image_path, left, top, width=width, height=height)
-                return True
-            except Exception:
-                return False
-        return False
-
-    # Conversación (native line chart)
-    conv_slide, conv_shape = find_shape_for_key('CONVERSATION_CHART')
-    if conv_slide and conv_shape:
-        try:
-            native_charts.add_native_line_chart(
-                conv_slide, conv_shape,
-                evolution_data['labels'], evolution_data['values'],
-                width=Inches(9.07), height=Inches(5.15)
-            )
-        except Exception:
-            missing_fields.append('CONVERSATION_CHART')
-    else:
-        missing_fields.append('CONVERSATION_CHART')
-
-    # Sentiment pie (native pie chart)
-    sent_slide, sent_shape = find_shape_for_key('SENTIMENT_PIE')
-    if sent_slide and sent_shape:
-        try:
-            native_charts.add_native_pie_chart(sent_slide, sent_shape, sentiment_data, width=Inches(5.75), height=Inches(5.09))
-        except Exception:
-            missing_fields.append('SENTIMENT_PIE')
-    else:
-        missing_fields.append('SENTIMENT_PIE')
-
-    # Wordcloud
-    wc_added = False
-    if wordcloud_path and os.path.exists(wordcloud_path):
-        wc_added = place_image_at_placeholder('WORDCLOUD', wordcloud_path, default_size=(Inches(4.2), Inches(2.66)))
-    if not wc_added:
-        missing_fields.append('WORDCLOUD')
-
-    # Top news (texto grande)
-    topnews_slide, topnews_shape = find_shape_for_key('TOP_NEWS')
-    if topnews_shape:
-        try:
-            set_text_style(topnews_shape, "\n".join(top_sentences), 'Effra Light', Pt(12), False)
-        except Exception:
-            missing_fields.append('TOP_NEWS')
-    else:
-        missing_fields.append('TOP_NEWS')
-
-    # Análisis Groq
-    analisis_texto = "No disponible"
-    try:
-        parrafos = "\n".join(df_cleaned['Hit Sentence'].dropna().astype(str).tolist()[:80])
-        prompt = construir_prompt(client_name, parrafos)
-        respuesta = llamar_groq(prompt)
-        if respuesta:
-            resultado_json = extraer_json(respuesta)
-            if isinstance(resultado_json, dict):
-                analisis_texto = formatear_analisis_social_listening(resultado_json)
-    except Exception:
-        analisis_texto = "No disponible"
-
-    analisis_slide, analisis_shape = find_shape_for_key('CONVERSATION_ANALISIS')
-    if analisis_shape:
-        try:
-            set_text_style(analisis_shape, analisis_texto, 'Effra Light', Pt(11), False)
-        except Exception:
-            missing_fields.append('CONVERSATION_ANALISIS')
-    else:
-        missing_fields.append('CONVERSATION_ANALISIS')
-
-    # KPI NUMB_PRENSA / NUMB_REDES and tables: localizar placeholder y ubicar tabla
-    prensa_shape_key = 'NUMB_PRENSA'
-    prensa_slide, prensa_shape = find_shape_for_key(prensa_shape_key)
-    if prensa_shape:
-        try:
-            set_text_style(prensa_shape, str(platform_counts.get('Prensa Digital', 0)), font_size=Pt(28))
-        except Exception:
-            missing_fields.append(prensa_shape_key)
-    else:
-        missing_fields.append(prensa_shape_key)
-
-    try:
-        table_added = False
-        slide_for_table, shape_for_table = find_shape_for_key('TOP_INFLUENCERS_PRENSA_TABLE')
-        if slide_for_table and shape_for_table:
-            left, top, width, height = shape_for_table.left, shape_for_table.top, shape_for_table.width, shape_for_table.height
-            try:
-                ppt_engine.add_dataframe_as_table(slide_for_table, top_influencers_prensa, left, top, width, height)
-                table_added = True
-            except Exception:
-                table_added = False
-        if not table_added:
-            missing_fields.append('TOP_INFLUENCERS_PRENSA_TABLE')
-    except Exception:
-        missing_fields.append('TOP_INFLUENCERS_PRENSA_TABLE')
-
-    redes_shape_key = 'NUMB_REDES'
-    redes_slide, redes_shape = find_shape_for_key(redes_shape_key)
-    if redes_shape:
-        try:
-            set_text_style(redes_shape, str(platform_counts.get('Redes Sociales', 0)), font_size=Pt(28))
-        except Exception:
-            missing_fields.append(redes_shape_key)
-    else:
-        missing_fields.append(redes_shape_key)
-
-    # Two tables for redes (posts and reach)
-    try:
-        table1_added = False
-        slide_t1, shape_t1 = find_shape_for_key('TOP_INFLUENCERS_REDES_POSTS_TABLE')
-        if slide_t1 and shape_t1:
-            try:
-                ppt_engine.add_dataframe_as_table(slide_t1, top_influencers_redes_posts, shape_t1.left, shape_t1.top, shape_t1.width, shape_t1.height)
-                table1_added = True
-            except Exception:
-                table1_added = False
-        if not table1_added:
-            missing_fields.append('TOP_INFLUENCERS_REDES_POSTS_TABLE')
-    except Exception:
-        missing_fields.append('TOP_INFLUENCERS_REDES_POSTS_TABLE')
-
-    try:
-        table2_added = False
-        slide_t2, shape_t2 = find_shape_for_key('TOP_INFLUENCERS_REDES_REACH_TABLE')
-        if slide_t2 and shape_t2:
-            try:
-                ppt_engine.add_dataframe_as_table(slide_t2, top_influencers_redes_reach, shape_t2.left, shape_t2.top, shape_t2.width, shape_t2.height)
-                table2_added = True
-            except Exception:
-                table2_added = False
-        if not table2_added:
-            missing_fields.append('TOP_INFLUENCERS_REDES_REACH_TABLE')
-    except Exception:
-        missing_fields.append('TOP_INFLUENCERS_REDES_REACH_TABLE')
-
-    # Guardado de archivos
-    safe_title = secure_filename(report_title) if report_title else f"Reporte_{unique_id}"
-    pptx_filename = f"{safe_title}.pptx"
-    pptx_path = os.path.join(app.config['UPLOAD_FOLDER'], pptx_filename)
-    prs.save(pptx_path)
-
-    zip_filename = f"{safe_title}.zip"
-    zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
-    with zipfile.ZipFile(zip_path, 'w') as zipf:
-        zipf.write(pptx_path, arcname=pptx_filename)
-        zipf.write(processed_csv_path, arcname=os.path.basename(processed_csv_path))
-
-    # Persistencia del reporte con plantilla usada
-    new_report = Report(
-        filename=zip_filename,
-        user_id=current_user.id,
-        title=report_title,
-        description=description,
-        template_name=template_filename
-    )
-    db.session.add(new_report)
-    db.session.commit()
-
-    return zip_path, missing_fields, template_filename
 
 
 @app.route('/download/<path:filename>')
@@ -1892,54 +1684,6 @@ def download_csv_summary(file_id):
     else:
         abort(404)
 
-@app.route('/upload_csv', methods=['POST'])
-@login_required
-@tool_required('reports')
-def upload_csv():
-    if 'csv_file' not in request.files:
-        flash('No se seleccionó ningún archivo')
-        return redirect(url_for('index'))
-    
-    file = request.files['csv_file']
-    
-    if file.filename == '':
-        flash('Nombre de archivo vacío')
-        return redirect(url_for('index'))
-
-    if file:
-        try:
-            upload_folder = app.config['UPLOAD_FOLDER']
-            os.makedirs(upload_folder, exist_ok=True)
-
-            safe_name = secure_filename(file.filename)
-            if not safe_name:
-                flash('Nombre de archivo inválido')
-                return redirect(url_for('index'))
-
-            file_path = os.path.join(upload_folder, safe_name)
-            if not os.path.abspath(file_path).startswith(_scratch_root_abs()):
-                app.logger.warning(f"Path traversal attempt in upload_csv: {file.filename}")
-                abort(403)
-
-            file.save(file_path)
-            
-            # Capturamos el título del formulario HTML también
-            titulo = request.form.get('report_title', 'Mi Reporte')
-
-            report_context = report.create_report_context(
-                file_path, 
-                report_title=titulo
-            )
-            return render_template('editor.html', context=report_context)
-            
-        except Exception as e:
-            app.logger.error(f"ERROR: {e}")
-            flash(f"Error procesando el archivo: {str(e)}")
-            return redirect(url_for('index'))
-
-    return redirect(url_for('index'))
-
-
 # ─────────────────────────────────────────────────────────────
 # Centralized Error Handlers (HTML for browser, JSON for AJAX)
 # ─────────────────────────────────────────────────────────────
@@ -2005,49 +1749,6 @@ def internal_error(e):
     return render_template('error.html',
                            title="Error 500 - Problema del servidor",
                            message="Ocurrió un error inesperado. Por favor, intenta más tarde."), 500
-
-@app.route('/generate_pptx', methods=['POST'])
-@login_required
-@tool_required('reports')
-def generate_pptx_route():
-    try:
-        # 1. Recibir el JSON con los datos editados
-        data = request.json
-        if not data:
-            return jsonify({"success": False, "error": "No se recibieron datos JSON."}), 400
-
-        # Validar la entrada antes de tocar el disco (FUN-06)
-        client_name = ((data.get('meta') or {}).get('client_name') or '').strip()
-        if not client_name:
-            return jsonify({"success": False, "error": "Falta meta.client_name."}), 400
-
-        # 2. Definir rutas
-        template_path = os.path.join('powerpoints', 'Reporte_plantilla.pptx')
-
-        # Verificar que la plantilla existe
-        if not os.path.exists(template_path):
-            app.logger.error(f"Plantilla no encontrada: {template_path}")
-            return jsonify({"success": False, "error": "No se encuentra la plantilla del reporte."}), 500
-
-        # El nombre en disco lo genera el servidor; client_name solo se usa
-        # como nombre de descarga (SEC-02: evita traversal via meta.client_name)
-        storage_name = f"Reporte_{uuid.uuid4().hex}.pptx"
-        output_path = _scratch_path(storage_name)
-        if not os.path.abspath(output_path).startswith(_scratch_root_abs() + os.sep):
-            abort(403)
-
-        safe_client = secure_filename(client_name) or 'reporte'
-        filename = f"Reporte_{safe_client}.pptx"
-
-        # 3. Llamar al motor de generación
-        ppt_engine.generate_pptx(data, template_path, output_path)
-
-        # 4. Enviar el archivo al usuario
-        return send_file(output_path, as_attachment=True, download_name=filename)
-
-    except Exception as e:
-        app.logger.error(f"ERROR GENERANDO PPT: {e}")
-        return jsonify({"success": False, "error": "Error generando el reporte. Por favor intenta nuevamente."}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
