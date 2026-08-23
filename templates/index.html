@@ -3,112 +3,516 @@
 {% block title %}Generar Reporte | Newlink{% endblock %}
 {% block page_name %}Generar Reporte{% endblock %}
 
+{% block head %}
+<style>
+  /* ── Carga de archivos ──────────────────────────────────────────────
+     Dos modos sobre el mismo formulario. El normal es un solo buzón: la app
+     reconoce cada widget por el nombre de su hoja, que lo pone Meltwater y no
+     depende de cómo se llame el archivo. El avanzado abre una casilla por
+     widget, para armar un reporte dejando datos fuera a propósito.
+
+     En ambos, el input nativo queda transparente y estirado sobre la zona: así
+     se conservan gratis el clic, el foco de teclado y el arrastrar-y-soltar. */
+
+  .mode-switch {
+    display: inline-flex; gap: 2px; padding: 3px;
+    background: var(--c-bg); border: 1px solid var(--c-border);
+    border-radius: var(--r-md); margin-bottom: 18px;
+  }
+  .mode-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 0.85rem; font-weight: 600;
+    padding: 7px 14px; border: none; border-radius: var(--r-sm);
+    background: transparent; color: var(--c-text-secondary); cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+  }
+  .mode-btn[aria-selected="true"] {
+    background: var(--c-primary); color: var(--c-primary-text);
+  }
+  .mode-btn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+  /* ── Buzón único ── */
+  .bulk-drop {
+    position: relative;
+    display: grid; place-items: center; gap: 6px; text-align: center;
+    padding: 40px 24px;
+    border: 2px dashed var(--c-border); border-radius: var(--r-md);
+    background: var(--c-bg);
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .bulk-drop input[type="file"] {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+  }
+  .bulk-drop:hover { border-color: var(--c-accent); background: var(--c-accent-light); }
+  .bulk-drop:focus-within, .bulk-drop.dragover {
+    border-color: var(--c-primary); border-style: solid; background: var(--c-accent-light);
+  }
+  .bulk-icon {
+    width: 52px; height: 52px; display: grid; place-items: center;
+    border-radius: 50%; background: var(--c-border-light);
+    color: var(--c-text-secondary); font-size: 1.25rem; margin-bottom: 4px;
+  }
+  .bulk-drop.has-files .bulk-icon { background: var(--c-primary); color: var(--c-primary-text); }
+  .bulk-title { font-weight: 600; font-size: 1rem; color: var(--c-text); }
+  .bulk-sub { font-size: 0.85rem; color: var(--c-text-secondary); }
+
+  .bulk-list { display: grid; gap: 6px; margin-top: 14px; }
+  .bulk-item {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 0.84rem; color: var(--c-text);
+    background: var(--c-bg); border: 1px solid var(--c-border-light);
+    border-radius: var(--r-sm); padding: 7px 11px;
+  }
+  .bulk-item i { color: var(--c-success); }
+  .bulk-item .size { margin-left: auto; color: var(--c-text-secondary); font-size: 0.78rem; }
+
+  /* ── Casillas (modo avanzado) ── */
+  .slot-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    gap: 14px;
+  }
+  .slot {
+    border: 1px solid var(--c-border); border-radius: var(--r-md);
+    background: var(--c-white); padding: 16px;
+    display: grid; gap: 12px; align-content: start;
+    transition: border-color .15s ease;
+  }
+  .slot:hover { border-color: var(--c-accent); }
+  .slot-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .slot-name { font-weight: 600; font-size: 0.95rem; color: var(--c-text); line-height: 1.25; }
+  .slot-sheet {
+    font-size: 0.68rem; color: var(--c-text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--c-bg); border: 1px solid var(--c-border-light);
+    padding: 2px 6px; border-radius: var(--r-sm); white-space: nowrap;
+  }
+  .slot-hint { font-size: 0.8rem; color: var(--c-text-secondary); line-height: 1.45; margin: -4px 0 0; }
+
+  .slot-drop {
+    position: relative; display: flex; align-items: center; gap: 11px;
+    min-height: 58px; padding: 10px 12px;
+    border: 1.5px dashed var(--c-border); border-radius: var(--r-md);
+    background: var(--c-bg);
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .slot-drop input[type="file"] {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+  }
+  .slot-drop:hover { border-color: var(--c-accent); background: var(--c-accent-light); }
+  .slot-drop:focus-within, .slot-drop.dragover {
+    border-color: var(--c-primary); border-style: solid; background: var(--c-accent-light);
+  }
+
+  .slot-icon {
+    width: 34px; height: 34px; flex: none; display: grid; place-items: center;
+    border-radius: var(--r-sm); background: var(--c-border-light);
+    color: var(--c-text-secondary); font-size: 0.95rem;
+    transition: background .15s ease, color .15s ease;
+  }
+  .slot-text { min-width: 0; display: grid; gap: 2px; }
+  .slot-primary {
+    font-size: 0.86rem; font-weight: 600; color: var(--c-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .slot-secondary { font-size: 0.74rem; color: var(--c-text-secondary); }
+
+  .slot.is-filled { border-color: var(--c-primary); }
+  .slot.is-filled .slot-drop {
+    border-style: solid; border-color: var(--c-primary); background: var(--c-accent-light);
+  }
+  .slot.is-filled .slot-icon { background: var(--c-primary); color: var(--c-primary-text); }
+
+  .slot.is-error { border-color: var(--c-danger); }
+  .slot.is-error .slot-drop {
+    border-style: solid; border-color: var(--c-danger); background: var(--c-danger-bg);
+  }
+  .slot.is-error .slot-icon { background: var(--c-danger); color: #fff; }
+
+  .slot-clear {
+    position: relative; z-index: 2; margin-left: auto; flex: none;
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 1px solid var(--c-border); background: var(--c-white);
+    color: var(--c-text-secondary); cursor: pointer;
+    display: none; place-items: center; font-size: 0.72rem;
+    transition: background .15s ease, color .15s ease;
+  }
+  .slot-clear:hover { background: var(--c-danger); border-color: var(--c-danger); color: #fff; }
+  .slot.is-filled .slot-clear, .slot.is-error .slot-clear { display: grid; }
+
+  .slot-foot { font-size: 0.75rem; line-height: 1.45; }
+  .slot-aporta { color: var(--c-text-secondary); }
+  .slot-aporta::before { content: "→ "; color: var(--c-accent); font-weight: 700; }
+  .slot-error-msg { color: var(--c-danger); font-weight: 600; }
+
+  .slot-summary {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    font-size: 0.85rem; color: var(--c-text-secondary); margin: 4px 0 16px;
+  }
+  .slot-summary b { color: var(--c-text); }
+  .slot-progress {
+    height: 5px; border-radius: 999px; background: var(--c-border-light);
+    overflow: hidden; flex: 1 1 180px; min-width: 120px;
+  }
+  .slot-progress i {
+    display: block; height: 100%; width: 0%;
+    background: var(--c-primary); border-radius: 999px; transition: width .25s ease;
+  }
+
+  .problem-list { margin: 8px 0 0; padding-left: 18px; }
+  .problem-list li { margin-bottom: 4px; }
+
+  /* ── Interruptor de opción ── */
+  .opt-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px; margin: 4px 0 16px;
+    border: 1px solid var(--c-border); border-radius: var(--r-md);
+    background: var(--c-bg);
+  }
+  .opt-text { display: grid; gap: 2px; }
+  .opt-title { font-weight: 600; font-size: 0.92rem; color: var(--c-text); }
+  .opt-sub { font-size: 0.8rem; color: var(--c-text-secondary); }
+
+  .switch { position: relative; flex: none; display: inline-flex; cursor: pointer; }
+  .switch input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; margin: 0; cursor: pointer;
+  }
+  .switch-track {
+    width: 44px; height: 25px; border-radius: 999px;
+    background: var(--c-border); display: block;
+    transition: background .18s ease;
+  }
+  .switch-thumb {
+    position: absolute; top: 3px; left: 3px;
+    width: 19px; height: 19px; border-radius: 50%;
+    background: var(--c-white); box-shadow: 0 1px 3px rgba(0,0,0,.28);
+    transition: transform .18s ease;
+  }
+  .switch input:checked + .switch-track { background: var(--c-primary); }
+  .switch input:checked + .switch-track .switch-thumb { transform: translateX(19px); }
+  .switch input:focus-visible + .switch-track {
+    outline: 2px solid var(--c-accent); outline-offset: 2px;
+  }
+
+  [data-theme="dark"] .slot { background: var(--c-bg); }
+  [data-theme="dark"] .slot-clear { background: var(--c-bg); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slot, .slot-drop, .slot-icon, .slot-clear, .slot-progress i,
+    .bulk-drop, .mode-btn { transition: none; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <div class="card view-start">
-  <div class="card-title"><i class="fa-solid fa-chart-bar"></i> 1. Configuracion del Reporte
+  <div class="card-title"><i class="fa-solid fa-chart-bar"></i> Generar reporte de escucha social
     <div class="tooltip">
       <i class="fa-solid fa-circle-question"></i>
-      <span class="tooltip-text">Crea reportes de analisis automatizados a partir de archivos CSV.</span>
+      <span class="tooltip-text">Suelta los .xlsx de Meltwater y la app reconoce cada uno por su hoja. Usa el modo avanzado si quieres colocarlos a mano u omitir datos.</span>
     </div>
   </div>
-  <form action="/upload_csv" method="POST" enctype="multipart/form-data" id="reportForm">
+
+  <form action="{{ url_for('upload_meltwater') }}" method="POST" enctype="multipart/form-data" id="reportForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-    <div class="form-group">
-      <label class="form-label" for="template_name">Plantilla de reporte</label>
-      <select id="template_name" name="template_name" class="form-select" required>
-        {% if available_templates %}
-          {% for tpl in available_templates %}
-            <option value="{{ tpl }}" {% if tpl == default_template %}selected{% endif %}>{{ tpl }}</option>
-          {% endfor %}
-        {% else %}
-          <option value="" disabled selected>No hay plantillas disponibles</option>
-        {% endif %}
-      </select>
-      <label class="form-check" style="margin-top: 8px;">
-        <input type="checkbox" name="fallback_default" checked />
-        Usar plantilla predeterminada como respaldo
-      </label>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Archivo CSV</label>
-      <div class="upload-zone" id="drop-zone" onclick="document.getElementById('csv_file').click()">
-        <i class="fa-solid fa-cloud-arrow-up"></i>
-        <div class="upload-zone-title">Haz clic o arrastra un archivo</div>
-        <div class="upload-zone-hint" id="file-name-display">Selecciona un archivo CSV para generar el reporte</div>
-        <input type="file" id="csv_file" name="csv_file" accept=".csv" required style="display:none;" />
-      </div>
-    </div>
+    <input type="hidden" name="modo" id="modoInput" value="{{ modo or 'simple' }}">
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label" for="report_title">Nombre del reporte</label>
-        <input type="text" id="report_title" name="report_title" class="form-input" placeholder="Ej: Reporte Mensual Cliente X" />
+        <input type="text" id="report_title" name="report_title" class="form-input"
+               value="{{ report_title or '' }}" placeholder="Ej: Rendición de Cuentas" />
       </div>
       <div class="form-group">
-        <label class="form-label" for="wordcloud_file">Wordcloud (opcional)</label>
-        <input type="file" id="wordcloud_file" name="wordcloud_file" accept="image/png" class="form-input" style="padding: 8px;" />
+        <label class="form-label" for="unique_authors">Autores únicos</label>
+        <input type="text" inputmode="numeric" id="unique_authors" name="unique_authors"
+               class="form-input" value="{{ unique_authors or '' }}" placeholder="Ej: 12,480" />
       </div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label" for="description">Descripcion</label>
-      <textarea id="description" name="description" class="form-textarea" placeholder="Describe brevemente el contenido del reporte"></textarea>
+    <!-- ── Análisis de Meltwater: opcional, oculto por defecto ── -->
+    <div class="opt-row">
+      <label class="switch">
+        <input type="checkbox" id="usarAnalisis" {% if meltwater_analysis %}checked{% endif %}>
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </label>
+      <div class="opt-text">
+        <span class="opt-title">Añadir el análisis de Meltwater</span>
+        <span class="opt-sub">Da más contexto a la IA al redactar los textos del reporte.</span>
+      </div>
     </div>
 
-    <label class="form-check" style="margin-bottom: 20px;">
-      <input type="checkbox" name="solo_fecha" />
-      Incluir hora en gráfico de conversación
-    </label>
+    <div class="form-group" id="analisisWrap" hidden>
+      <label class="form-label" for="meltwater_analysis">Análisis de Meltwater</label>
+      <textarea id="meltwater_analysis" name="meltwater_analysis" class="form-textarea"
+                rows="7" placeholder="Pega aquí el análisis que genera Meltwater.">{{ meltwater_analysis or '' }}</textarea>
+    </div>
 
-    <button type="submit" class="btn btn-primary btn-block btn-lg" id="btnSubmit">
-      <i class="fa-solid fa-file-powerpoint"></i> Generar reporte
+    <div class="card-title" style="margin-top: 28px;">
+      <i class="fa-solid fa-file-excel"></i> Archivos de Meltwater
+    </div>
+
+    {% if problemas %}
+    <div class="flash-msg error" style="margin-bottom: 16px;">
+      <div>
+        <strong>Estos archivos no se pudieron usar:</strong>
+        <ul class="problem-list">
+          {% for p in problemas %}<li>{{ p }}</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="mode-switch" role="tablist" aria-label="Modo de carga">
+      <button type="button" class="mode-btn" id="modoSimple" role="tab"
+              aria-selected="true" aria-controls="panelSimple">
+        <i class="fa-solid fa-bolt"></i> Carga rápida
+      </button>
+      <button type="button" class="mode-btn" id="modoAvanzado" role="tab"
+              aria-selected="false" aria-controls="panelAvanzado">
+        <i class="fa-solid fa-sliders"></i> Avanzado
+      </button>
+    </div>
+
+    <!-- ── Modo simple: un solo buzón ── -->
+    <div id="panelSimple" role="tabpanel" aria-labelledby="modoSimple">
+      <div class="bulk-drop" id="bulkDrop">
+        <span class="bulk-icon" aria-hidden="true"><i class="fa-solid fa-arrow-up-from-bracket" id="bulkIcon"></i></span>
+        <span class="bulk-title" id="bulkTitle">Suelta aquí los archivos de Meltwater</span>
+        <span class="bulk-sub" id="bulkSub">o haz clic para elegirlos · varios .xlsx a la vez</span>
+        <input type="file" name="widget_files" id="bulkInput" accept=".xlsx" multiple
+               aria-label="Archivos de Meltwater" />
+      </div>
+      <div class="bulk-list" id="bulkList"></div>
+      <p class="slot-summary" style="margin-top:14px;">
+        Cada archivo se reconoce por el nombre de su hoja, así que da igual cómo se llame
+        el fichero o en qué orden los sueltes.
+      </p>
+    </div>
+
+    <!-- ── Modo avanzado: una casilla por widget ── -->
+    <div id="panelAvanzado" role="tabpanel" aria-labelledby="modoAvanzado" hidden>
+      <div class="slot-summary">
+        <span><b id="slotCount">0</b> de {{ slots | length }} archivos cargados — las casillas vacías no aparecen en el reporte</span>
+        <span class="slot-progress"><i id="slotBar"></i></span>
+      </div>
+
+      <div class="slot-grid">
+        {% for slot in slots %}
+        {% set err = errores.get(slot.key) if errores else None %}
+        <div class="slot {% if err %}is-error{% endif %}" data-slot="{{ slot.key }}">
+          <div class="slot-head">
+            <span class="slot-name">{{ slot.label }}</span>
+            <span class="slot-sheet" title="Nombre de la hoja dentro del .xlsx">{{ slot.sheet }}</span>
+          </div>
+          <p class="slot-hint">{{ slot.hint }}</p>
+
+          <div class="slot-drop">
+            <span class="slot-icon" aria-hidden="true">
+              <i class="fa-solid {% if err %}fa-triangle-exclamation{% else %}fa-arrow-up-from-bracket{% endif %}"></i>
+            </span>
+            <span class="slot-text">
+              <span class="slot-primary">{% if err %}Archivo no válido{% else %}Elegir archivo{% endif %}</span>
+              <span class="slot-secondary">{% if err %}Elige otro .xlsx{% else %}o arrástralo aquí · .xlsx{% endif %}</span>
+            </span>
+            <input type="file" name="{{ slot.field }}" accept=".xlsx"
+                   aria-label="{{ slot.label }}" {% if err %}aria-invalid="true"{% endif %} />
+            <button type="button" class="slot-clear" aria-label="Quitar archivo">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <div class="slot-foot">
+            {% if err %}
+              <span class="slot-error-msg">{{ err }}</span>
+            {% else %}
+              <span class="slot-aporta">{{ slot.aporta }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-block btn-lg" id="btnSubmit" style="margin-top: 24px;">
+      <i class="fa-solid fa-chart-line"></i> Generar reporte
     </button>
 
     <div id="mensaje-cargando" class="flash-msg info" style="display: none; margin-top: 16px;">
-      <i class="fa-solid fa-spinner fa-spin"></i> Procesando reporte... Esto puede tardar unos segundos.
+      <i class="fa-solid fa-spinner fa-spin"></i> Procesando archivos...
     </div>
   </form>
 </div>
 
 <script>
-  // File input display
-  const csvInput = document.getElementById('csv_file');
-  const fileDisplay = document.getElementById('file-name-display');
-  const dropZone = document.getElementById('drop-zone');
+(function () {
+  var modoInput = document.getElementById('modoInput');
+  var btnSimple = document.getElementById('modoSimple');
+  var btnAvanzado = document.getElementById('modoAvanzado');
+  var panelSimple = document.getElementById('panelSimple');
+  var panelAvanzado = document.getElementById('panelAvanzado');
 
-  csvInput.addEventListener('change', function(e) {
-    if (e.target.files.length > 0) {
-      fileDisplay.textContent = e.target.files[0].name;
-      dropZone.style.borderColor = 'var(--c-primary)';
+  function humanSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  // ── Cambio de modo ──
+  function setModo(modo, recordar) {
+    var avanzado = modo === 'avanzado';
+    modoInput.value = avanzado ? 'avanzado' : 'simple';
+    btnSimple.setAttribute('aria-selected', String(!avanzado));
+    btnAvanzado.setAttribute('aria-selected', String(avanzado));
+    panelSimple.hidden = avanzado;
+    panelAvanzado.hidden = !avanzado;
+
+    // Los inputs del panel oculto se desactivan para que el navegador no los
+    // envíe: si no, el servidor recibiría archivos de los dos modos a la vez.
+    panelSimple.querySelectorAll('input[type=file]').forEach(function (i) { i.disabled = avanzado; });
+    panelAvanzado.querySelectorAll('input[type=file]').forEach(function (i) { i.disabled = !avanzado; });
+
+    if (recordar) {
+      try { localStorage.setItem('reporte_modo_carga', modoInput.value); } catch (e) {}
     }
+  }
+
+  btnSimple.addEventListener('click', function () { setModo('simple', true); });
+  btnAvanzado.addEventListener('click', function () { setModo('avanzado', true); });
+
+  // El modo que manda el servidor gana (viene de un intento fallido); si no,
+  // se recupera la última preferencia del usuario.
+  var modoInicial = modoInput.value;
+  if (modoInicial !== 'avanzado') {
+    try { modoInicial = localStorage.getItem('reporte_modo_carga') || 'simple'; } catch (e) {}
+  }
+  setModo(modoInicial, false);
+
+  // ── Análisis de Meltwater (opcional) ──
+  var usarAnalisis = document.getElementById('usarAnalisis');
+  var analisisWrap = document.getElementById('analisisWrap');
+  var analisisTexto = document.getElementById('meltwater_analysis');
+
+  function toggleAnalisis() {
+    analisisWrap.hidden = !usarAnalisis.checked;
+    // Al apagar el interruptor se vacía el campo: dejar texto escondido y que
+    // aun así viajara al servidor sería una sorpresa desagradable.
+    if (!usarAnalisis.checked) analisisTexto.value = '';
+    else analisisTexto.focus();
+  }
+  usarAnalisis.addEventListener('change', toggleAnalisis);
+  analisisWrap.hidden = !usarAnalisis.checked;
+
+  // ── Buzón único ──
+  var bulkInput = document.getElementById('bulkInput');
+  var bulkDrop = document.getElementById('bulkDrop');
+  var bulkList = document.getElementById('bulkList');
+  var bulkTitle = document.getElementById('bulkTitle');
+  var bulkSub = document.getElementById('bulkSub');
+  var bulkIcon = document.getElementById('bulkIcon');
+
+  bulkInput.addEventListener('change', function () {
+    var files = [...(bulkInput.files || [])];
+    bulkDrop.classList.toggle('has-files', files.length > 0);
+    bulkIcon.className = files.length ? 'fa-solid fa-check' : 'fa-solid fa-arrow-up-from-bracket';
+    bulkTitle.textContent = files.length
+      ? files.length + (files.length === 1 ? ' archivo listo' : ' archivos listos')
+      : 'Suelta aquí los archivos de Meltwater';
+    bulkSub.textContent = files.length
+      ? 'Haz clic para cambiar la selección'
+      : 'o haz clic para elegirlos · varios .xlsx a la vez';
+
+    bulkList.innerHTML = files.map(function (f) {
+      return '<div class="bulk-item"><i class="fa-solid fa-file-excel"></i>' +
+             '<span>' + f.name + '</span><span class="size">' + humanSize(f.size) + '</span></div>';
+    }).join('');
   });
 
-  dropZone.addEventListener('dragover', function(e) {
-    e.preventDefault();
-    this.classList.add('dragover');
+  ['dragenter', 'dragover'].forEach(function (evt) {
+    bulkDrop.addEventListener(evt, function (e) { e.preventDefault(); bulkDrop.classList.add('dragover'); });
   });
-  dropZone.addEventListener('dragleave', function() {
-    this.classList.remove('dragover');
+  ['dragleave', 'drop'].forEach(function (evt) {
+    bulkDrop.addEventListener(evt, function () { bulkDrop.classList.remove('dragover'); });
   });
-  dropZone.addEventListener('drop', function(e) {
-    e.preventDefault();
-    this.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) {
-      csvInput.files = e.dataTransfer.files;
-      fileDisplay.textContent = e.dataTransfer.files[0].name;
-      dropZone.style.borderColor = 'var(--c-primary)';
+
+  // ── Casillas ──
+  var slots = [...document.querySelectorAll('.slot')];
+
+  function refreshSummary() {
+    var n = slots.filter(function (s) { return s.classList.contains('is-filled'); }).length;
+    document.getElementById('slotCount').textContent = n;
+    document.getElementById('slotBar').style.width = (n / slots.length * 100) + '%';
+  }
+
+  slots.forEach(function (slot) {
+    var input = slot.querySelector('input[type="file"]');
+    var drop = slot.querySelector('.slot-drop');
+    var icon = slot.querySelector('.slot-icon i');
+    var primary = slot.querySelector('.slot-primary');
+    var secondary = slot.querySelector('.slot-secondary');
+    var clear = slot.querySelector('.slot-clear');
+    var foot = slot.querySelector('.slot-foot');
+    var aportaOriginal = foot.innerHTML;
+
+    function render() {
+      var file = input.files && input.files[0];
+      if (file) {
+        slot.classList.remove('is-error');
+        slot.classList.add('is-filled');
+        icon.className = 'fa-solid fa-file-excel';
+        primary.textContent = file.name;
+        secondary.textContent = humanSize(file.size);
+        if (foot.querySelector('.slot-error-msg')) foot.innerHTML = aportaOriginal;
+      } else if (slot.classList.contains('is-error')) {
+        // El navegador no puede repoblar un input de archivo tras el POST, así
+        // que sin este caso el render inicial borraría el aviso del servidor.
+        icon.className = 'fa-solid fa-triangle-exclamation';
+        primary.textContent = 'Archivo no válido';
+        secondary.textContent = 'Elige otro .xlsx';
+      } else {
+        slot.classList.remove('is-filled');
+        icon.className = 'fa-solid fa-arrow-up-from-bracket';
+        primary.textContent = 'Elegir archivo';
+        secondary.textContent = 'o arrástralo aquí · .xlsx';
+      }
+      refreshSummary();
     }
+
+    input.addEventListener('change', render);
+    clear.addEventListener('click', function () { input.value = ''; render(); input.focus(); });
+
+    ['dragenter', 'dragover'].forEach(function (evt) {
+      drop.addEventListener(evt, function (e) { e.preventDefault(); drop.classList.add('dragover'); });
+    });
+    ['dragleave', 'drop'].forEach(function (evt) {
+      drop.addEventListener(evt, function () { drop.classList.remove('dragover'); });
+    });
+
+    render();
   });
 
-  // Loading state
-  document.getElementById('reportForm').addEventListener('submit', function() {
+  // ── Envío ──
+  document.getElementById('reportForm').addEventListener('submit', function (e) {
+    var hayArchivos = modoInput.value === 'avanzado'
+      ? slots.some(function (s) { return s.classList.contains('is-filled'); })
+      : (bulkInput.files && bulkInput.files.length > 0);
+
+    if (!hayArchivos) {
+      e.preventDefault();
+      if (window.appNotify) {
+        window.appNotify({ type: 'error', message: 'Carga al menos un archivo para generar el reporte.' });
+      }
+      return;
+    }
+
     document.getElementById('mensaje-cargando').style.display = 'flex';
-    document.getElementById('btnSubmit').disabled = true;
-    document.getElementById('btnSubmit').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
-    showLoading('Generando reporte...', 'Esto puede tardar dependiendo del tamano del archivo.');
+    var btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
   });
+})();
 </script>
 {% endblock %}

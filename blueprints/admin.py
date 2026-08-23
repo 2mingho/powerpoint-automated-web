@@ -1117,3 +1117,207 @@ def catalogo_prioridad_eliminar(prioridad_id):
     log_activity('task_priority_delete', f'Prioridad eliminada: {nombre}')
     flash(f'Prioridad "{nombre}" eliminada.', 'success')
     return redirect(url_for('admin.catalogo_list'))
+
+
+# ─────────────────────────────────────────────────────────────
+# Conexiones a proveedores de IA
+# ─────────────────────────────────────────────────────────────
+
+# Tarifas de referencia de Anthropic (USD por millon de tokens), para
+# precargar el formulario. Los precios de Groq y OpenAI no se incluyen: no
+# tenerlos verificados es mejor que arriesgar un coste inventado, asi que ahi
+# el administrador teclea la tarifa.
+PRECIOS_CONOCIDOS = {
+    'claude-opus-5': (5.00, 25.00),
+    'claude-opus-4-8': (5.00, 25.00),
+    'claude-sonnet-5': (3.00, 15.00),
+    'claude-sonnet-4-6': (3.00, 15.00),
+    'claude-haiku-4-5': (1.00, 5.00),
+    'claude-fable-5': (10.00, 50.00),
+}
+
+
+@admin_bp.route('/ia')
+@admin_required
+def ia_list():
+    from sqlalchemy import func
+    from models import AIProvider, AIUsage
+    from services import ai_provider as ia
+
+    conexiones = AIProvider.query.order_by(AIProvider.name).all()
+
+    # Consumo agregado por modelo. Se agrupa por modelo y no por conexion
+    # porque la pregunta es "cuanto me cuesta este modelo", y una conexion
+    # borrada no debe llevarse su historico por delante.
+    filas = (
+        db.session.query(
+            AIUsage.provider,
+            AIUsage.model,
+            func.count(AIUsage.id).label('llamadas'),
+            func.sum(AIUsage.tokens_in).label('tokens_in'),
+            func.sum(AIUsage.tokens_out).label('tokens_out'),
+            func.sum(AIUsage.cost_usd).label('coste'),
+            func.max(AIUsage.created_at).label('ultima'),
+        )
+        .group_by(AIUsage.provider, AIUsage.model)
+        .order_by(func.sum(AIUsage.cost_usd).desc())
+        .all()
+    )
+
+    fallos = dict(
+        db.session.query(AIUsage.model, func.count(AIUsage.id))
+        .filter(AIUsage.ok.is_(False))
+        .group_by(AIUsage.model).all()
+    )
+
+    consumo = [{
+        'provider': f.provider,
+        'model': f.model,
+        'llamadas': f.llamadas or 0,
+        'tokens_in': f.tokens_in or 0,
+        'tokens_out': f.tokens_out or 0,
+        'coste': f.coste or 0.0,
+        'ultima': f.ultima,
+        'fallos': fallos.get(f.model, 0),
+    } for f in filas]
+
+    totales = {
+        'llamadas': sum(c['llamadas'] for c in consumo),
+        'tokens_in': sum(c['tokens_in'] for c in consumo),
+        'tokens_out': sum(c['tokens_out'] for c in consumo),
+        'coste': sum(c['coste'] for c in consumo),
+    }
+
+    por_uso = (
+        db.session.query(
+            AIUsage.feature,
+            func.count(AIUsage.id),
+            func.sum(AIUsage.cost_usd),
+        ).group_by(AIUsage.feature).all()
+    )
+
+    return render_template('admin_ia.html',
+                           conexiones=conexiones,
+                           proveedores=ia.SUPPORTED_PROVIDERS,
+                           hay_fallback_env=bool(os.getenv('GROQ_API_KEY')),
+                           consumo=consumo,
+                           totales=totales,
+                           por_uso=por_uso,
+                           precios_conocidos=PRECIOS_CONOCIDOS)
+
+
+@admin_bp.route('/ia/guardar', methods=['POST'])
+@admin_required
+def ia_save():
+    from models import AIProvider
+    from services import ai_provider as ia
+
+    nombre = (request.form.get('name') or '').strip()
+    proveedor = (request.form.get('provider') or '').strip().lower()
+    modelo = (request.form.get('model') or '').strip()
+    clave = (request.form.get('api_key') or '').strip()
+    conexion_id = request.form.get('conexion_id')
+
+    def _precio(campo):
+        crudo = (request.form.get(campo) or '').strip().replace(',', '.')
+        try:
+            return max(0.0, float(crudo)) if crudo else 0.0
+        except ValueError:
+            return 0.0
+
+    precio_in = _precio('price_in_per_1m')
+    precio_out = _precio('price_out_per_1m')
+
+    if not nombre or not modelo:
+        flash('El nombre y el modelo son obligatorios.', 'error')
+        return redirect(url_for('admin.ia_list'))
+
+    if proveedor not in ia.SUPPORTED_PROVIDERS:
+        flash(f'Proveedor no soportado: {proveedor}.', 'error')
+        return redirect(url_for('admin.ia_list'))
+
+    if conexion_id:
+        conexion = AIProvider.query.get_or_404(int(conexion_id))
+        # Una clave vacia al editar significa "conserva la que ya estaba":
+        # asi se puede corregir el modelo sin volver a teclear el secreto.
+        if clave:
+            conexion.api_key = clave
+        conexion.name = nombre
+        conexion.provider = proveedor
+        conexion.model = modelo
+        conexion.price_in_per_1m = precio_in
+        conexion.price_out_per_1m = precio_out
+        accion, verbo = 'ai_provider_edit', 'actualizada'
+    else:
+        if not clave:
+            flash('La clave API es obligatoria al crear una conexion.', 'error')
+            return redirect(url_for('admin.ia_list'))
+        if AIProvider.query.filter_by(name=nombre).first():
+            flash(f'Ya existe una conexion llamada "{nombre}".', 'error')
+            return redirect(url_for('admin.ia_list'))
+        conexion = AIProvider(name=nombre, provider=proveedor, model=modelo,
+                              api_key=clave, created_by_id=current_user.id,
+                              price_in_per_1m=precio_in, price_out_per_1m=precio_out)
+        db.session.add(conexion)
+        accion, verbo = 'ai_provider_create', 'creada'
+
+    db.session.commit()
+    # La clave nunca entra en el registro de actividad.
+    log_activity(accion, f'Conexion IA {verbo}: {nombre} ({proveedor}/{modelo})')
+    flash(f'Conexion "{nombre}" {verbo}.', 'success')
+    return redirect(url_for('admin.ia_list'))
+
+
+@admin_bp.route('/ia/<int:conexion_id>/activar', methods=['POST'])
+@admin_required
+def ia_activate(conexion_id):
+    from models import AIProvider
+
+    conexion = AIProvider.query.get_or_404(conexion_id)
+    # Solo una conexion activa a la vez: es la que resuelve ai_provider.complete().
+    AIProvider.query.update({AIProvider.is_active: False})
+    conexion.is_active = True
+    db.session.commit()
+    log_activity('ai_provider_activate', f'Conexion IA activada: {conexion.name}')
+    flash(f'"{conexion.name}" es ahora la conexion activa.', 'success')
+    return redirect(url_for('admin.ia_list'))
+
+
+@admin_bp.route('/ia/<int:conexion_id>/desactivar', methods=['POST'])
+@admin_required
+def ia_deactivate(conexion_id):
+    from models import AIProvider
+
+    conexion = AIProvider.query.get_or_404(conexion_id)
+    conexion.is_active = False
+    db.session.commit()
+    log_activity('ai_provider_deactivate', f'Conexion IA desactivada: {conexion.name}')
+    flash(f'"{conexion.name}" desactivada. Las funciones de IA quedan en pausa.', 'success')
+    return redirect(url_for('admin.ia_list'))
+
+
+@admin_bp.route('/ia/<int:conexion_id>/probar', methods=['POST'])
+@admin_required
+def ia_test(conexion_id):
+    from models import AIProvider
+    from services import ai_provider as ia
+
+    conexion = AIProvider.query.get_or_404(conexion_id)
+    ok, mensaje = ia.test_connection(conexion.provider, conexion.model, conexion.api_key)
+    log_activity('ai_provider_test', f'Prueba de conexion IA {conexion.name}: {"ok" if ok else "fallo"}')
+    flash(f'{conexion.name}: {mensaje}', 'success' if ok else 'error')
+    return redirect(url_for('admin.ia_list'))
+
+
+@admin_bp.route('/ia/<int:conexion_id>/eliminar', methods=['POST'])
+@admin_required
+def ia_delete(conexion_id):
+    from models import AIProvider
+
+    conexion = AIProvider.query.get_or_404(conexion_id)
+    nombre = conexion.name
+    db.session.delete(conexion)
+    db.session.commit()
+    log_activity('ai_provider_delete', f'Conexion IA eliminada: {nombre}')
+    flash(f'Conexion "{nombre}" eliminada.', 'success')
+    return redirect(url_for('admin.ia_list'))

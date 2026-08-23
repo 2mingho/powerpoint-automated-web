@@ -102,6 +102,74 @@ class PptxTemplate(db.Model):
         return f"<PptxTemplate {self.name}>"
 
 
+class AIProvider(db.Model):
+    """Conexiones a proveedores de IA, configurables desde el panel.
+
+    Antes el unico proveedor era Groq y su clave vivia en el .env, asi que
+    cambiar de modelo o de proveedor exigia tocar el servidor. Aqui cada fila
+    es una conexion (proveedor + modelo + clave) que un administrador puede
+    anadir, editar o desactivar sin despliegue.
+
+    La clave se guarda tal cual porque el resto de secretos de la aplicacion
+    (SECRET_KEY, DATABASE_URL) ya viven en el mismo entorno de confianza; solo
+    un administrador llega a esta tabla y la clave nunca se manda al navegador.
+    """
+    __tablename__ = 'ai_providers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    provider = db.Column(db.String(50), nullable=False)   # groq | anthropic | openai
+    model = db.Column(db.String(150), nullable=False)
+    api_key = db.Column(db.Text, nullable=False)
+    is_active = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Precio por millon de tokens, en dolares. Se guarda por conexion y no en una
+    # tabla fija de precios porque las tarifas cambian y varian por proveedor:
+    # una lista escrita en el codigo envejece y calcula costes equivocados.
+    price_in_per_1m = db.Column(db.Float, default=0.0, nullable=False)
+    price_out_per_1m = db.Column(db.Float, default=0.0, nullable=False)
+
+    created_by = db.relationship('User')
+
+    def masked_key(self):
+        """Nunca se ensena la clave entera en la interfaz."""
+        if not self.api_key or len(self.api_key) < 8:
+            return '••••'
+        return f"{self.api_key[:4]}…{self.api_key[-4:]}"
+
+    def __repr__(self):
+        return f"<AIProvider {self.name} ({self.provider}/{self.model})>"
+
+
+class AIUsage(db.Model):
+    """Una fila por llamada al modelo: tokens y coste.
+
+    Sirve para responder «cuanto llevo gastado y en que modelo». Se guarda el
+    coste ya calculado ademas de los tokens porque el precio de la conexion
+    puede cambiar despues, y reevaluar el historico con la tarifa nueva daria
+    una cifra que nunca se pago.
+    """
+    __tablename__ = 'ai_usage'
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider_id = db.Column(db.Integer, db.ForeignKey('ai_providers.id', ondelete='SET NULL'),
+                            nullable=True, index=True)
+    provider = db.Column(db.String(50), nullable=False)
+    model = db.Column(db.String(150), nullable=False, index=True)
+    feature = db.Column(db.String(50), nullable=True)     # traduccion | insights | prueba
+    tokens_in = db.Column(db.Integer, default=0, nullable=False)
+    tokens_out = db.Column(db.Integer, default=0, nullable=False)
+    cost_usd = db.Column(db.Float, default=0.0, nullable=False)
+    ok = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    def __repr__(self):
+        return f"<AIUsage {self.model} in={self.tokens_in} out={self.tokens_out}>"
+
+
 class UnitLead(db.Model):
     """Quien lidera cada unidad, de forma directa.
 

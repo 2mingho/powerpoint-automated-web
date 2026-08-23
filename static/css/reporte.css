@@ -1,0 +1,365 @@
+/* ===========================================================================
+   reporte.css — Sistema visual del reporte de escucha social
+   ---------------------------------------------------------------------------
+   El reporte es un documento, no una pantalla de la aplicación: tiene su propia
+   superficie, su propia tipografía y su propia retícula. Por eso no hereda los
+   tokens de style.css, salvo el modo oscuro.
+
+   La paleta de datos está validada contra daltonismo y contraste:
+   - #a67c00  serie única (magnitud). El amarillo de marca #fadf25 da 1.34:1
+              sobre blanco, así que nunca pinta datos: solo acentúa sobre oscuro.
+   - #0f8a5f / #8a8f98 / #c2352f  escala divergente de sentimiento (dos polos y
+              un gris neutro en el medio). En deuteranopia los polos quedan en
+              ΔE 6.7, por eso cada porción lleva su porcentaje impreso.
+   =========================================================================== */
+
+.rep {
+  --r-ink:        #101317;
+  --r-ink-2:      #4b4f56;
+  --r-ink-3:      #82868e;
+  --r-surface:    #ffffff;
+  --r-surface-2:  #f7f5f0;
+  --r-line:       #e4dfd3;
+  --r-line-soft:  #f0ece2;
+
+  --r-gold:       #a67c00;
+  --r-gold-soft:  #f3e8ca;
+  --r-yellow:     #fadf25;
+
+  --r-pos:        #0f8a5f;
+  --r-neu:        #8a8f98;
+  --r-neg:        #c2352f;
+  --r-ghost:      #cdc7b8;
+
+  /* El boton primario necesita su propio par: --r-ink se invierte con el tema,
+     asi que un color de texto fijo encima deja la accion principal ilegible. */
+  --r-btn-bg:     #101317;
+  --r-btn-fg:     #ffffff;
+
+  --r-display: "Archivo", "Inter", system-ui, sans-serif;
+  --r-body:    "Source Sans 3", "Inter", system-ui, sans-serif;
+
+  --r-gap:   28px;
+  --r-band:  72px;
+
+  color: var(--r-ink);
+  font-family: var(--r-body);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+[data-theme="dark"] .rep {
+  --r-ink:        #f2f0ea;
+  --r-ink-2:      #bcbfc5;
+  --r-ink-3:      #8b8f97;
+  --r-surface:    #17191d;
+  --r-surface-2:  #1f2126;
+  --r-line:       #32353b;
+  --r-line-soft:  #26292e;
+  /* Pasos validados contra la superficie oscura #17191d, no invertidos a ojo:
+     oro con contraste >=3:1; polos del sentimiento con CVD ΔE 8.1 (deuteranopia)
+     y 15.9 en visión normal — la versión anterior se quedaba en 4.7 y hacía
+     indistinguibles positivo y negativo para un lector daltónico. */
+  --r-gold:       #b88a16;
+  --r-gold-soft:  #382f14;
+  --r-pos:        #33be83;
+  --r-neu:        #8b9198;
+  --r-neg:        #b83b34;
+  --r-ghost:      #6b7079;
+  --r-btn-bg:     #f2f0ea;
+  --r-btn-fg:     #101317;
+}
+
+/* ── Barra de acciones (no se imprime) ───────────────────────────────── */
+.rep-actions {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 14px 0 16px;
+  margin-bottom: 8px;
+  background: var(--r-surface);
+  border-bottom: 1px solid var(--r-line);
+}
+.rep-actions-meta { font-size: 14px; color: var(--r-ink-3); }
+.rep-actions-meta strong { color: var(--r-ink); font-weight: 600; }
+.rep-actions-btns { display: flex; gap: 10px; align-items: center; }
+
+.rep-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--r-display); font-size: 14px; font-weight: 600;
+  padding: 9px 16px; border-radius: 3px; cursor: pointer;
+  border: 1px solid var(--r-btn-bg); background: var(--r-btn-bg); color: var(--r-btn-fg);
+  transition: transform .12s ease, opacity .12s ease;
+}
+.rep-btn:hover { opacity: .88; }
+.rep-btn:active { transform: translateY(1px); }
+.rep-btn-ghost {
+  background: transparent; color: var(--r-ink); border-color: var(--r-line);
+}
+.rep-btn:focus-visible { outline: 2px solid var(--r-gold); outline-offset: 2px; }
+
+.rep-flag {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600;
+  padding: 5px 10px; border-radius: 999px;
+  background: var(--r-gold-soft); color: var(--r-gold);
+}
+
+/* ── Avisos ──────────────────────────────────────────────────────────── */
+.rep-warnings {
+  border-left: 3px solid var(--r-gold);
+  background: var(--r-surface-2);
+  padding: 14px 18px; margin-bottom: 32px;
+  font-size: 14px; color: var(--r-ink-2);
+}
+.rep-warnings b { color: var(--r-ink); }
+.rep-warnings ul { margin: 8px 0 0; padding-left: 18px; }
+.rep-warnings li { margin-bottom: 3px; }
+
+/* ── Portada ─────────────────────────────────────────────────────────── */
+.rep-cover {
+  background: #101317; color: #f4f2ed;
+  padding: var(--r-band) 56px;
+  margin-bottom: var(--r-band);
+  border-radius: 4px;
+}
+.rep-cover-mark {
+  font-family: var(--r-display); font-size: 12px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--r-yellow);
+  margin: 0;
+}
+.rep-cover-rule { width: 84px; height: 4px; background: var(--r-yellow); margin: 22px 0; }
+.rep-cover h1 {
+  font-family: var(--r-display);
+  font-size: clamp(32px, 5vw, 56px); font-weight: 700; line-height: 1.05;
+  letter-spacing: -.025em; margin: 0 0 14px; max-width: 18ch;
+  text-wrap: balance; color: #fff;
+}
+.rep-cover-meta { font-size: 17px; color: #b6b3ac; margin: 0; }
+
+/* ── Secciones ───────────────────────────────────────────────────────── */
+.rep-section { margin-bottom: var(--r-band); }
+.rep-q {
+  display: flex; align-items: baseline; gap: 12px;
+  border-top: 3px solid var(--r-gold);
+  padding-top: 14px; margin-bottom: 22px;
+}
+.rep-q-n {
+  font-family: var(--r-display); font-size: 12px; font-weight: 700;
+  letter-spacing: .14em; color: var(--r-gold);
+}
+.rep-q-t {
+  font-family: var(--r-display); font-size: 13px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--r-ink-3);
+}
+
+.rep-headline {
+  font-family: var(--r-display);
+  font-size: clamp(24px, 3.4vw, 38px); font-weight: 700;
+  letter-spacing: -.02em; line-height: 1.14;
+  margin: 0 0 12px; max-width: 24ch; text-wrap: balance;
+}
+.rep-take {
+  font-size: 18px; line-height: 1.55; color: var(--r-ink-2);
+  max-width: 68ch; margin: 0 0 var(--r-gap);
+}
+.rep-take b, .rep-headline b { color: var(--r-ink); font-weight: 700; }
+
+/* Campos editables */
+.rep-edit { border-radius: 3px; transition: background .15s ease; }
+.rep-edit:hover { background: var(--r-gold-soft); }
+.rep-edit:focus {
+  outline: 2px solid var(--r-gold); outline-offset: 3px;
+  background: var(--r-surface);
+}
+
+/* ── KPIs ────────────────────────────────────────────────────────────── */
+.rep-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--r-gap); margin-bottom: var(--r-gap);
+}
+.rep-kpi { border-top: 4px solid var(--r-gold); padding-top: 14px; }
+.rep-kpi-v {
+  font-family: var(--r-display);
+  font-size: clamp(30px, 4vw, 44px); font-weight: 700;
+  line-height: 1; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+.rep-kpi-l { font-size: 14px; color: var(--r-ink-2); margin-top: 8px; line-height: 1.35; }
+.rep-kpi-d {
+  font-size: 14px; font-weight: 700; margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.rep-up   { color: var(--r-pos); }
+.rep-down { color: var(--r-neg); }
+.rep-flat { color: var(--r-ink-3); }
+
+/* ── Bloques y retícula ──────────────────────────────────────────────── */
+.rep-grid    { display: grid; gap: var(--r-gap); }
+.rep-grid-2  { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.rep-grid-32 { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+@media (max-width: 860px) { .rep-grid-32 { grid-template-columns: 1fr; } }
+
+.rep-panel {
+  background: var(--r-surface-2);
+  border: 1px solid var(--r-line);
+  border-radius: 4px;
+  padding: 24px;
+}
+.rep-panel-plain { background: transparent; border: none; padding: 0; }
+
+.rep-label {
+  font-family: var(--r-display); font-size: 11.5px; font-weight: 700;
+  letter-spacing: .13em; text-transform: uppercase;
+  color: var(--r-ink-3); margin: 0 0 16px;
+}
+
+/* ── Tablas ──────────────────────────────────────────────────────────── */
+.rep-table-wrap { overflow-x: auto; }
+.rep-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.rep-table th {
+  text-align: left; font-family: var(--r-display);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--r-ink-3);
+  padding: 0 0 10px; border-bottom: 1px solid var(--r-line);
+  white-space: nowrap;
+}
+.rep-table td {
+  padding: 12px 0; border-bottom: 1px solid var(--r-line-soft);
+  vertical-align: top;
+}
+.rep-table td + td, .rep-table th + th { padding-left: 16px; }
+.rep-table .num {
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.rep-table .rank {
+  color: var(--r-gold); font-family: var(--r-display);
+  font-weight: 700; width: 22px;
+}
+.rep-table tbody tr:last-child td { border-bottom: none; }
+
+/* ── Gráficos ────────────────────────────────────────────────────────── */
+.rep-chart { position: relative; }
+.rep-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* El donut es cuadrado: sin tope se estira hasta el ancho del panel y desplaza
+   todo lo demás. Los demás gráficos sí aprovechan el ancho completo. */
+#chartSentiment svg { max-width: 260px; }
+.rep-chart text { font-family: var(--r-body); }
+
+.rep-legend {
+  display: flex; flex-wrap: wrap; gap: 18px;
+  font-size: 13.5px; color: var(--r-ink-2); margin-top: 14px;
+}
+.rep-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.rep-legend i { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+.rep-legend .dash {
+  width: 14px; height: 0; border-top: 2px dashed var(--r-ghost); border-radius: 0;
+}
+
+/* Tooltip propio — sin librería */
+.rep-tip {
+  position: absolute; pointer-events: none; opacity: 0;
+  transform: translate(-50%, -114%);
+  background: var(--r-ink); color: #fff;
+  padding: 8px 11px; border-radius: 3px;
+  font-size: 12.5px; line-height: 1.45; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(16,19,23,.22);
+  transition: opacity .12s ease;
+  z-index: 5;
+}
+[data-theme="dark"] .rep-tip { background: #000; border: 1px solid var(--r-line); }
+.rep-tip.on { opacity: 1; }
+.rep-tip b { font-variant-numeric: tabular-nums; }
+.rep-tip-sub { color: #b6b3ac; font-size: 11.5px; }
+
+/* ── Conclusiones ────────────────────────────────────────────────────── */
+.rep-close {
+  background: #101317; color: #e6e3dc;
+  padding: var(--r-band) 56px; border-radius: 4px;
+}
+.rep-close h2 {
+  font-family: var(--r-display); font-size: 30px; font-weight: 700;
+  color: #fff; margin: 0 0 32px; letter-spacing: -.02em;
+}
+.rep-close-list { display: grid; gap: 24px; max-width: 80ch; }
+.rep-close-item {
+  border-left: 3px solid var(--r-yellow); padding-left: 20px;
+  font-size: 18px; line-height: 1.5;
+}
+.rep-close .rep-edit:hover { background: rgba(250,223,37,.12); }
+.rep-close .rep-edit:focus { background: rgba(250,223,37,.16); outline-color: var(--r-yellow); }
+
+.rep-foot {
+  margin-top: 48px; padding-top: 18px;
+  border-top: 1px solid var(--r-line);
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  font-size: 13px; color: var(--r-ink-3);
+}
+
+/* ===========================================================================
+   Impresión / PDF
+   ---------------------------------------------------------------------------
+   El PDF sale del motor del navegador, así que el texto queda vectorial y
+   seleccionable. Se fuerza la paleta clara: un documento que se archiva o se
+   imprime no debe heredar el modo oscuro de la pantalla.
+   =========================================================================== */
+@page {
+  size: A4;
+  margin: 14mm 13mm;
+}
+
+@media print {
+  /* Cromo de la aplicación fuera */
+  .sidebar, .topbar, .rep-actions, .impersonation-banner,
+  .flash-msg, .loading-overlay, nav, footer.app-footer { display: none !important; }
+
+  html, body, .main-content, .content-area, .page-wrap {
+    margin: 0 !important; padding: 0 !important;
+    background: #fff !important; width: 100% !important; max-width: none !important;
+  }
+
+  .rep, [data-theme="dark"] .rep {
+    --r-ink: #101317; --r-ink-2: #3f434a; --r-ink-3: #6f737b;
+    --r-surface: #ffffff; --r-surface-2: #f7f5f0;
+    --r-line: #ddd8cc; --r-line-soft: #eeeae0;
+    --r-gold: #a67c00; --r-gold-soft: #f3e8ca;
+    --r-pos: #0f8a5f; --r-neu: #8a8f98; --r-neg: #c2352f; --r-ghost: #c4bfb1;
+    --r-band: 30px; --r-gap: 18px;
+    font-size: 10.5pt;
+  }
+
+  /* Los fondos oscuros y los rellenos de los gráficos deben imprimirse */
+  .rep-cover, .rep-close, .rep-kpi, .rep-panel,
+  .rep-chart svg, .rep-legend i, .rep-table {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .rep-cover  { padding: 34mm 16mm; margin-bottom: 0; border-radius: 0; break-after: page; }
+  .rep-close  { padding: 24px 22px; border-radius: 0; }
+
+  /* Una pregunta del arco narrativo por página */
+  .rep-section { break-before: page; break-inside: avoid; margin-bottom: 20px; }
+  .rep-section:first-of-type { break-before: auto; }
+
+  .rep-panel, .rep-kpi, .rep-chart, .rep-close-item, .rep-q { break-inside: avoid; }
+  .rep-table tr, .rep-table thead { break-inside: avoid; }
+  .rep-table thead { display: table-header-group; }
+
+  .rep-headline { font-size: 20pt; }
+  .rep-take     { font-size: 11pt; }
+  .rep-kpi-v    { font-size: 22pt; }
+  .rep-cover h1 { font-size: 30pt; }
+  .rep-close h2 { font-size: 18pt; }
+  .rep-close-item { font-size: 11pt; }
+
+  .rep-edit:hover, .rep-edit:focus { background: transparent !important; outline: none !important; }
+  .rep-tip { display: none !important; }
+  .rep-warnings { display: none !important; }
+  a { text-decoration: none; color: inherit; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rep-btn, .rep-edit, .rep-tip { transition: none !important; }
+}
