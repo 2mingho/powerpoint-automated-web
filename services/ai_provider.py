@@ -42,8 +42,26 @@ def get_active_provider():
         from models import AIProvider
         return AIProvider.query.filter_by(is_active=True).first()
     except Exception:
-        # Table missing (migration not applied) or no app context.
+        # Tabla ausente (migracion sin aplicar) o sin contexto de aplicacion.
+        #
+        # El rollback no es decorativo. En PostgreSQL, una consulta contra una
+        # tabla inexistente aborta la transaccion entera: a partir de ahi
+        # cualquier otra consulta de la misma sesion responde
+        # "current transaction is aborted". Devolver None sin deshacer dejaba
+        # la sesion envenenada y tumbaba la peticion completa mas adelante,
+        # al guardar el reporte. En SQLite no pasa, y por eso en local no se
+        # veia. Que falte el proveedor de IA debe degradar el reporte, no
+        # romperlo.
+        _rollback_quietly()
         return None
+
+
+def _rollback_quietly():
+    try:
+        from extensions import db
+        db.session.rollback()
+    except Exception:
+        pass
 
 
 def _row_to_conn(row):
@@ -157,6 +175,9 @@ def _record_usage(conn, tokens_in, tokens_out, feature, ok=True):
         ))
         db.session.commit()
     except Exception as e:
+        # Mismo motivo que en get_active_provider: un commit fallido deja la
+        # sesion inservible para el resto de la peticion.
+        _rollback_quietly()
         logger.warning('No se pudo registrar el consumo de IA: %s', e)
 
 

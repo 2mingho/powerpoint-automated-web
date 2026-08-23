@@ -20,7 +20,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-RUN mkdir -p scratch instance powerpoints \
+RUN chmod +x docker-entrypoint.sh \
+    && mkdir -p scratch instance powerpoints \
     && adduser --disabled-password --gecos "" appuser \
     && chown -R appuser:appuser /app
 
@@ -28,4 +29,4 @@ USER appuser
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers ${WEB_CONCURRENCY:-1} --threads ${GUNICORN_THREADS:-4} --timeout ${GUNICORN_TIMEOUT:-180} app:app"]
+CMD ["./docker-entrypoint.sh"]

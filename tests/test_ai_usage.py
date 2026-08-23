@@ -129,3 +129,24 @@ class TestAIUsage(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSesionNoSeEnvenena(unittest.TestCase):
+    """Si la tabla de proveedores no existe, la peticion debe seguir viva.
+
+    En produccion (PostgreSQL) una consulta contra una tabla inexistente
+    aborta la transaccion entera: las siguientes consultas de esa misma
+    sesion responden "current transaction is aborted". get_active_provider
+    tragaba el error y devolvia None, con lo que el fallo no se veia hasta
+    mas adelante, al guardar el reporte, y la peticion moria con un 500.
+    SQLite no se comporta asi, y por eso en local nunca se reprodujo.
+    """
+
+    def test_falta_de_tabla_hace_rollback(self):
+        with app_module.app.app_context():
+            with patch.object(db.session, 'rollback') as rollback:
+                with patch('models.AIProvider.query') as query:
+                    query.filter_by.side_effect = RuntimeError('relation "ai_providers" does not exist')
+                    self.assertIsNone(ai_provider.get_active_provider())
+                self.assertTrue(rollback.called,
+                                'un fallo consultando el proveedor debe deshacer la transaccion')
