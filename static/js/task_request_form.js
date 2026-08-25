@@ -37,14 +37,23 @@ document.addEventListener('DOMContentLoaded', function () {
     if (aviso) aviso.textContent = '';
   }
 
+  // ?destino=solicitud deja fuera las unidades propias. Antes se ofrecian
+  // todas y elegir la tuya solo fallaba al pulsar Enviar, con el formulario ya
+  // relleno.
   function cargarUnidades() {
     if (!selArea) return;
     selArea.innerHTML = '<option value="">Cargando...</option>';
-    fetch('/api/areas')
+    if (btnEnviar) btnEnviar.disabled = true;
+    fetch('/api/areas?destino=solicitud')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.success || !Array.isArray(data.areas)) {
           selArea.innerHTML = '<option value="">No se pudieron cargar las unidades</option>';
+          return;
+        }
+        if (!data.areas.length) {
+          selArea.innerHTML = '<option value="">No hay otra unidad a la que solicitar</option>';
+          if (aviso) aviso.textContent = 'Ya llevas todas las unidades registradas: crea la tarea directamente en vez de solicitarla.';
           return;
         }
         selArea.innerHTML = '<option value="">Selecciona unidad...</option>';
@@ -54,6 +63,7 @@ document.addEventListener('DOMContentLoaded', function () {
           o.textContent = a.name;
           selArea.appendChild(o);
         });
+        if (btnEnviar) btnEnviar.disabled = false;
       })
       .catch(function () {
         selArea.innerHTML = '<option value="">Error de conexión</option>';

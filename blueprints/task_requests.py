@@ -1,18 +1,59 @@
 """Blueprint for cross-area task requests."""
 from datetime import datetime, date
 from flask import Blueprint, render_template, request, jsonify
+from sqlalchemy import or_
 from flask_login import login_required, current_user
 from extensions import db
 from models import User, Area, Task, TaskWatcher, TaskRequest, UnitLead
-from services.alcance import alcance_unidades, ambito_unidades
+from services.alcance import alcance_unidades, ambito_unidades, unidades_lideradas
 from services.notifications import notify_user, notify_many
 from services.clock import today_local
 from services.catalogo import (prioridades_validas, prioridad_por_defecto,
                                estado_inicial)
 from blueprints.admin import log_activity
-from blueprints.tasks import task_access_required, _assignee_in_current_unit
+from blueprints.tasks import task_access_required
 
 task_requests_bp = Blueprint('task_requests', __name__, template_folder='../templates')
+
+
+# ─────────────────────────────────────────────────────────────
+# A quien se puede solicitar, y quien resuelve
+# ─────────────────────────────────────────────────────────────
+
+def _unidades_propias(user):
+    """Unidades a las que no tiene sentido solicitarse trabajo a uno mismo.
+
+    Antes se usaba ambito_unidades() para todos. Para un admin ese ambito es la
+    empresa entera, asi que la regla le cerraba *todas* las unidades: un admin
+    no podia enviar ni una solicitud, que es justo lo que se veia desde fuera
+    como "el modulo no deja enviar solicitudes". Un admin solo se excluye la
+    suya y las que lidera de verdad.
+    """
+    if getattr(user, 'is_admin', False):
+        unidades = set(unidades_lideradas(user))
+    else:
+        unidades = set(ambito_unidades(user))
+    propia = getattr(user, 'area_id', None)
+    if propia is not None:
+        unidades.add(propia)
+    return unidades
+
+
+def _resolutores(area_id):
+    """Quien puede aceptar o rechazar lo que llega a esa unidad.
+
+    Son sus lideres, y si no tiene ninguno, los administradores. Antes la falta
+    de lider era un 400 que cortaba el envio: una unidad sin fila en unit_leads
+    —lo normal en una base recien migrada— dejaba la solicitud imposible de
+    enviar en vez de imposible de aceptar. Ahora la solicitud viaja y la
+    resuelve quien administra, que ya tenia permiso para hacerlo.
+    """
+    lideres = User.query.join(
+        UnitLead, UnitLead.user_id == User.id
+    ).filter(UnitLead.area_id == area_id, User.is_active.is_(True)).all()
+    if lideres:
+        return lideres
+    return User.query.filter(User.role == 'admin', User.is_active.is_(True)).all()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -36,7 +77,17 @@ def task_requests_page():
 @task_requests_bp.route('/api/areas')
 @login_required
 def api_areas():
+    """Unidades para los desplegables.
+
+    Con ?destino=solicitud devuelve solo aquellas a las que el usuario puede
+    solicitar trabajo. El desplegable ofrecia todas, incluidas las suyas, y el
+    error solo aparecia despues de rellenar el formulario y pulsar enviar: la
+    lista y la regla del servidor decian cosas distintas.
+    """
     areas = Area.query.order_by(Area.name).all()
+    if request.args.get('destino') == 'solicitud':
+        propias = _unidades_propias(current_user)
+        areas = [a for a in areas if a.id not in propias]
     return jsonify({
         'success': True,
         'areas': [{'id': a.id, 'name': a.name} for a in areas],
@@ -50,9 +101,9 @@ def api_areas():
 @task_requests_bp.route('/api/task-requests', methods=['POST'])
 @task_access_required
 def api_task_requests_create():
-    if not current_user.area_id:
-        return jsonify({'success': False, 'error': 'Tu usuario no tiene unidad asignada.'}), 400
-
+    # Ya no se exige unidad de origen. Antes se cortaba aqui, asi que quien no
+    # la tuviera asignada no podia enviar ni una solicitud: la culpa era de un
+    # dato de administracion, no de lo que estaba pidiendo.
     data = request.get_json(force=True) or {}
     title = (data.get('title') or '').strip()
     if not title:
@@ -65,9 +116,10 @@ def api_task_requests_create():
         return jsonify({'success': False, 'error': 'Área destino no válida.'}), 400
 
     # Quien lleva varias unidades no deberia solicitarse trabajo a si mismo en
-    # ninguna de ellas, ni un director a las de sus managers.
-    if to_area_id in ambito_unidades(current_user):
-        return jsonify({'success': False, 'error': 'No puedes solicitar a una unidad que ya llevas.'}), 400
+    # ninguna de ellas, ni un director a las de sus managers. Para un admin la
+    # regla se limita a la suya y a las que lidera: ver el resto no es llevarlo.
+    if to_area_id in _unidades_propias(current_user):
+        return jsonify({'success': False, 'error': 'Esa unidad ya es tuya. Elige otra o crea la tarea directamente.'}), 400
 
     to_area = Area.query.get(to_area_id)
     if not to_area:
@@ -77,14 +129,14 @@ def api_task_requests_create():
     if priority not in prioridades_validas():
         return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
 
-    # Check destination area has at least one lead
-    # El booleano is_area_lead solo sabia de la unidad a la que uno pertenece.
-    # Ahora el liderazgo es explicito: se pregunta a unit_leads.
-    dest_leads = db.session.query(UnitLead.user_id).join(
-        User, User.id == UnitLead.user_id
-    ).filter(UnitLead.area_id == to_area_id, User.is_active.is_(True)).count()
-    if dest_leads == 0:
-        return jsonify({'success': False, 'error': 'La unidad destino no tiene líder asignado.'}), 400
+    # Quien va a resolverla: sus lideres, o los administradores si no tiene
+    # ninguno. Solo se corta el envio cuando no queda nadie en absoluto.
+    destinatarios = _resolutores(to_area_id)
+    if not destinatarios:
+        return jsonify({
+            'success': False,
+            'error': 'Esa unidad no tiene a nadie que pueda recibir solicitudes. Avisa a un administrador.',
+        }), 400
 
     due_date_str = data.get('due_date', '').strip()
     parsed_due = None
@@ -105,13 +157,13 @@ def api_task_requests_create():
         to_area_id=to_area_id,
     )
     db.session.add(req)
+    # Sin flush la solicitud todavia no tiene id, y tanto la notificacion como
+    # el registro de actividad guardaban entity_id nulo: el aviso no podia
+    # llevar a ninguna parte.
+    db.session.flush()
 
-    # Notify destination leads
-    dest_leads_list = User.query.join(
-        UnitLead, UnitLead.user_id == User.id
-    ).filter(UnitLead.area_id == to_area_id, User.is_active.is_(True)).all()
     notify_many(
-        [u.id for u in dest_leads_list],
+        [u.id for u in destinatarios],
         kind='request_received',
         title=f'Solicitud de tarea: {title}',
         body=f'{current_user.username} ha solicitado una tarea a tu unidad.',
@@ -136,15 +188,20 @@ def api_task_requests_create():
 @login_required
 def api_task_requests_list():
     unidades = ambito_unidades(current_user)
-    if not unidades:
-        return jsonify({'success': True, 'requests': []})
-
     direction = request.args.get('direction', 'received')
     status_filter = request.args.get('status', '').strip()
 
     if direction == 'sent':
-        query = TaskRequest.query.filter(TaskRequest.from_area_id.in_(unidades))
+        # Lo que uno envio es suyo aunque su unidad cambie despues, y aunque no
+        # tenga unidad. Filtrar solo por from_area_id dejaba "Enviadas" vacia
+        # justo para quien acababa de mandar la solicitud.
+        condiciones = [TaskRequest.requester_id == current_user.id]
+        if unidades:
+            condiciones.append(TaskRequest.from_area_id.in_(unidades))
+        query = TaskRequest.query.filter(or_(*condiciones))
     else:
+        if not unidades:
+            return jsonify({'success': True, 'requests': []})
         query = TaskRequest.query.filter(TaskRequest.to_area_id.in_(unidades))
 
     if status_filter and status_filter in TaskRequest.VALID_STATUSES:
@@ -152,6 +209,38 @@ def api_task_requests_list():
 
     requests = query.order_by(TaskRequest.created_at.desc()).all()
     return jsonify({'success': True, 'requests': [r.to_dict() for r in requests]})
+
+
+# ─────────────────────────────────────────────────────────────
+# Quien puede quedarse la tarea
+# ─────────────────────────────────────────────────────────────
+
+@task_requests_bp.route('/api/task-requests/<int:request_id>/assignees')
+@task_access_required
+def api_task_requests_assignees(request_id):
+    """Gente de la unidad destino, que es la unica a la que se puede asignar.
+
+    El modal de aceptar llenaba el desplegable con /api/team/tasks/filters, que
+    devuelve el equipo de quien mira, no el de la unidad destino. Quien lidera
+    dos unidades veia las dos mezcladas y un admin veia la empresa entera; al
+    confirmar, el servidor rechazaba con "el asignado debe pertenecer a la
+    unidad destino" sin que hubiera forma de saber cual servia.
+    """
+    req = TaskRequest.query.get_or_404(request_id)
+
+    if not current_user.is_admin and req.to_area_id not in alcance_unidades(current_user):
+        return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
+
+    usuarios = User.query.filter(
+        User.area_id == req.to_area_id, User.is_active.is_(True)
+    ).order_by(User.username).all()
+
+    return jsonify({
+        'success': True,
+        'area_name': req.to_area.name if req.to_area else '',
+        'due_date': req.due_date.isoformat() if req.due_date else '',
+        'users': [{'id': u.id, 'username': u.username} for u in usuarios],
+    })
 
 
 # ─────────────────────────────────────────────────────────────
