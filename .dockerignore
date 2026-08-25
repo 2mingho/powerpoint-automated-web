@@ -1,0 +1,62 @@
+# Que NO entra en la imagen.
+#
+# El Dockerfile hace `COPY . .` y Docker no lee .gitignore: sin este fichero la
+# imagen se llevaba dentro el .env —con el SECRET_KEY—, las bases SQLite de
+# desarrollo con sus hashes de contrasena, y el venv local entero. Un
+# SECRET_KEY dentro de la imagen no es una fuga cualquiera: con el se firman
+# las cookies de sesion, asi que quien pueda hacer pull de la imagen se
+# autentica como cualquier usuario, administradores incluidos.
+#
+# La lista es de exclusion y no de inclusion a proposito: un fichero nuevo del
+# codigo entra solo en la imagen, y olvidarse de anadirlo aqui no rompe el
+# despliegue. Lo que se excluye son categorias estables —secretos, entornos
+# locales, artefactos— que no crecen sin que alguien se de cuenta.
+
+# ─── Secretos ───
+.env
+.env.*
+!.env.example
+
+# ─── Entorno local de Python ───
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ─── Bases de datos y sus ficheros laterales ───
+# En produccion la aplicacion rechaza arrancar contra SQLite, asi que estas
+# copias no llegarian a usarse; se excluyen porque contienen datos reales de
+# desarrollo, no porque estorben.
+instance/
+*.db
+*.db-shm
+*.db-wal
+*.db.bak*
+
+# ─── Artefactos de ejecucion ───
+# scratch/ y powerpoints/ los crea el Dockerfile vacios; lo que haya aqui en
+# local es basura de pruebas.
+scratch/
+*.log
+
+# ─── Historia y herramientas ───
+.git/
+.github/
+.gitignore
+.claude/
+_archive/
+
+# ─── Documentacion y utilidades de escritorio ───
+docs/
+*.md
+setup_env.bat
+setup_env.sh
+
+# ─── Pruebas ───
+# No se ejecutan dentro del contenedor: de eso se encarga el CI antes de
+# construir la imagen.
+tests/

@@ -157,6 +157,25 @@ login_manager.init_app(app)
 csrf.init_app(app)
 limiter.init_app(app)
 
+# SEC-05 (continuacion). El contador de flask-limiter con "memory://" vive
+# dentro de cada proceso, asi que con N workers de Gunicorn cada limite se
+# multiplica por N: los 5 intentos de login por minuto se convierten en 5*N y
+# la proteccion se diluye sin que nada lo diga. Antes esto solo estaba
+# advertido en un comentario, que es exactamente donde no se lee el dia que
+# alguien sube WEB_CONCURRENCY para aguantar carga.
+#
+# Se falla el arranque, igual que con SQLite en produccion y con la contrasena
+# de admin por defecto: la aplicacion no se queda a medio proteger en silencio.
+_WORKERS = _env_int('WEB_CONCURRENCY', 1)
+if (_is_production_mode() and _WORKERS > 1
+        and os.environ.get('RATELIMIT_STORAGE_URI', 'memory://').startswith('memory://')):
+    raise RuntimeError(
+        f"Startup blocked: WEB_CONCURRENCY={_WORKERS} con RATELIMIT_STORAGE_URI en memoria. "
+        "Cada worker llevaria su propio contador y el limite de intentos de login se "
+        "multiplicaria por el numero de workers. Define RATELIMIT_STORAGE_URI con un "
+        "backend compartido (redis://...) o deja WEB_CONCURRENCY en 1."
+    )
+
 # Un CSS y un JS no son trafico que haya que limitar, pero contaban igual: solo
 # entre esos dos, cada carga de /tasks gastaba dos peticiones de la cuota.
 limiter.exempt(app.view_functions['static'])
@@ -178,7 +197,7 @@ if _is_production_mode():
 # Security headers via Talisman (CSP, HSTS, X-Frame-Options)
 # Using 'unsafe-inline' for scripts/styles since templates use inline code extensively
 # NOTE: Do NOT use content_security_policy_nonce_in — it causes browsers to ignore 'unsafe-inline'
-Talisman(app,
+talisman = Talisman(app,
          force_https=_is_production_mode(),
          permissions_policy={
              'camera': '()',
@@ -583,12 +602,41 @@ def schema_check_command():
             click.echo('  Revisa la lista de arriba antes de aplicar ninguna migracion.')
 
 
+def _es_comando_de_migracion():
+    """Si este proceso es un `flask db ...` y no un servidor.
+
+    Alembic importa la aplicacion para tener contexto, y al importarla se
+    ejecutaban las tareas de arranque: sembrar el admin consulta la tabla
+    users. Sobre una base vacia esa consulta falla —todavia no existe ninguna
+    tabla— y tumba el propio comando que iba a crearlas, antes de aplicar una
+    sola migracion.
+
+    El efecto era que la aplicacion no podia inicializar una base nueva: ni un
+    entorno de pruebas, ni un despliegue en limpio, ni restaurar una copia de
+    seguridad sobre una base vacia. En la de produccion no se veia porque sus
+    tablas ya existian de antes, creadas por create_all en su dia.
+
+    El comentario de mas abajo ya describia esta necesidad, pero dependia de
+    que quien lanzara el comando recordase exportar SKIP_STARTUP_TASKS, y el
+    entrypoint del contenedor no lo hacia. Deducirlo quita ese requisito.
+    """
+    import sys
+    if len(sys.argv) < 2 or sys.argv[1] != 'db':
+        return False
+
+    # Cubre las dos formas de invocarlo: el ejecutable `flask` (lo que usa el
+    # contenedor) y `python -m flask` (lo habitual en local y en el CI), donde
+    # argv[0] apunta al __main__.py del propio paquete.
+    invocacion = sys.argv[0].replace(os.sep, '/')
+    return invocacion.endswith('/flask') or invocacion == 'flask' or '/flask/' in invocacion
+
+
 # Las tareas de arranque (crear esquema, sembrar admin, podar, log de estado)
 # se saltan cuando la app se importa solo como contenedor de contexto: los
 # comandos `flask db ...` necesitan una app sin efectos secundarios sobre el
 # esquema, o el autogenerate compara contra tablas que el propio arranque acaba
 # de crear.
-SKIP_STARTUP_TASKS = _env_bool('SKIP_STARTUP_TASKS', False)
+SKIP_STARTUP_TASKS = _env_bool('SKIP_STARTUP_TASKS', False) or _es_comando_de_migracion()
 
 if not SKIP_STARTUP_TASKS and not _startup_db_writes_allowed():
     _safe_uri = app.config['SQLALCHEMY_DATABASE_URI']
@@ -704,8 +752,15 @@ def clean_scratch_folder():
         import time
         current_time = time.time()
         one_hour_ago = current_time - 3600
-        
+
         for file in os.listdir(folder):
+            # El cerrojo que reparte esta misma limpieza entre los workers vive
+            # aqui dentro. Borrarlo no libera nada —el flock va con el
+            # descriptor, no con el nombre— pero deja que el siguiente proceso
+            # cree otro inodo y se lleve un segundo cerrojo: volverian a barrer
+            # dos a la vez, que es justo lo que el cerrojo evita.
+            if file == '.limpieza.lock':
+                continue
             file_path = os.path.join(folder, file)
             try:
                 # Only delete files/folders older than 1 hour
@@ -720,8 +775,49 @@ def clean_scratch_folder():
         app.logger.error(f"Error al limpiar la carpeta scratch: {e}")
 
 
+def _tomar_cerrojo_de_limpieza():
+    """Intenta quedarse con la limpieza para este proceso.
+
+    Gunicorn arranca N workers y cada uno importaba este modulo, asi que salian
+    N hilos barriendo la misma carpeta compartida: trabajo repetido y, peor,
+    dos procesos borrando el mismo fichero a la vez. El error resultante lo
+    tragaba el `except Exception: continue` de clean_scratch_folder, de modo
+    que la carrera no se veia por ningun lado.
+
+    El cerrojo es un flock sobre un fichero del propio volumen: lo consigue un
+    solo proceso, y el sistema lo suelta solo si ese proceso muere, sin dejar
+    un fichero rancio que bloquee la limpieza para siempre. Se guarda el
+    descriptor en un global para que el recolector no lo cierre y libere el
+    cerrojo por su cuenta.
+    """
+    global _DESCRIPTOR_CERROJO_LIMPIEZA
+    try:
+        import fcntl
+    except ImportError:
+        # Sin flock (Windows) no hay nada que coordinar: en local corre un
+        # unico proceso.
+        return True
+
+    try:
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        ruta = os.path.join(app.config['UPLOAD_FOLDER'], '.limpieza.lock')
+        descriptor = os.open(ruta, os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+
+    _DESCRIPTOR_CERROJO_LIMPIEZA = descriptor
+    return True
+
+
+_DESCRIPTOR_CERROJO_LIMPIEZA = None
+
+
 def _schedule_background_cleanup():
     """Start a background thread that cleans scratch/ every 30 minutes."""
+    if not _tomar_cerrojo_de_limpieza():
+        return
+
     def _run():
         while True:
             import time
@@ -1685,6 +1781,41 @@ def download_csv_summary(file_id):
         return send_file(file_path, as_attachment=True, download_name=f"analisis_resumen_{safe_id}.csv")
     else:
         abort(404)
+
+# ─────────────────────────────────────────────────────────────
+# Sonda de salud
+# ─────────────────────────────────────────────────────────────
+
+@app.route('/healthz')
+@csrf.exempt
+@limiter.exempt
+@talisman(force_https=False)
+def healthz():
+    """Si el proceso puede atender y hablar con la base.
+
+    Sin esto el orquestador solo sabe si el puerto acepta conexiones, que es
+    verdad desde el primer instante y sigue siendolo con la base caida. Como el
+    arranque aplica migraciones antes de levantar los workers, tambien hace
+    falta para distinguir "todavia arrancando" de "roto".
+
+    Se consulta la base de verdad —un SELECT 1— en vez de responder que si a
+    secas: un proceso vivo con la conexion perdida es justo el caso que hay que
+    sacar del balanceador.
+
+    Exenta de tres cosas por necesidad: de CSRF y del limitador porque la sonda
+    no trae sesion ni cookies, y de force_https porque quien la llama es el
+    propio contenedor por HTTP contra 127.0.0.1; sin la exencion recibiria un
+    301 y lo leeria como fallo. No expone version ni detalles del error: es un
+    punto sin autenticar.
+    """
+    try:
+        db.session.execute(text('SELECT 1'))
+    except Exception as e:
+        app.logger.error(f"[healthz] base inaccesible: {e}")
+        return jsonify({'status': 'error', 'database': 'unreachable'}), 503
+
+    return jsonify({'status': 'ok'}), 200
+
 
 # ─────────────────────────────────────────────────────────────
 # Centralized Error Handlers (HTML for browser, JSON for AJAX)

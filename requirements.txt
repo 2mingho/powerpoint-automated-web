@@ -1,21 +1,54 @@
-Flask
-Flask-Login
-Flask-SQLAlchemy
-Flask-Migrate
-Flask-Limiter
-Flask-WTF
-flask-talisman
-python-dotenv
-requests>=2.32,<2.33
-pandas
-matplotlib
-python-pptx
-babel
-wordcloud
-gunicorn
-SQLAlchemy
-openpyxl
-chardet>=5,<6
-xlrd
-APScheduler
-psycopg2-binary
+# Versiones fijas a proposito.
+#
+# Sin fijarlas, dos construcciones de la misma imagen en fechas distintas
+# instalan dependencias distintas: un despliegue puede romperse sin que nadie
+# haya tocado el codigo, y no queda forma de volver a la combinacion que
+# funcionaba. Estas son las versiones con las que pasa la bateria de pruebas.
+#
+# Subirlas es un cambio deliberado: se edita el numero, corre el CI y se ve si
+# algo se rompe, en vez de descubrirlo en produccion.
+#
+# Lo que esto NO cubre: las dependencias transitivas siguen sueltas. El
+# siguiente paso, cuando haga falta reproducibilidad total, es generar un
+# fichero bloqueado con pip-compile (pip-tools) a partir de este.
+
+# ─── Web ───
+Flask==3.1.3
+Flask-Login==0.6.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
+Flask-Limiter==4.1.1
+# Cliente de Redis. No lo importa el codigo: lo carga flask-limiter cuando
+# RATELIMIT_STORAGE_URI apunta a redis://. Sin el, definir esa variable —que es
+# justo lo que hay que hacer para tener mas de un worker— hace que la
+# aplicacion no arranque. La salida de emergencia tiene que estar montada
+# antes de necesitarla, no despues.
+redis==8.1.0
+Flask-WTF==1.3.0
+flask-talisman==1.1.0
+gunicorn==26.0.0
+
+# ─── Base de datos ───
+SQLAlchemy==2.0.51
+psycopg2-binary==2.9.12
+
+# ─── Datos y ficheros ───
+pandas==3.0.3
+openpyxl==3.1.5
+xlrd==2.0.2
+chardet==5.2.0
+
+# ─── Reportes ───
+python-pptx==1.0.2
+matplotlib==3.11.0
+wordcloud==1.9.6
+babel==2.18.0
+
+# ─── Utilidades ───
+python-dotenv==1.2.2
+requests==2.32.5
+
+# APScheduler estaba aqui sin que nada lo importe: la limpieza periodica la
+# hace un hilo propio en app.py. Se retira porque una dependencia que no se usa
+# sigue entrando en la imagen y sigue apareciendo en las auditorias de
+# vulnerabilidades.
