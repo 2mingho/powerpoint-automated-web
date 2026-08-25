@@ -22,9 +22,10 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/loading-overlay.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tour.css') }}" />
     {% block head %}{% endblock %}
   </head>
-  <body>
+  <body{% if current_user.is_authenticated and not current_user.tour_completed_at %} data-tour-pendiente="1"{% endif %}>
     {% if session.get('impersonating_from') %}
     <div class="impersonation-banner">
       <i class="fa-solid fa-user-secret"></i>
@@ -232,6 +233,9 @@
           </div>
           <div class="topbar-dropdown">
             <a href="{{ url_for('mis_reportes') }}"><i class="fa-solid fa-folder-open"></i> Mis Reportes</a>
+            {# Sin esta entrada el tour seria irrepetible, y quien lo cerrara sin
+               querer en su primer minuto se quedaria sin el para siempre. #}
+            <a href="#" data-iniciar-tour><i class="fa-solid fa-compass"></i> Ver el tour</a>
             {% if current_user.role == 'admin' %}
             <a href="{{ url_for('admin.dashboard') }}"><i class="fa-solid fa-gear"></i> Admin Panel</a>
             {% endif %}
@@ -284,6 +288,7 @@
     </script>
     {% if current_user.is_authenticated %}
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tour.js') }}"></script>
     {% endif %}
     {% block scripts %}{% endblock %}
   </body>

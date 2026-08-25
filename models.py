@@ -203,6 +203,9 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     allowed_tools = db.Column(db.Text, nullable=True)  # JSON list, None = all
+    # Cuando termino el tour de bienvenida. Nulo = todavia no lo ha visto, y
+    # entonces se le ofrece al entrar.
+    tour_completed_at = db.Column(db.DateTime, nullable=True)
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
     is_area_lead = db.Column(db.Boolean, default=False, server_default=false())
