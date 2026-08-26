@@ -290,6 +290,45 @@ def _deterministic_insights(context):
     return slots
 
 
+def aplicar_insights_de_ia(context):
+    """Pide los textos al modelo y los pone encima del suelo determinista.
+
+    Se encarga aqui y no en quien llama porque la mezcla tiene una regla que no
+    conviene repetir en dos sitios: el modelo puede devolver una respuesta
+    PARCIAL, con solo los campos que superaron la validacion. Los que falten se
+    quedan con el texto por reglas, que ya esta puesto. Asi un desliz en una
+    frase cuesta esa frase y no el reporte entero.
+
+    Modifica el contexto en el sitio y devuelve el `meta` del arnes.
+    """
+    try:
+        from services import insight_harness
+        generados, meta = insight_harness.generate_insights(context)
+    except Exception:
+        return {'ok': False, 'reason': 'el harness de insights falló'}
+
+    if generados:
+        # Encima del suelo, no en lugar del suelo.
+        context['insights'] = {**context['insights'], **generados}
+        context['insights_source'] = 'ia'
+
+        descartados = meta.get('descartados') or {}
+        if descartados:
+            context.setdefault('warnings', []).append(
+                f"{len(descartados)} de {len(insight_harness.SLOTS)} textos de IA no "
+                f"superaron la comprobación de cifras y se dejaron con el texto por "
+                f"reglas ({', '.join(sorted(descartados))})."
+            )
+    elif meta.get('reason') and 'no hay proveedor' not in meta['reason']:
+        # Un descarte por validacion es informacion que el analista debe ver.
+        context.setdefault('warnings', []).append(
+            f"Los insights de IA se descartaron ({meta['reason']}). "
+            f"Se usó el texto generado por reglas."
+        )
+
+    return meta
+
+
 def create_report_context_from_widgets(parsed_widgets, report_title=None, warnings=None,
                                        use_ai_insights=True, unique_authors=None,
                                        meltwater_analysis=None):
@@ -321,21 +360,7 @@ def create_report_context_from_widgets(parsed_widgets, report_title=None, warnin
     context['insights_source'] = 'reglas'
 
     if use_ai_insights:
-        try:
-            from services import insight_harness
-            generados, meta = insight_harness.generate_insights(context)
-        except Exception:
-            generados, meta = None, {'ok': False, 'reason': 'el harness de insights falló'}
-
-        if generados:
-            context['insights'] = generados
-            context['insights_source'] = 'ia'
-        elif meta.get('reason') and 'no hay proveedor' not in meta['reason']:
-            # Un descarte por validacion es informacion que el analista debe ver.
-            context['warnings'].append(
-                f"Los insights de IA se descartaron ({meta['reason']}). "
-                f"Se usó el texto generado por reglas."
-            )
+        aplicar_insights_de_ia(context)
 
     # Ya cumplió su función: se retira para no viajar al navegador dentro del
     # JSON del reporte, donde solo añadiría peso sin mostrarse.
