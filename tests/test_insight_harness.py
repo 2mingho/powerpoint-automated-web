@@ -183,6 +183,64 @@ class TestGenerateInsights(unittest.TestCase):
         self.assertTrue(meta['ok'])
         self.assertEqual(insights['volume_title'], 'La conversación baja pero sigue siendo masiva')
 
+    def test_valid_answer_does_not_retry(self):
+        """El camino bueno no puede costar dos llamadas."""
+        llamadas = []
+
+        def _contando(prompt, temperature=0.4, feature=None):
+            llamadas.append(prompt)
+            return json.dumps(_valid_payload())
+
+        insights, meta = insight_harness.generate_insights(_context(), complete_fn=_contando)
+        self.assertTrue(meta['ok'])
+        self.assertEqual(len(llamadas), 1)
+        self.assertEqual(meta['intentos'], 1)
+
+    def test_retries_once_with_the_reason_and_recovers(self):
+        """Un desliz de una cifra no debe costar los trece campos.
+
+        El reintento solo sirve si el modelo se entera de que falló y de por
+        qué, asi que se comprueba que el motivo exacto viaja dentro del segundo
+        prompt: sin eso el reintento es una tirada de dados mas cara.
+        """
+        prompts = []
+        malo = _valid_payload()
+        malo['volume_take'] = 'Se registraron 45000 menciones en el periodo.'
+
+        def _corrige(prompt, temperature=0.4, feature=None):
+            prompts.append(prompt)
+            return json.dumps(malo if len(prompts) == 1 else _valid_payload())
+
+        insights, meta = insight_harness.generate_insights(_context(), complete_fn=_corrige)
+
+        self.assertTrue(meta['ok'], meta['reason'])
+        self.assertEqual(meta['intentos'], 2)
+        self.assertEqual(insights['volume_take'], _valid_payload()['volume_take'])
+
+        self.assertEqual(len(prompts), 2)
+        self.assertIn('CORRECCIÓN', prompts[1])
+        self.assertIn('45000', prompts[1])
+        # La ficha viaja otra vez: sin ella el modelo no tiene con qué corregir.
+        self.assertIn('FICHA DE DATOS', prompts[1])
+
+    def test_gives_up_after_the_retry(self):
+        """Dos intentos y se para: hay un suelo determinista esperando."""
+        llamadas = []
+        malo = _valid_payload()
+        malo['volume_take'] = 'Se registraron 45000 menciones en el periodo.'
+
+        def _terco(prompt, temperature=0.4, feature=None):
+            llamadas.append(prompt)
+            return json.dumps(malo)
+
+        insights, meta = insight_harness.generate_insights(_context(), complete_fn=_terco)
+
+        self.assertIsNone(insights)
+        self.assertFalse(meta['ok'])
+        self.assertEqual(len(llamadas), insight_harness.MAX_INTENTOS)
+        self.assertIn('45000', meta['reason'])
+        self.assertIn('intentos', meta['reason'])
+
     def test_discards_hallucinating_model(self):
         payload = _valid_payload()
         payload['volume_take'] = 'Hubo 999999 menciones.'
