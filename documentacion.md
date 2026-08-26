@@ -82,7 +82,7 @@ App Flask (app.py)
     └── groq_analysis.py        ← Llamadas a la API de Groq/Llama3
        │
        ▼
-  pptx_builder/                 ← Wrappers de python-pptx y constructores de gráficos nativos
+  templates/reporte.html        ← El reporte: se renderiza en el navegador y se imprime a PDF
   instance/users.db             ← Base de datos SQLite
   scratch/                      ← Archivos temporales (subidas, salidas, sesiones)
 ```

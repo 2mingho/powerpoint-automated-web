@@ -39,7 +39,10 @@ xlrd==2.0.2
 chardet==5.2.0
 
 # ─── Reportes ───
-python-pptx==1.0.2
+# python-pptx se retira con el motor de PPTX (pptx_builder/). El reporte se
+# renderiza en la web y se exporta a PDF desde el navegador; el paquete solo
+# lo usaba codigo que ya no llamaba nadie. La validacion de las plantillas que
+# suben los administradores comprueba el zip a mano, sin esta dependencia.
 matplotlib==3.11.0
 wordcloud==1.9.6
 babel==2.18.0

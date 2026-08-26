@@ -79,9 +79,6 @@ powerpoint-automated-web/
 │   ├── file_merger.py         # Merge multiple CSV/Excel files
 │   └── groq_analysis.py       # Groq/Llama3 API integration
 │
-├── pptx_builder/              # PowerPoint generation engine
-│   └── (native_charts, ppt_engine, etc.)
-│
 ├── blueprints/
 │   ├── auth.py                # Login / Register / Logout routes
 │   └── admin.py               # Admin dashboard, user management, activity log

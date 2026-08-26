@@ -16,9 +16,6 @@ from services.classifier import classify_mentions
 from services.file_loader import detect_format, read_full_as_tsv
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
 from babel.dates import format_datetime
 from sqlalchemy import inspect, text, event
 from dotenv import load_dotenv
@@ -38,8 +35,7 @@ from models import User, Report, ActivityLog, ClassificationPreset, Task, TempAr
 from services import calculation as report
 from services import meltwater_ingest
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
-# El reporte se renderiza en la web y se exporta a PDF desde el navegador; el
-# paquete pptx_builder/ queda en el repositorio pero ya no entra en el flujo.
+# El reporte se renderiza en la web y se exporta a PDF desde el navegador.
 from services.csv_analysis import analyze_csv, generate_summary_csv
 
 # Load environment variables
