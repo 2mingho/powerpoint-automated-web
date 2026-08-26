@@ -183,7 +183,27 @@ def build_fact_sheet(context):
         for a in sorted(content['top_authors'], key=lambda x: x['posts'], reverse=True)[:6]:
             lines.append(f"- {a['author']}: {num(a['posts'])} publicaciones, {num(a['followers'])} seguidores")
 
-    return "\n".join(lines), nums, pcts
+    ficha = "\n".join(lines)
+
+    # Ultimo paso a proposito: lo que se permite citar se lee de la ficha ya
+    # renderizada, no solo de los valores que pasaron por num() y pct().
+    #
+    # La diferencia no es cosmetica. Varias lineas imprimen cifras que nunca
+    # pasan por esos dos filtros —la mas visible es el alcance compacto, que se
+    # escribe "15.8 B" junto al entero—, asi que el modelo leia "15.8" en la
+    # ficha, la citaba obedeciendo el contrato, y la validacion la rechazaba
+    # como inventada. Se descartaban los trece campos por una cifra que estaba
+    # delante de sus ojos, y el analista recibia el texto por reglas sin
+    # entender por que.
+    #
+    # Releer la ficha cierra la clase entera de fallo: si algo se imprime en la
+    # ficha, por definicion es citable, y ya no hay dos listas que puedan
+    # separarse cuando alguien anada una linea nueva.
+    enteros_ficha, decimales_ficha = _numbers_in(ficha)
+    nums |= enteros_ficha
+    pcts |= decimales_ficha
+
+    return ficha, nums, pcts
 
 
 # ─────────────────────────────────────────────────────────────
@@ -310,7 +330,7 @@ def validate(payload, nums, pcts):
                 continue
             if valor in nums or int(valor) in nums:
                 continue
-            return False, f"'{slot}' cita un porcentaje que no está en los datos: {valor}"
+            return False, f"'{slot}' cita una cifra decimal que no está en los datos: {valor}"
 
     return True, 'ok'
 
