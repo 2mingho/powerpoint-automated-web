@@ -1058,12 +1058,40 @@ def api_checklist_delete(task_id, item_id):
     return jsonify({'success': True})
 
 
+@tasks_bp.route('/api/tasks/<int:task_id>/watcher-candidates')
+@task_access_required
+def api_task_watcher_candidates(task_id):
+    """A quien se puede poner a observar esta tarea: cualquiera activo.
+
+    El desplegable se llenaba con la gente de la propia unidad, y justo al lado
+    el texto decia "anade a alguien de otra unidad para mantenerlo al tanto".
+    Observar existe precisamente para cruzar unidades: limitar la lista al
+    propio equipo dejaba la funcion sin su unico uso.
+    """
+    task = Task.active_query().filter_by(id=task_id).first_or_404()
+    if not _can_view_task(task):
+        return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
+
+    ya_observan = {w.user_id for w in task.watchers}
+    usuarios = User.query.filter(User.is_active.is_(True)).order_by(User.username).all()
+
+    return jsonify({
+        'success': True,
+        'users': [
+            {
+                'id': u.id,
+                'username': u.username,
+                'unit': u.area.name if u.area and u.area.name else (u.role or 'Sin unidad'),
+            }
+            for u in usuarios if u.id not in ya_observan
+        ],
+    })
+
+
 @tasks_bp.route('/api/tasks/<int:task_id>/watchers', methods=['POST'])
 @task_access_required
 def api_task_watchers_add(task_id):
     task = Task.active_query().filter_by(id=task_id).first_or_404()
-    if not _can_edit_task(task):
-        return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
 
     data = request.get_json(force=True) or {}
     try:
@@ -1071,9 +1099,20 @@ def api_task_watchers_add(task_id):
     except (TypeError, ValueError):
         return jsonify({'success': False, 'error': 'Usuario no válido.'}), 400
 
+    # Apuntarse uno mismo solo pide poder ver la tarea; apuntar a otro sigue
+    # pidiendo permiso de edicion. Antes las dos cosas pedian edicion, asi que
+    # quien recibia una tarea compartida no podia ni seguirla por su cuenta.
+    if user_id == current_user.id:
+        if not _can_view_task(task):
+            return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
+    elif not _can_edit_task(task):
+        return jsonify({'success': False, 'error': 'Solo quien puede editar la tarea añade a otras personas.'}), 403
+
     watcher_user = User.query.get(user_id)
     if not watcher_user:
         return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    if not watcher_user.is_active:
+        return jsonify({'success': False, 'error': 'Ese usuario está inactivo.'}), 400
 
     watcher = TaskWatcher.query.filter_by(task_id=task.id, user_id=user_id).first()
     if watcher is None:
@@ -1089,8 +1128,9 @@ def api_task_watchers_add(task_id):
 
     notify_user(
         watcher_user.id,
-        'task_comment',
+        'task_watching',
         f'Ahora observas la tarea: {task.title}',
+        body=f'{current_user.username} te añadió como observador. Te avisaremos de sus cambios.',
         link_url=f'/tasks?task={task.id}',
         entity_type='task',
         entity_id=task.id,
@@ -1117,7 +1157,11 @@ def api_task_watchers_remove(task_id, user_id):
 
     db.session.delete(watcher)
     db.session.commit()
-    return jsonify({'success': True})
+
+    # Quien solo veia la tarea por observarla la pierde de vista al salir. Se
+    # dice aqui para que el panel se cierre en vez de recargar un detalle que
+    # ya responde 403.
+    return jsonify({'success': True, 'can_still_view': _can_view_task(task)})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1834,7 +1878,7 @@ def api_tasks_update(task_id):
         watcher_ids = [watcher.user_id for watcher in task.watchers]
         notify_many(
             watcher_ids,
-            kind='task_comment',
+            kind='task_watching',
             title=f'Estado actualizado en: {task.title}',
             body=f'Nuevo estado: {task.status}',
             link_url=f'/tasks?task={task.id}',

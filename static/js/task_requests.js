@@ -52,10 +52,14 @@ document.addEventListener('DOMContentLoaded', function () {
       .replace(/'/g, '&#39;');
   }
 
+  // El aviso global se llama appNotify, no notify: la comprobacion buscaba un
+  // nombre que no existe en ninguna pagina, asi que cada error de aceptar,
+  // rechazar o cancelar acababa en la consola y la pantalla no decia nada.
   function notify(kind, message) {
-    // Reuse existing notify function if available
-    if (window.notify) { window.notify(kind, message); return; }
-    // Fallback
+    if (typeof window.appNotify === 'function') {
+      window.appNotify({ type: kind, message: message });
+      return;
+    }
     console.log('[' + kind + '] ' + message);
   }
 
@@ -141,19 +145,23 @@ document.addEventListener('DOMContentLoaded', function () {
     acceptDueDate.value = '';
     window.abrirModal(acceptModal);
 
-    // Load team users for assignee select
-    fetch('/api/team/tasks/filters')
+    // Solo la gente de la unidad destino: es la unica a la que el servidor
+    // acepta asignarle la tarea.
+    fetch('/api/task-requests/' + requestId + '/assignees')
       .then(parseJsonResponse)
       .then(function (data) {
-        acceptAssignee.innerHTML = '<option value="">Selecciona un usuario...</option>';
-        if (Array.isArray(data.users)) {
-          data.users.forEach(function (u) {
-            var opt = document.createElement('option');
-            opt.value = u.id;
-            opt.textContent = u.label || u.username;
-            acceptAssignee.appendChild(opt);
-          });
+        if (!data.success || !Array.isArray(data.users) || !data.users.length) {
+          acceptAssignee.innerHTML = '<option value="">La unidad destino no tiene a nadie activo</option>';
+          return;
         }
+        acceptAssignee.innerHTML = '<option value="">Selecciona un usuario...</option>';
+        data.users.forEach(function (u) {
+          var opt = document.createElement('option');
+          opt.value = u.id;
+          opt.textContent = u.username;
+          acceptAssignee.appendChild(opt);
+        });
+        if (data.due_date) acceptDueDate.value = data.due_date;
       })
       .catch(function () {
         acceptAssignee.innerHTML = '<option value="">Error al cargar usuarios</option>';
@@ -230,15 +238,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ── Cancel flow ── */
   function cancelRequest(requestId) {
-    if (!confirm('¿Cancelar esta solicitud?')) return;
-    fetch('/api/task-requests/' + requestId + '/cancel', { method: 'POST' })
-      .then(parseJsonResponse)
-      .then(function (data) {
-        if (!data.success) { notify('error', data.error || 'Error al cancelar.'); return; }
-        notify('success', 'Solicitud cancelada.');
-        loadRequests();
-      })
-      .catch(function () { notify('error', 'Error de conexión.'); });
+    const pregunta = typeof window.appConfirm === 'function'
+      ? window.appConfirm({
+          title: 'Cancelar solicitud',
+          message: 'La unidad destino dejara de verla. Esto no se puede deshacer.',
+          confirmText: 'Cancelar solicitud',
+          cancelText: 'Volver',
+        })
+      : Promise.resolve(window.confirm('¿Cancelar esta solicitud?'));
+
+    pregunta.then(function (ok) {
+      if (!ok) return;
+      fetch('/api/task-requests/' + requestId + '/cancel', { method: 'POST' })
+        .then(parseJsonResponse)
+        .then(function (data) {
+          if (!data.success) { notify('error', data.error || 'Error al cancelar.'); return; }
+          notify('success', 'Solicitud cancelada.');
+          loadRequests();
+        })
+        .catch(function () { notify('error', 'Error de conexión.'); });
+    });
   }
 
   /* ── Event delegation ── */

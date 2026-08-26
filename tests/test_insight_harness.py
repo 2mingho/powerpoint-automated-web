@@ -126,6 +126,45 @@ class TestValidation(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn('volume_title', motivo)
 
+    def test_accepts_compact_reach_printed_in_the_fact_sheet(self):
+        """La regresion que descartaba los insights por el alcance compacto.
+
+        La ficha imprime el alcance dos veces: el entero y su forma compacta
+        ("15.8 B"). Esa segunda cifra no pasaba por el filtro que arma el
+        allowlist, asi que el modelo la leia en la ficha, la citaba —como manda
+        el contrato— y la validacion la tomaba por inventada, tirando los trece
+        campos por una cifra que la propia ficha le habia dado.
+        """
+        texto, _, _ = insight_harness.build_fact_sheet(self.ctx)
+        compacto = self.ctx['kpis']['estimated_reach_fmt']
+        self.assertIn(compacto, texto)
+
+        payload = _valid_payload()
+        payload['volume_take'] = f'El alcance estimado fue de {compacto} impresiones.'
+        ok, motivo = insight_harness.validate(payload, self.nums, self.pcts)
+        self.assertTrue(ok, motivo)
+
+    def test_any_figure_printed_in_the_fact_sheet_is_quotable(self):
+        """La regla general, no el caso suelto.
+
+        Si una cifra se imprime en la ficha es citable por definicion: el
+        contrato le pide al modelo justamente eso. Se comprueba sobre la ficha
+        entera para que anadir una linea nueva manana no vuelva a abrir el
+        hueco.
+        """
+        texto, nums, pcts = insight_harness.build_fact_sheet(self.ctx)
+        enteros, decimales = insight_harness._numbers_in(texto)
+
+        fuera = [n for n in enteros if n >= insight_harness.LITERAL_FLOOR and n not in nums]
+        self.assertEqual(fuera, [], f'enteros impresos pero no permitidos: {fuera}')
+
+        sin_permiso = [
+            d for d in decimales
+            if not any(abs(d - p) <= insight_harness.PCT_TOLERANCE for p in pcts)
+            and d not in nums
+        ]
+        self.assertEqual(sin_permiso, [], f'decimales impresos pero no permitidos: {sin_permiso}')
+
     def test_accepts_spanish_thousands_separator(self):
         """33.146 y 33146 son la misma cifra."""
         payload = _valid_payload()
@@ -143,6 +182,64 @@ class TestGenerateInsights(unittest.TestCase):
         )
         self.assertTrue(meta['ok'])
         self.assertEqual(insights['volume_title'], 'La conversación baja pero sigue siendo masiva')
+
+    def test_valid_answer_does_not_retry(self):
+        """El camino bueno no puede costar dos llamadas."""
+        llamadas = []
+
+        def _contando(prompt, temperature=0.4, feature=None):
+            llamadas.append(prompt)
+            return json.dumps(_valid_payload())
+
+        insights, meta = insight_harness.generate_insights(_context(), complete_fn=_contando)
+        self.assertTrue(meta['ok'])
+        self.assertEqual(len(llamadas), 1)
+        self.assertEqual(meta['intentos'], 1)
+
+    def test_retries_once_with_the_reason_and_recovers(self):
+        """Un desliz de una cifra no debe costar los trece campos.
+
+        El reintento solo sirve si el modelo se entera de que falló y de por
+        qué, asi que se comprueba que el motivo exacto viaja dentro del segundo
+        prompt: sin eso el reintento es una tirada de dados mas cara.
+        """
+        prompts = []
+        malo = _valid_payload()
+        malo['volume_take'] = 'Se registraron 45000 menciones en el periodo.'
+
+        def _corrige(prompt, temperature=0.4, feature=None):
+            prompts.append(prompt)
+            return json.dumps(malo if len(prompts) == 1 else _valid_payload())
+
+        insights, meta = insight_harness.generate_insights(_context(), complete_fn=_corrige)
+
+        self.assertTrue(meta['ok'], meta['reason'])
+        self.assertEqual(meta['intentos'], 2)
+        self.assertEqual(insights['volume_take'], _valid_payload()['volume_take'])
+
+        self.assertEqual(len(prompts), 2)
+        self.assertIn('CORRECCIÓN', prompts[1])
+        self.assertIn('45000', prompts[1])
+        # La ficha viaja otra vez: sin ella el modelo no tiene con qué corregir.
+        self.assertIn('FICHA DE DATOS', prompts[1])
+
+    def test_gives_up_after_the_retry(self):
+        """Dos intentos y se para: hay un suelo determinista esperando."""
+        llamadas = []
+        malo = _valid_payload()
+        malo['volume_take'] = 'Se registraron 45000 menciones en el periodo.'
+
+        def _terco(prompt, temperature=0.4, feature=None):
+            llamadas.append(prompt)
+            return json.dumps(malo)
+
+        insights, meta = insight_harness.generate_insights(_context(), complete_fn=_terco)
+
+        self.assertIsNone(insights)
+        self.assertFalse(meta['ok'])
+        self.assertEqual(len(llamadas), insight_harness.MAX_INTENTOS)
+        self.assertIn('45000', meta['reason'])
+        self.assertIn('intentos', meta['reason'])
 
     def test_discards_hallucinating_model(self):
         payload = _valid_payload()

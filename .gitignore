@@ -15,7 +15,10 @@ venv/
 
 # Local database sidecar/backup files
 users.db
-instance/users.db
+# Cualquier base local, no solo users.db: las pruebas y las comprobaciones
+# manuales dejan ficheros con nombres distintos cada vez, y acababan
+# apareciendo como sin trackear una y otra vez.
+instance/*.db
 instance/*.db-shm
 instance/*.db-wal
 instance/*.db.bak*

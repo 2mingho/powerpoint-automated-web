@@ -1113,6 +1113,29 @@
   gap: 8px;
 }
 
+.task-watchers-controls .form-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* El interruptor de observar cambia de aspecto segun el estado: leerlo tiene
+   que bastar para saber si ya la sigues, sin abrir la lista de chips. */
+#btnToggleWatching {
+  align-self: flex-start;
+}
+
+#btnToggleWatching.is-watching {
+  border-color: var(--c-accent);
+  background: var(--c-accent-light);
+  color: var(--c-text);
+}
+
+.task-watchers-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--c-text-secondary);
+}
+
 .tasks-watching-panel {
   margin-top: 16px;
   padding: 16px;

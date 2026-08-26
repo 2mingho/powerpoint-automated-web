@@ -32,7 +32,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const taskWatchersChips = document.getElementById('taskWatchersChips');
   const taskWatcherUserSelect = document.getElementById('taskWatcherUserSelect');
   const btnAddWatcher = document.getElementById('btnAddWatcher');
-  const btnLeaveWatching = document.getElementById('btnLeaveWatching');
+  const btnToggleWatching = document.getElementById('btnToggleWatching');
+  const btnToggleWatchingText = document.getElementById('btnToggleWatchingText');
+  const taskWatchersControls = document.getElementById('taskWatchersControls');
+  const taskWatchersHint = document.getElementById('taskWatchersHint');
+  const taskWatchersCount = document.getElementById('taskWatchersCount');
   const taskChecklistCount = document.getElementById('taskChecklistCount');
   const taskChecklistInput = document.getElementById('taskChecklistInput');
   const btnChecklistAdd = document.getElementById('btnTaskChecklistAdd');
@@ -1067,16 +1071,59 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderWatchers(taskData) {
     if (!taskWatchersSection || !taskWatchersChips) return;
     const watchers = Array.isArray(taskData && taskData.watchers) ? taskData.watchers : [];
-    taskWatchersSection.classList.toggle('modal-hidden', !taskData || !taskData.id);
+    const guardada = !!(taskData && taskData.id);
+
+    // La pestaña entera solo tiene sentido sobre una tarea ya guardada: hasta
+    // entonces no hay a qué apuntar a nadie.
+    const pestana = document.querySelector('.task-tab[data-tab="watchers"]');
+    if (pestana) pestana.classList.toggle('modal-hidden', !guardada);
+    if (taskWatchersCount) taskWatchersCount.textContent = String(watchers.length);
+
     taskWatchersChips.innerHTML = watchers.length
       ? watchers.map(function (watcher) {
           const canRemove = !!taskData.can_edit || !!watcher.is_self;
-          return `<span class="task-watcher-chip">${escapeHtml(watcher.username)}${watcher.unit ? ` · ${escapeHtml(watcher.unit)}` : ''}${canRemove ? ` <button type="button" class="task-watcher-remove" data-user-id="${Number(watcher.user_id)}">&times;</button>` : ''}</span>`;
+          return `<span class="task-watcher-chip">${escapeHtml(watcher.username)}${watcher.unit ? ` · ${escapeHtml(watcher.unit)}` : ''}${canRemove ? ` <button type="button" class="task-watcher-remove" data-user-id="${Number(watcher.user_id)}" title="Quitar">&times;</button>` : ''}</span>`;
         }).join('')
-      : '<div class="task-comments-empty">Nadie observa esta tarea. Añade a alguien de otra unidad para mantenerlo al tanto sin asignársela.</div>';
-    if (taskWatcherUserSelect) taskWatcherUserSelect.disabled = !taskData.can_edit;
-    if (btnAddWatcher) btnAddWatcher.disabled = !taskData.can_edit;
-    if (btnLeaveWatching) btnLeaveWatching.classList.toggle('modal-hidden', !(taskData.is_watcher && !taskData.can_edit));
+      : '<div class="task-comments-empty">Nadie la observa todavía.</div>';
+
+    // Apuntarse uno mismo no depende de poder editar: cualquiera que vea la
+    // tarea puede seguirla. Antes el botón solo existía para dejar de
+    // observar, y solo si además no podías editar.
+    if (btnToggleWatching) {
+      btnToggleWatching.classList.toggle('modal-hidden', !guardada);
+      btnToggleWatching.classList.toggle('is-watching', !!taskData.is_watcher);
+      const icono = btnToggleWatching.querySelector('i');
+      if (icono) icono.className = taskData.is_watcher ? 'fa-solid fa-eye-slash' : 'fa-regular fa-eye';
+      if (btnToggleWatchingText) {
+        btnToggleWatchingText.textContent = taskData.is_watcher ? 'Dejar de observar' : 'Observar esta tarea';
+      }
+    }
+
+    const puedeAnadir = !!taskData.can_edit && guardada;
+    if (taskWatchersControls) taskWatchersControls.classList.toggle('modal-hidden', !puedeAnadir);
+    if (taskWatchersHint) {
+      taskWatchersHint.textContent = puedeAnadir
+        ? 'Puedes añadir a cualquiera, también de otra unidad: observar no asigna trabajo.'
+        : 'Solo quien puede editar la tarea añade a otras personas.';
+    }
+    if (puedeAnadir) cargarCandidatosObservador(taskData.id);
+  }
+
+  // El desplegable se llenaba en el HTML con la gente de la propia unidad, y
+  // el texto de al lado invitaba a añadir a alguien de otra: la función
+  // existía para cruzar unidades y la lista lo impedía.
+  function cargarCandidatosObservador(taskId) {
+    if (!taskWatcherUserSelect) return;
+    requestJson(`/api/tasks/${taskId}/watcher-candidates`).then(function (data) {
+      if (!data.success || !Array.isArray(data.users)) return;
+      taskWatcherUserSelect.innerHTML = '<option value="">Selecciona a alguien...</option>';
+      data.users.forEach(function (u) {
+        const opcion = document.createElement('option');
+        opcion.value = u.id;
+        opcion.textContent = u.unit ? `${u.username} · ${u.unit}` : u.username;
+        taskWatcherUserSelect.appendChild(opcion);
+      });
+    }).catch(function () { /* el desplegable se queda como estaba */ });
   }
 
   function renderChecklist(items) {
@@ -1757,9 +1804,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (taskChecklistList) taskChecklistList.innerHTML = '<div class="task-comments-empty">Sin ítems. Divide la tarea en pasos y podrás ver el avance sin cambiarle el estado.</div>';
     if (taskChecklistCount) taskChecklistCount.textContent = '0';
     if (taskChecklistInput) taskChecklistInput.value = '';
-    if (taskWatchersChips) taskWatchersChips.innerHTML = '<div class="task-comments-empty">Nadie observa esta tarea. Añade a alguien de otra unidad para mantenerlo al tanto sin asignársela.</div>';
-    if (taskWatchersSection) taskWatchersSection.classList.add('modal-hidden');
-    if (btnLeaveWatching) btnLeaveWatching.classList.add('modal-hidden');
+    if (taskWatchersChips) taskWatchersChips.innerHTML = '<div class="task-comments-empty">Nadie la observa todavía.</div>';
+    if (taskWatchersCount) taskWatchersCount.textContent = '0';
+    if (btnToggleWatching) btnToggleWatching.classList.add('modal-hidden');
     setActiveTaskTab('details');
 
     clearFormMessage();
@@ -2154,14 +2201,14 @@ document.addEventListener('DOMContentLoaded', function () {
         body: JSON.stringify({ user_id: userId })
       }).then(function (data) {
         if (!data.success) {
-          notify('error', data.error || 'No se pudo agregar observador.');
+          notify('error', data.error || 'No se pudo añadir el observador.');
           return;
         }
         return refreshTaskDetail(taskId).then(function () {
-          notify('success', 'Observador agregado.');
+          notify('success', 'Observador añadido. Le avisaremos de los cambios.');
         });
       }).catch(function () {
-        notify('error', 'Error de conexion al agregar observador.');
+        notify('error', 'Error de conexión al añadir el observador.');
       });
     });
   }
@@ -2174,14 +2221,14 @@ document.addEventListener('DOMContentLoaded', function () {
       const userId = button.dataset.userId;
       requestJson(`/api/tasks/${taskId}/watchers/${userId}`, { method: 'DELETE' }).then(function (data) {
         if (!data.success) {
-          notify('error', data.error || 'No se pudo quitar observador.');
+          notify('error', data.error || 'No se pudo quitar el observador.');
           return;
         }
         return refreshTaskDetail(taskId).then(function () {
-          notify('success', 'Observador removido.');
+          notify('success', 'Observador quitado.');
         });
       }).catch(function () {
-        notify('error', 'Error de conexion al quitar observador.');
+        notify('error', 'Error de conexión al quitar el observador.');
       });
     });
   }
@@ -2257,25 +2304,44 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  if (btnLeaveWatching) {
-    btnLeaveWatching.addEventListener('click', function () {
+  if (btnToggleWatching) {
+    btnToggleWatching.addEventListener('click', function () {
       const taskId = fId.value;
       const myUserId = currentTaskDetail && currentTaskDetail.current_user_id;
-      const watcher = currentTaskDetail && Array.isArray(currentTaskDetail.watchers)
-        ? currentTaskDetail.watchers.find(function (item) { return item.is_self; })
-        : null;
-      const userId = watcher ? watcher.user_id : myUserId;
-      if (!taskId || !userId) return;
-      requestJson(`/api/tasks/${taskId}/watchers/${userId}`, { method: 'DELETE' }).then(function (data) {
+      if (!taskId || !myUserId) return;
+      const observando = !!(currentTaskDetail && currentTaskDetail.is_watcher);
+
+      const peticion = observando
+        ? requestJson(`/api/tasks/${taskId}/watchers/${myUserId}`, { method: 'DELETE' })
+        : requestJson(`/api/tasks/${taskId}/watchers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: myUserId })
+          });
+
+      btnToggleWatching.disabled = true;
+      peticion.then(function (data) {
         if (!data.success) {
-          notify('error', data.error || 'No se pudo dejar de observar.');
+          notify('error', data.error || 'No se pudo cambiar la observación.');
           return;
         }
-        closeModal();
-        notify('success', 'Ya no observas esta tarea.');
-        loadWatchingTasks();
+        // Dejar de observar una tarea que solo se veia por eso quita el acceso:
+        // recargar el detalle daria un 403. En los demas casos se refresca en
+        // vez de cerrar, para que se vea el efecto de lo que se acaba de pulsar.
+        if (observando && data.can_still_view === false) {
+          closeModal();
+          notify('success', 'Ya no observas esta tarea, y deja de estar a tu vista.');
+          loadWatchingTasks();
+          return;
+        }
+        return refreshTaskDetail(taskId).then(function () {
+          notify('success', observando ? 'Ya no observas esta tarea.' : 'Ahora observas esta tarea.');
+          loadWatchingTasks();
+        });
       }).catch(function () {
-        notify('error', 'Error de conexion al dejar de observar.');
+        notify('error', 'Error de conexión al cambiar la observación.');
+      }).finally(function () {
+        btnToggleWatching.disabled = false;
       });
     });
   }

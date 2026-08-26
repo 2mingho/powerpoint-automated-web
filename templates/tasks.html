@@ -231,6 +231,11 @@
         <button type="button" class="task-tab active" data-tab="details">Detalles</button>
         <button type="button" class="task-tab" data-tab="checklist">Checklist <span class="task-tab-count" id="taskChecklistCount">0</span></button>
         <button type="button" class="task-tab" data-tab="comments">Comentarios <span class="task-tab-count" id="taskCommentsCount">0</span></button>
+        {# Observadores estaba al final del acordeon "Planificacion", detras de
+           las fechas y la recurrencia: nadie lo encontraba, y quien lo
+           encontraba no sabia para que servia. Como pestana se ve, se cuenta y
+           tiene sitio para explicarse. #}
+        <button type="button" class="task-tab" data-tab="watchers">Observadores <span class="task-tab-count" id="taskWatchersCount">0</span></button>
         <button type="button" class="task-tab" data-tab="activity">Actividad</button>
       </div>
 
@@ -339,7 +344,7 @@
       <details class="task-fieldset" id="taskGroupPlanificacion">
         <summary class="task-fieldset-head">
           <span class="task-fieldset-title">Planificación</span>
-          <span class="task-fieldset-hint">Fechas, recurrencia, observadores</span>
+          <span class="task-fieldset-hint">Fechas y recurrencia</span>
         </summary>
         <div class="task-fieldset-body">
           <div class="form-row mb-0">
@@ -372,25 +377,31 @@
             <div class="recurrence-preview">La recurrencia usa la fecha de finalización para crear solo días laborables.</div>
             <div class="recurrence-preview" id="recurrencePreview"></div>
           </div>
-
-          <div class="task-watchers-section modal-hidden" id="taskWatchersSection">
-            <label class="form-label">Observadores</label>
-            <div class="task-watchers-chips" id="taskWatchersChips"></div>
-            <div class="task-watchers-controls" id="taskWatchersControls">
-              <select class="form-select" id="taskWatcherUserSelect">
-                <option value="">Selecciona usuario...</option>
-                {% for u in area_users %}
-                <option value="{{ u.id }}">{{ u.username }}{% if current_user.is_admin %} ({{ u.area.name if u.area and u.area.name else (u.role or 'Sin unidad') }}){% endif %}</option>
-                {% endfor %}
-              </select>
-              <button class="btn btn-secondary btn-sm" id="btnAddWatcher" type="button">Agregar</button>
-            </div>
-            <button class="btn btn-secondary btn-sm modal-hidden" id="btnLeaveWatching" type="button">Dejar de observar</button>
-          </div>
         </div>
       </details>
 
       </div>{# /taskFormFields #}
+      </div>
+
+      <div class="task-tab-panel" id="taskTabWatchers">
+        <div class="task-watchers-section" id="taskWatchersSection">
+          <p class="tasks-modal-intro">Observar una tarea es seguirla sin que sea tuya: te avisamos cuando cambia de estado o recibe comentarios, y no aparece en tu carga de trabajo.</p>
+
+          <button class="btn btn-secondary btn-sm" id="btnToggleWatching" type="button">
+            <i class="fa-regular fa-eye"></i> <span id="btnToggleWatchingText">Observar esta tarea</span>
+          </button>
+
+          <label class="form-label">Quién la observa</label>
+          <div class="task-watchers-chips" id="taskWatchersChips"></div>
+
+          <div class="task-watchers-controls" id="taskWatchersControls">
+            <select class="form-select" id="taskWatcherUserSelect">
+              <option value="">Selecciona a alguien...</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" id="btnAddWatcher" type="button">Añadir</button>
+          </div>
+          <p class="task-watchers-hint" id="taskWatchersHint"></p>
+        </div>
       </div>
 
       <div class="task-tab-panel" id="taskTabComments">

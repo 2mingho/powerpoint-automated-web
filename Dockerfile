@@ -9,8 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# curl entra solo para la sonda de salud del HEALTHCHECK de mas abajo.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get install -y --no-install-recommends libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -28,5 +29,12 @@ RUN chmod +x docker-entrypoint.sh \
 USER appuser
 
 EXPOSE 5000
+
+# El arranque aplica las migraciones antes de levantar gunicorn, asi que el
+# primer boot tarda: start-period le da margen sin contar esos intentos como
+# fallos. Despues, tres sondas seguidas en rojo bastan para sacar el contenedor
+# del balanceador en vez de seguir mandandole trafico.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-5000}/healthz" || exit 1
 
 CMD ["./docker-entrypoint.sh"]

@@ -32,6 +32,10 @@ LITERAL_FLOOR = 100
 # Percentages may drift slightly from rounding; anything wider is a fabrication.
 PCT_TOLERANCE = 0.15
 
+# Intentos de generacion antes de rendirse y quedarse con el texto por reglas.
+# El segundo lleva el motivo del rechazo dentro del prompt; ver generate_insights.
+MAX_INTENTOS = 2
+
 STYLE_CONTRACT = """\
 Eres analista de escucha social en Newlink y escribes las láminas de un reporte
 para un cliente. Reglas de estilo, sin excepciones:
@@ -183,7 +187,27 @@ def build_fact_sheet(context):
         for a in sorted(content['top_authors'], key=lambda x: x['posts'], reverse=True)[:6]:
             lines.append(f"- {a['author']}: {num(a['posts'])} publicaciones, {num(a['followers'])} seguidores")
 
-    return "\n".join(lines), nums, pcts
+    ficha = "\n".join(lines)
+
+    # Ultimo paso a proposito: lo que se permite citar se lee de la ficha ya
+    # renderizada, no solo de los valores que pasaron por num() y pct().
+    #
+    # La diferencia no es cosmetica. Varias lineas imprimen cifras que nunca
+    # pasan por esos dos filtros —la mas visible es el alcance compacto, que se
+    # escribe "15.8 B" junto al entero—, asi que el modelo leia "15.8" en la
+    # ficha, la citaba obedeciendo el contrato, y la validacion la rechazaba
+    # como inventada. Se descartaban los trece campos por una cifra que estaba
+    # delante de sus ojos, y el analista recibia el texto por reglas sin
+    # entender por que.
+    #
+    # Releer la ficha cierra la clase entera de fallo: si algo se imprime en la
+    # ficha, por definicion es citable, y ya no hay dos listas que puedan
+    # separarse cuando alguien anada una linea nueva.
+    enteros_ficha, decimales_ficha = _numbers_in(ficha)
+    nums |= enteros_ficha
+    pcts |= decimales_ficha
+
+    return ficha, nums, pcts
 
 
 # ─────────────────────────────────────────────────────────────
@@ -310,7 +334,7 @@ def validate(payload, nums, pcts):
                 continue
             if valor in nums or int(valor) in nums:
                 continue
-            return False, f"'{slot}' cita un porcentaje que no está en los datos: {valor}"
+            return False, f"'{slot}' cita una cifra decimal que no está en los datos: {valor}"
 
     return True, 'ok'
 
@@ -319,6 +343,25 @@ def validate(payload, nums, pcts):
 # Entrada publica
 # ─────────────────────────────────────────────────────────────
 
+def _prompt_de_correccion(prompt, motivo):
+    """El mismo encargo, mas el motivo exacto por el que se tiro el anterior.
+
+    Se reenvia el prompt entero y no solo la queja porque estas llamadas no
+    guardan conversacion: el modelo no recuerda la ficha de datos, y pedirle que
+    corrija una cifra sin volver a darle las cifras validas garantiza el mismo
+    fallo otra vez.
+    """
+    return prompt + f"""
+
+CORRECCIÓN — tu respuesta anterior se rechazó por este motivo:
+{motivo}
+
+Devuelve otra vez el JSON completo, con todos los campos, arreglando únicamente
+lo que causó el rechazo. Si el problema es una cifra, sustitúyela por una que
+aparezca literalmente en la FICHA DE DATOS o reescribe la frase sin ella. No
+introduzcas ninguna cifra nueva."""
+
+
 def generate_insights(context, complete_fn=None):
     """
     Ask the configured model for the report's written insights.
@@ -326,6 +369,16 @@ def generate_insights(context, complete_fn=None):
     Returns (insights, meta). `insights` is None when no model is configured or
     the answer failed validation — the caller then keeps the deterministic
     narrative. `meta` always explains what happened, so the editor can show it.
+
+    Un rechazo no es definitivo: se reintenta una vez diciendole al modelo que
+    fallo. La mayoria de los descartes son de una sola frase —una cifra de mas,
+    un campo largo— y el resto del texto era bueno; tirarlo entero por eso
+    desperdicia trece campos correctos y deja al analista con el texto por
+    reglas sin saber que faltó tan poco.
+
+    Un solo reintento, no varios: si con el motivo delante el modelo vuelve a
+    fallar, el problema no es un desliz y las llamadas siguientes solo anaden
+    espera y coste a un reporte que igualmente tiene un suelo determinista.
     """
     if complete_fn is None:
         from services import ai_provider
@@ -333,23 +386,36 @@ def generate_insights(context, complete_fn=None):
 
     prompt, nums, pcts = build_prompt(context)
 
-    try:
-        raw = complete_fn(prompt, temperature=0.4, feature='insights')
-    except Exception as e:
-        logger.warning('El proveedor de IA falló al generar insights: %s', e)
-        return None, {'ok': False, 'reason': f'error del proveedor: {e}'}
+    motivo = None
+    for intento in range(1, MAX_INTENTOS + 1):
+        # La primera pasada es redaccion y la segunda es correccion, asi que
+        # baja la temperatura: en el reintento no se busca otra idea sino que
+        # se cina a lo que ya se le dijo.
+        envio = prompt if motivo is None else _prompt_de_correccion(prompt, motivo)
+        temperatura = 0.4 if motivo is None else 0.2
 
-    if not raw:
-        return None, {'ok': False, 'reason': 'no hay proveedor de IA configurado'}
+        try:
+            raw = complete_fn(envio, temperature=temperatura, feature='insights')
+        except Exception as e:
+            logger.warning('El proveedor de IA falló al generar insights: %s', e)
+            return None, {'ok': False, 'reason': f'error del proveedor: {e}', 'intentos': intento}
 
-    payload = _parse_json(raw)
-    if payload is None:
-        return None, {'ok': False, 'reason': 'la respuesta no contenía JSON válido'}
+        if not raw:
+            return None, {'ok': False, 'reason': 'no hay proveedor de IA configurado',
+                          'intentos': intento}
 
-    ok, motivo = validate(payload, nums, pcts)
-    if not ok:
-        logger.warning('Insights descartados por validación: %s', motivo)
-        return None, {'ok': False, 'reason': motivo}
+        payload = _parse_json(raw)
+        if payload is None:
+            motivo = 'la respuesta no contenía JSON válido'
+        else:
+            ok, motivo = validate(payload, nums, pcts)
+            if ok:
+                limpio = {slot: str(payload[slot]).strip() for slot in SLOTS}
+                return limpio, {'ok': True, 'reason': 'ok', 'intentos': intento}
 
-    limpio = {slot: str(payload[slot]).strip() for slot in SLOTS}
-    return limpio, {'ok': True, 'reason': 'ok'}
+        logger.warning('Insights rechazados en el intento %d/%d: %s',
+                       intento, MAX_INTENTOS, motivo)
+
+    return None, {'ok': False,
+                  'reason': f'{motivo} (tras {MAX_INTENTOS} intentos)',
+                  'intentos': MAX_INTENTOS}

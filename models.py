@@ -203,6 +203,9 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     allowed_tools = db.Column(db.Text, nullable=True)  # JSON list, None = all
+    # Cuando termino el tour de bienvenida. Nulo = todavia no lo ha visto, y
+    # entonces se le ofrece al entrar.
+    tour_completed_at = db.Column(db.DateTime, nullable=True)
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
     is_area_lead = db.Column(db.Boolean, default=False, server_default=false())
@@ -435,7 +438,11 @@ class Notification(db.Model):
     KINDS = (
         'task_assigned', 'task_reassigned', 'task_due_soon',
         'task_overdue', 'task_comment', 'mention',
-        'request_received', 'request_accepted', 'request_rejected'
+        'request_received', 'request_accepted', 'request_rejected',
+        # Lo que le llega a quien observa una tarea sin ser suya. Iba como
+        # 'task_comment', asi que el aviso decia "comentario" cuando lo que
+        # habia cambiado era el estado.
+        'task_watching',
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -586,7 +593,9 @@ class TaskRequest(db.Model):
     priority = db.Column(db.String(10), default='Media')
 
     requester_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    from_area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False, index=True)
+    # Opcional: quien todavia no tiene unidad asignada debe poder solicitar.
+    # El solicitante ya queda en requester_id; la unidad de origen es contexto.
+    from_area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
     to_area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False, index=True)
 
     status = db.Column(db.String(15), nullable=False, default='Pendiente', index=True)
