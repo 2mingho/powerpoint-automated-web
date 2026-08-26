@@ -431,11 +431,23 @@ def prune_activity_logs(retention_days=ACTIVITY_LOG_RETENTION_DAYS, max_rows=ACT
 
 
 def prune_report_metadata(retention_days=REPORT_METADATA_RETENTION_DAYS):
-    """Prune report metadata rows older than retention window."""
+    """Limpia las filas que solo eran metadatos de un fichero que ya no existe.
+
+    Esta poda nacio cuando la fila describia un .pptx en disco: borrarla a los
+    180 dias no perdia nada porque el fichero se habia ido mucho antes. Desde
+    que el reporte se guarda entero, la fila YA NO es un metadato: es el
+    trabajo del analista, con sus textos reescritos a mano.
+
+    Por eso solo se barre lo que no tiene contenido. Borrar reportes de verdad
+    puede ser razonable, pero es una decision de retencion de datos del cliente
+    que alguien tiene que tomar a proposito, no algo que se herede de una
+    funcion que antes borraba nombres de fichero.
+    """
     cutoff = datetime.utcnow() - timedelta(days=retention_days)
     deleted = (
         Report.query
         .filter(Report.created_at < cutoff)
+        .filter(Report.context_json.is_(None))
         .delete(synchronize_session=False)
     )
     db.session.commit()
@@ -983,27 +995,32 @@ def upload_meltwater():
             return volver_al_formulario()
 
         parsed = meltwater_ingest.parse_widgets(widgets)
+
+        # Sin IA aqui a proposito. La generacion vivia dentro de esta peticion,
+        # con la llamada al modelo en medio y Gunicorn cortando a los 180s: un
+        # proveedor lento era un 504, y el 504 se llevaba por delante todo el
+        # trabajo. Ahora el reporte se arma con el texto por reglas —que es
+        # inmediato y no depende de la red—, se guarda, y la pagina pide los
+        # textos del modelo por su cuenta cuando ya se esta viendo.
         report_context = report.create_report_context_from_widgets(
             parsed, report_title=titulo, warnings=warnings, unique_authors=autores,
-            meltwater_analysis=analisis
+            meltwater_analysis=analisis, use_ai_insights=False
         )
 
-        # Porcentajes de reparto: se calculan aqui y no en la plantilla para
-        # que Jinja no tenga que hacer aritmetica ni protegerse del cero.
-        total = report_context['kpis']['total_mentions'] or 1
-        pct_redes = round(report_context['kpis']['mentions_redes'] / total * 100)
-        pct_prensa = round(report_context['kpis']['mentions_prensa'] / total * 100)
+        guardado = Report(
+            token=Report.nuevo_token(),
+            title=titulo,
+            user_id=current_user.id,
+            context_json=json.dumps(report_context, ensure_ascii=False),
+            insights_source='reglas',
+            insights_status=Report.INSIGHTS_PENDIENTE,
+        )
+        db.session.add(guardado)
+        db.session.commit()
 
-        top_authors = sorted(
-            report_context['content'].get('top_authors', []),
-            key=lambda a: a['posts'], reverse=True
-        )[:8]
-
-        return render_template('reporte.html',
-                               context=report_context,
-                               pct_redes=pct_redes,
-                               pct_prensa=pct_prensa,
-                               top_authors=top_authors)
+        # Redirect y no render: asi el reporte tiene una URL a la que volver, y
+        # recargar deja de reenviar el formulario con los ficheros.
+        return redirect(url_for('ver_reporte', token=guardado.token))
 
     except Exception as e:
         app.logger.error(f"ERROR procesando widgets de Meltwater: {e}")
@@ -1011,6 +1028,160 @@ def upload_meltwater():
               "Comprueba que son los export .xlsx de Meltwater sin modificar.", 'error')
         return volver_al_formulario()
 
+
+
+# ─────────────────────────────────────────────────────────────
+# Un reporte guardado: verlo, editarlo y pedirle los textos al modelo
+# ─────────────────────────────────────────────────────────────
+
+def _reporte_por_token(token):
+    """El reporte, o 404. Ver exige el enlace; editar exige ser su dueno.
+
+    Se identifica por un token aleatorio y no por el id porque el enlace se
+    comparte con companeros: con /reporte/7 cualquiera prueba /reporte/8 y
+    averigua cuantos reportes hay y de quien son. El token no es un permiso por
+    si solo —sigue haciendo falta sesion y acceso al modulo de reportes—, es lo
+    que evita que la URL sea adivinable.
+    """
+    guardado = Report.query.filter_by(token=token).first()
+    if guardado is None:
+        abort(404)
+    return guardado
+
+
+def _puede_editar_reporte(guardado):
+    return guardado.user_id == current_user.id or current_user.is_admin
+
+
+def _vista_de_reporte(contexto):
+    """Los calculos que la plantilla no debe hacer.
+
+    Viven aqui y no en Jinja para que la plantilla no tenga que hacer
+    aritmetica ni protegerse de la division por cero.
+    """
+    total = contexto['kpis']['total_mentions'] or 1
+    return {
+        'pct_redes': round(contexto['kpis']['mentions_redes'] / total * 100),
+        'pct_prensa': round(contexto['kpis']['mentions_prensa'] / total * 100),
+        'top_authors': sorted(
+            contexto['content'].get('top_authors', []),
+            key=lambda a: a['posts'], reverse=True
+        )[:8],
+    }
+
+
+@app.route('/reporte/<token>')
+@login_required
+@tool_required('reports')
+def ver_reporte(token):
+    guardado = _reporte_por_token(token)
+    contexto = guardado.contexto
+    if contexto is None:
+        # Filas de la epoca en que esto describia un fichero .pptx.
+        flash('Ese reporte se generó con una versión anterior y no se guardó su contenido.', 'error')
+        return redirect(url_for('mis_reportes'))
+
+    contexto['insights_source'] = guardado.insights_source or 'reglas'
+
+    return render_template('reporte.html',
+                           context=contexto,
+                           reporte=guardado,
+                           puede_editar=_puede_editar_reporte(guardado),
+                           **_vista_de_reporte(contexto))
+
+
+@app.route('/api/reportes/<token>/insights', methods=['POST'])
+@login_required
+@tool_required('reports')
+@limiter.limit('10 per hour')
+def api_reporte_insights(token):
+    """Pide los textos al modelo y los guarda.
+
+    Es una peticion aparte de la que sirve la pagina porque el modelo puede
+    tardar —o no contestar— y eso no puede costar el reporte. Limitada por hora
+    porque cada llamada se paga.
+    """
+    guardado = _reporte_por_token(token)
+    if not _puede_editar_reporte(guardado):
+        return jsonify({'success': False, 'error': 'Este reporte no es tuyo.'}), 403
+
+    # Ya se pidieron: no se repite el gasto porque alguien recargue la pagina.
+    if guardado.insights_status == Report.INSIGHTS_LISTO:
+        return jsonify({'success': True, 'estado': guardado.insights_status,
+                        'source': guardado.insights_source,
+                        'insights': (json.loads(guardado.context_json).get('insights') or {}),
+                        'warnings': (json.loads(guardado.context_json).get('warnings') or [])})
+
+    contexto = json.loads(guardado.context_json or '{}')
+    if not contexto:
+        return jsonify({'success': False, 'error': 'El reporte no tiene contenido guardado.'}), 400
+
+    meta = report.aplicar_insights_de_ia(contexto)
+
+    if meta.get('ok'):
+        guardado.insights_status = Report.INSIGHTS_LISTO
+        guardado.insights_source = 'ia'
+        guardado.insights_error = None
+    else:
+        # Que el modelo falle no invalida el reporte: se queda con el texto por
+        # reglas, que ya estaba escrito, y se recuerda el motivo para poder
+        # ensenarlo en vez de dejar la pagina girando para siempre.
+        guardado.insights_status = Report.INSIGHTS_FALLIDO
+        guardado.insights_error = meta.get('reason')
+
+    guardado.context_json = json.dumps(contexto, ensure_ascii=False)
+    db.session.commit()
+
+    # Lo que el analista ya retoco a mano manda sobre lo que traiga el modelo.
+    editados = guardado.slots_editados()
+    insights = {k: v for k, v in (contexto.get('insights') or {}).items() if k not in editados}
+
+    return jsonify({
+        'success': bool(meta.get('ok')),
+        'estado': guardado.insights_status,
+        'source': guardado.insights_source,
+        'insights': insights,
+        'warnings': contexto.get('warnings') or [],
+        'error': guardado.insights_error,
+    })
+
+
+@app.route('/api/reportes/<token>/textos', methods=['POST'])
+@login_required
+@tool_required('reports')
+def api_reporte_textos(token):
+    """Guarda los retoques del analista.
+
+    Se guardan aparte del contexto y no encima: asi volver a pedirle el texto
+    al modelo no pisa lo que ya escribio a mano.
+    """
+    guardado = _reporte_por_token(token)
+    if not _puede_editar_reporte(guardado):
+        return jsonify({'success': False, 'error': 'Este reporte no es tuyo.'}), 403
+
+    entrantes = (request.get_json(silent=True) or {}).get('textos')
+    if not isinstance(entrantes, dict):
+        return jsonify({'success': False, 'error': 'Nada que guardar.'}), 400
+
+    permitidos = set(insight_slots()) | {'client_name'}
+    retoques = json.loads(guardado.edits_json) if guardado.edits_json else {}
+    for slot, texto in entrantes.items():
+        if slot in permitidos and isinstance(texto, str):
+            # Un limite generoso: corta un pegado accidental de un documento
+            # entero sin estorbar a nadie que escriba de verdad.
+            retoques[slot] = texto.strip()[:2000]
+
+    guardado.edits_json = json.dumps(retoques, ensure_ascii=False)
+    if 'client_name' in retoques and retoques['client_name']:
+        guardado.title = retoques['client_name'][:255]
+    db.session.commit()
+
+    return jsonify({'success': True, 'guardados': len(retoques)})
+
+
+def insight_slots():
+    from services.insight_harness import SLOTS
+    return list(SLOTS)
 
 
 @app.route('/download/<path:filename>')
@@ -1049,6 +1220,20 @@ def download_file(filename):
 def mis_reportes():
     user_reports = Report.query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
     return render_template('mis_reportes.html', reports=user_reports)
+
+
+@app.template_filter('fecha_es')
+def _filtro_fecha_es(valor):
+    """26 de agosto de 2026, 14:50.
+
+    strftime('%B') da el mes en el idioma de la locale del contenedor, que es
+    la de C: la lista salia como "26 de August, 2026". El mes se traduce a mano
+    porque depender de la locale del sistema hace que el idioma de la interfaz
+    cambie con el servidor donde se despliegue.
+    """
+    if valor is None:
+        return ''
+    return f"{valor.day} de {report.MESES_ES[valor.month - 1]} de {valor.year}, {valor:%H:%M}"
 
 
 @app.context_processor

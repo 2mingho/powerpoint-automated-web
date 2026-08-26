@@ -105,6 +105,17 @@
   background: var(--r-gold-soft); color: var(--r-gold);
 }
 
+/* Estado del autoguardado. Discreto a proposito: es una confirmacion, no un
+   aviso, y compite con el reporte por la atencion del analista. */
+.rep-guardado {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: 10px;
+  font-size: 12px; color: var(--r-ink-2);
+}
+
+.rep-guardado.is-ok { color: var(--r-ink-2); opacity: 0.75; }
+.rep-guardado.is-error { color: #c0392b; font-weight: 600; }
+
 /* ── Avisos ──────────────────────────────────────────────────────────── */
 .rep-warnings {
   border-left: 3px solid var(--r-gold);

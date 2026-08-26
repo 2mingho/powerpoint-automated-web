@@ -16,15 +16,21 @@
   <div class="rep-actions">
     <div class="rep-actions-meta">
       Reporte de <strong>{{ context.meta.client_name }}</strong> · {{ context.meta.date_generated }}
-      {% if context.insights_source == 'ia' %}
-        <span class="rep-flag"><i class="fa-solid fa-wand-magic-sparkles"></i> Textos por IA</span>
-      {% else %}
-        <span class="rep-flag"><i class="fa-solid fa-ruler"></i> Textos por reglas</span>
-      {% endif %}
+      <span class="rep-flag" id="repFuente">
+        {% if context.insights_source == 'ia' %}
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Textos por IA
+        {% else %}
+          <i class="fa-solid fa-ruler"></i> Textos por reglas
+        {% endif %}
+      </span>
+      <span class="rep-guardado" id="repGuardado" hidden></span>
     </div>
     <div class="rep-actions-btns">
       <button type="button" class="rep-btn rep-btn-ghost" onclick="location.href='{{ url_for('index') }}'">
         <i class="fa-solid fa-arrow-left"></i> Nuevo reporte
+      </button>
+      <button type="button" class="rep-btn rep-btn-ghost" id="repCopiarEnlace">
+        <i class="fa-solid fa-link"></i> Copiar enlace
       </button>
       <button type="button" class="rep-btn" onclick="window.print()">
         <i class="fa-solid fa-file-pdf"></i> Descargar PDF
@@ -32,12 +38,10 @@
     </div>
   </div>
 
-  {% if context.warnings %}
-  <div class="rep-warnings">
+  <div class="rep-warnings" id="repAvisos" {% if not context.warnings %}hidden{% endif %}>
     <b>Avisos de carga</b>
-    <ul>{% for w in context.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+    <ul id="repAvisosLista">{% for w in context.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
   </div>
-  {% endif %}
 
   <!-- ── Portada ────────────────────────────────────────────────────── -->
   <header class="rep-cover">
@@ -358,17 +362,142 @@
   // cambia el tema para que no queden con la paleta anterior.
   RepCharts.onThemeChange(draw);
 
-  // ── Los textos editados se conservan al imprimir; sin guardado en servidor,
-  //    así que se avisa antes de abandonar la página con cambios. ──
-  var dirty = false;
-  document.querySelectorAll('.rep-edit').forEach(function (n) {
-    n.addEventListener('input', function () { dirty = true; });
-  });
-  window.addEventListener('beforeunload', function (e) {
-    if (!dirty) return;
-    e.preventDefault();
-    e.returnValue = '';
-  });
+  // ── Retoques del analista: se guardan solos en el servidor ──────────
+  //
+  // Antes vivían solo en el DOM y la única red de seguridad era un aviso al
+  // cerrar la pestaña: una recarga se llevaba el trabajo por delante. Ahora se
+  // mandan al servidor y el aviso queda para lo único que sigue estando en el
+  // aire, que es lo que aún no ha terminado de guardarse.
+  var TOKEN = {{ (reporte.token if reporte else '')|tojson }};
+  var PUEDE_EDITAR = {{ 'true' if puede_editar else 'false' }};
+
+  var campos = Array.prototype.slice.call(document.querySelectorAll('.rep-edit'));
+  var etiqueta = document.getElementById('repGuardado');
+  var pendientes = {};
+  var temporizador = null;
+  var enVuelo = 0;
+
+  function slotDe(nodo) {
+    return nodo.dataset.slot || (nodo.id === 'repTitle' ? 'client_name' : null);
+  }
+
+  function estado(texto, tono) {
+    if (!etiqueta) return;
+    etiqueta.hidden = false;
+    etiqueta.textContent = texto;
+    etiqueta.className = 'rep-guardado' + (tono ? ' is-' + tono : '');
+  }
+
+  function guardar() {
+    var lote = pendientes;
+    pendientes = {};
+    if (!Object.keys(lote).length) return;
+
+    enVuelo += 1;
+    estado('Guardando…');
+    fetch('/api/reportes/' + TOKEN + '/textos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textos: lote })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      estado('Guardado', 'ok');
+    }).catch(function () {
+      // Se devuelven al montón: el siguiente intento los reenvía, y mientras
+      // tanto el aviso de salida sigue activo porque quedan cambios sin ir.
+      Object.keys(lote).forEach(function (k) {
+        if (!(k in pendientes)) pendientes[k] = lote[k];
+      });
+      estado('No se pudo guardar', 'error');
+    }).then(function () { enVuelo -= 1; });
+  }
+
+  if (!PUEDE_EDITAR) {
+    // Un compañero con el enlace lo lee, no lo edita: dejar los campos
+    // editables invitaría a escribir algo que el servidor va a rechazar.
+    campos.forEach(function (n) { n.setAttribute('contenteditable', 'false'); });
+  } else {
+    campos.forEach(function (nodo) {
+      nodo.addEventListener('input', function () {
+        var slot = slotDe(nodo);
+        if (!slot) return;
+        pendientes[slot] = nodo.textContent;
+        estado('Sin guardar');
+        clearTimeout(temporizador);
+        temporizador = setTimeout(guardar, 900);
+      });
+      // Salir del campo guarda ya: esperar el temporizador es tiempo en el que
+      // el trabajo sigue existiendo en un solo sitio.
+      nodo.addEventListener('blur', function () { clearTimeout(temporizador); guardar(); });
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+      if (!Object.keys(pendientes).length && enVuelo === 0) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+  }
+
+  // ── Copiar el enlace ────────────────────────────────────────────────
+  var btnEnlace = document.getElementById('repCopiarEnlace');
+  if (btnEnlace) {
+    btnEnlace.addEventListener('click', function () {
+      navigator.clipboard.writeText(window.location.href).then(function () {
+        var antes = btnEnlace.innerHTML;
+        btnEnlace.innerHTML = '<i class="fa-solid fa-check"></i> Enlace copiado';
+        setTimeout(function () { btnEnlace.innerHTML = antes; }, 1800);
+      });
+    });
+  }
+
+  // ── Los textos del modelo llegan después de la página ───────────────
+  //
+  // La generación vivía dentro de la petición que servía el reporte, con la
+  // llamada al modelo en medio y Gunicorn cortando a los 180s. Pidiéndolos
+  // aparte, el analista ve su reporte en cuanto se procesan los ficheros y un
+  // proveedor lento deja de poder tumbar el reporte entero.
+  var ESTADO_IA = {{ (reporte.insights_status if reporte else '')|tojson }};
+  var fuente = document.getElementById('repFuente');
+
+  function pintarAvisos(lista) {
+    if (!lista || !lista.length) return;
+    var caja = document.getElementById('repAvisos');
+    var ul = document.getElementById('repAvisosLista');
+    if (!caja || !ul) return;
+    ul.innerHTML = lista.map(function (w) {
+      var li = document.createElement('li');
+      li.textContent = w;
+      return li.outerHTML;
+    }).join('');
+    caja.hidden = false;
+  }
+
+  if (PUEDE_EDITAR && ESTADO_IA === 'pendiente') {
+    if (fuente) {
+      fuente.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Escribiendo los textos…';
+    }
+    fetch('/api/reportes/' + TOKEN + '/insights', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success && data.insights) {
+          Object.keys(data.insights).forEach(function (slot) {
+            var nodo = document.querySelector('[data-slot="' + slot + '"]');
+            if (nodo) nodo.textContent = data.insights[slot];
+          });
+          if (fuente) {
+            fuente.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Textos por IA';
+          }
+        } else if (fuente) {
+          // Sin IA el reporte no se rompe: ya está escrito por reglas. Solo
+          // hay que decirlo, en vez de dejar el indicador girando.
+          fuente.innerHTML = '<i class="fa-solid fa-ruler"></i> Textos por reglas';
+        }
+        pintarAvisos(data.warnings);
+      })
+      .catch(function () {
+        if (fuente) fuente.innerHTML = '<i class="fa-solid fa-ruler"></i> Textos por reglas';
+      });
+  }
 })();
 </script>
 {% endblock %}
