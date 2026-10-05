@@ -1,4 +1,5 @@
 import os
+import time
 import io
 import pandas as pd
 import uuid
@@ -18,6 +19,8 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash
 from babel.dates import format_datetime
 from sqlalchemy import inspect, text, event
+from sqlalchemy.engine import Engine
+from sqlalchemy.pool import NullPool
 from dotenv import load_dotenv
 from flask_talisman import Talisman
 from werkzeug.exceptions import HTTPException
@@ -131,10 +134,29 @@ if _is_production_mode() and app.config['SQLALCHEMY_DATABASE_URI'].startswith('s
 app.config['ALLOW_SELF_REGISTRATION'] = _env_bool('ALLOW_SELF_REGISTRATION', False)
 
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_pre_ping': True,
-        'pool_recycle': 300,
-    }
+    # La base vive en un compute que se suspende solo cuando lleva un rato sin
+    # nadie conectado, y se factura por el tiempo que pasa despierto. Un pool
+    # normal guarda conexiones ociosas abiertas mientras el proceso viva:
+    # SQLAlchemy no las cierra por su cuenta —pool_recycle solo descarta la
+    # conexion vieja en el momento de pedirla, no antes—, asi que el compute
+    # no llegaba a suspenderse nunca y el mes se gasto en horas ociosas.
+    #
+    # NullPool abre la conexion al empezar cada operacion y la cierra al
+    # terminar, de modo que entre peticion y peticion no queda ninguna en pie.
+    # Se paga un saludo TCP+TLS por operacion; contra una base interna con
+    # trafico bajo eso son milisegundos, y a cambio la base duerme. Con
+    # NullPool sobran pool_pre_ping (la conexion es siempre nueva) y
+    # pool_recycle (ninguna envejece).
+    #
+    # DB_POOL=persistent vuelve al pool de siempre si algun dia el trafico
+    # hace que el coste por conexion pese mas que las horas ociosas.
+    if os.environ.get('DB_POOL', 'ephemeral').strip().lower() == 'persistent':
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_pre_ping': True,
+            'pool_recycle': 300,
+        }
+    else:
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'poolclass': NullPool}
 
 # Session security
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -1967,6 +1989,42 @@ def download_csv_summary(file_id):
 # Sonda de salud
 # ─────────────────────────────────────────────────────────────
 
+# Cuanto vale como prueba de vida el ultimo contacto real con la base, en
+# segundos. Por debajo de esa edad la sonda responde con lo que ya sabe en vez
+# de preguntar otra vez. En 0 vuelve a preguntar en cada sonda.
+HEALTHZ_DB_TTL = _env_int('HEALTHZ_DB_TTL', 300)
+
+# Ultimo contacto con la base y como fue. `momento` es un reloj monotono, que
+# no lo mueven los ajustes de hora del sistema. Lo escriben hilos distintos
+# (cada worker de gunicorn atiende varios), pero son dos asignaciones sueltas
+# sobre un dict: el peor cruce posible es leer un veredicto un instante viejo,
+# y la sonda ya trabaja con informacion de hasta HEALTHZ_DB_TTL segundos.
+_contacto_db = {'momento': None, 'ok': False}
+
+
+def _anotar_contacto_db(ok):
+    _contacto_db['ok'] = ok
+    _contacto_db['momento'] = time.monotonic()
+
+
+@event.listens_for(Engine, 'checkout')
+def _registrar_conexion_viva(dbapi_connection, connection_record, connection_proxy):
+    """Una conexion entregada a la aplicacion es prueba de que la base responde."""
+    _anotar_contacto_db(True)
+
+
+@event.listens_for(Engine, 'handle_error')
+def _registrar_conexion_rota(contexto):
+    """Y un error de conexion es prueba de lo contrario.
+
+    Solo cuentan los que dejan la conexion invalida —la base caida, la red
+    cortada—. Un SQL mal escrito o una constraint violada tambien pasan por
+    aqui y no dicen nada sobre la salud de la base.
+    """
+    if contexto.is_disconnect:
+        _anotar_contacto_db(False)
+
+
 @app.route('/healthz')
 @csrf.exempt
 @limiter.exempt
@@ -1979,9 +2037,24 @@ def healthz():
     arranque aplica migraciones antes de levantar los workers, tambien hace
     falta para distinguir "todavia arrancando" de "roto".
 
-    Se consulta la base de verdad —un SELECT 1— en vez de responder que si a
-    secas: un proceso vivo con la conexion perdida es justo el caso que hay que
-    sacar del balanceador.
+    Hace falta saber de la base —un proceso vivo con la conexion perdida es
+    justo el caso que hay que sacar del balanceador—, pero preguntarselo a la
+    base en cada sonda salia caro: el orquestador llama cada treinta segundos
+    y la base se factura por el tiempo que pasa despierta, asi que la propia
+    sonda le impedia dormirse y se comio la cuota del mes en horas ociosas.
+
+    Asi que la sonda aprovecha el trafico real: cada conexion que la aplicacion
+    usa deja constancia de si la base respondio, y mientras esa constancia sea
+    reciente se responde con ella sin tocar la base. Solo se pregunta cuando no
+    la hay: al arrancar, o tras un rato largo sin actividad.
+
+    Cuando no hay constancia fresca y la aplicacion lleva ociosa, la respuesta
+    es que si. Suena arriesgado y no lo es: con la base caida el contenedor no
+    habria llegado a arrancar —el arranque migra primero—, y sin trafico no hay
+    nadie a quien este sirviendo mal. En cuanto llegue una peticion de verdad,
+    esa peticion actualiza la constancia y la siguiente sonda ya lo refleja.
+    Sacarlo del balanceador por adelantado solo cambia un error de aplicacion
+    por un "sin servidor disponible", que no es mejor para nadie.
 
     Exenta de tres cosas por necesidad: de CSRF y del limitador porque la sonda
     no trae sesion ni cookies, y de force_https porque quien la llama es el
@@ -1989,13 +2062,27 @@ def healthz():
     301 y lo leeria como fallo. No expone version ni detalles del error: es un
     punto sin autenticar.
     """
+    momento = _contacto_db['momento'] if HEALTHZ_DB_TTL > 0 else None
+
+    if momento is not None:
+        if (time.monotonic() - momento) < HEALTHZ_DB_TTL:
+            if _contacto_db['ok']:
+                return jsonify({'status': 'ok', 'database': 'reachable'}), 200
+            return jsonify({'status': 'error', 'database': 'unreachable'}), 503
+
+        # Hubo contacto, pero ya es viejo: nadie ha usado la aplicacion desde
+        # entonces. Preguntar aqui es exactamente lo que despertaba la base
+        # cada treinta segundos.
+        return jsonify({'status': 'ok', 'database': 'idle'}), 200
+
     try:
         db.session.execute(text('SELECT 1'))
     except Exception as e:
         app.logger.error(f"[healthz] base inaccesible: {e}")
+        _anotar_contacto_db(False)
         return jsonify({'status': 'error', 'database': 'unreachable'}), 503
 
-    return jsonify({'status': 'ok'}), 200
+    return jsonify({'status': 'ok', 'database': 'reachable'}), 200
 
 
 # ─────────────────────────────────────────────────────────────
