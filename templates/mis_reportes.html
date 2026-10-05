@@ -18,19 +18,29 @@
     <div class="report-list-item">
       <div class="report-info">
         <div class="report-file-icon">
-          <i class="fa-solid fa-file-zipper"></i>
+          <i class="fa-solid fa-chart-line"></i>
         </div>
         <div>
-          <div class="report-name">{{ r.filename }}</div>
+          <div class="report-name">{{ r.title or 'Reporte sin título' }}</div>
           <div class="report-meta">
-            {{ r.created_at.strftime('%d de %B, %Y - %H:%M') }}
-            &middot; Plantilla: {{ r.template_name or 'N/D' }}
+            {{ r.created_at | fecha_es }}
+            {% if r.insights_source == 'ia' %}
+              &middot; Textos por IA
+            {% else %}
+              &middot; Textos por reglas
+            {% endif %}
           </div>
         </div>
       </div>
-      <a href="{{ url_for('download_file', filename=r.filename) }}" class="btn btn-outline btn-sm" title="Descargar">
-        <i class="fa-solid fa-download"></i> Descargar
+      {# Los reportes anteriores a la persistencia no guardaron su contenido:
+         no hay nada que abrir, y ofrecer el enlace solo lleva a un error. #}
+      {% if r.context_json %}
+      <a href="{{ url_for('ver_reporte', token=r.token) }}" class="btn btn-outline btn-sm" title="Abrir">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir
       </a>
+      {% else %}
+      <span class="report-meta">Sin contenido guardado</span>
+      {% endif %}
     </div>
     {% endfor %}
   {% else %}

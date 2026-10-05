@@ -79,9 +79,6 @@ powerpoint-automated-web/
 │   ├── file_merger.py         # Merge multiple CSV/Excel files
 │   └── groq_analysis.py       # Groq/Llama3 API integration
 │
-├── pptx_builder/              # PowerPoint generation engine
-│   └── (native_charts, ppt_engine, etc.)
-│
 ├── blueprints/
 │   ├── auth.py                # Login / Register / Logout routes
 │   └── admin.py               # Admin dashboard, user management, activity log
@@ -156,6 +153,7 @@ Temporary files in `scratch/` are automatically purged when they are older than 
 
 - **SECRET_KEY** must be set before starting the app — it will raise a `RuntimeError` at startup if missing.
 - **GROQ_API_KEY** is optional but AI report analysis will display "No disponible" without it.
-- **DATABASE_URL** is recommended for production (Neon/Postgres). Without it, the app falls back to local SQLite.
+- **DATABASE_URL** is recommended for production (PostgreSQL; in production it is a Coolify-managed Postgres on the same server, reached through its internal URL). Without it, the app falls back to local SQLite.
+- **DB_POOL** selects the connection strategy for PostgreSQL: `persistent` keeps a regular connection pool (use it with a self-hosted database such as the Coolify one); the default `ephemeral` opens one connection per operation, which only makes sense on a serverless database billed by awake time.
 - The report generator expects social listening CSV exports in **UTF-16 tab-delimited format** (standard Meltwater/similar export). Other tools accept any format.
 - The `scratch/` folder must be writable by the process user.

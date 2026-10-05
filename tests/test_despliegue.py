@@ -7,6 +7,7 @@ lo note hasta que ya esta en produccion.
 """
 import os
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -37,7 +38,24 @@ def client():
 # Sonda de salud
 # ─────────────────────────────────────────────────────────────
 
-def test_healthz_responde_sin_sesion(client):
+@pytest.fixture
+def sin_constancia():
+    """Borra lo que la sonda sepa de la base, como al recien arrancar.
+
+    Montar el fixture `client` ya toca la base (crea las tablas), asi que sin
+    esto cada prueba empezaria con una constancia fresca que no pidio.
+    """
+    app_module._contacto_db.update(momento=None, ok=False)
+    yield
+    app_module._contacto_db.update(momento=None, ok=False)
+
+
+def _constancia(ok, antiguedad=0):
+    """Deja constancia de un contacto con la base de hace `antiguedad` segundos."""
+    app_module._contacto_db.update(momento=time.monotonic() - antiguedad, ok=ok)
+
+
+def test_healthz_responde_sin_sesion(client, sin_constancia):
     """La sonda la llama el orquestador, que no trae cookies."""
     respuesta = client.get('/healthz')
 
@@ -45,7 +63,7 @@ def test_healthz_responde_sin_sesion(client):
     assert respuesta.get_json()['status'] == 'ok'
 
 
-def test_healthz_falla_si_la_base_no_responde(client, monkeypatch):
+def test_healthz_falla_si_la_base_no_responde(client, sin_constancia, monkeypatch):
     """Un proceso vivo con la conexion perdida es justo el que hay que sacar
     del balanceador. Responder 200 mirando solo si el puerto acepta lo dejaria
     recibiendo trafico."""
@@ -59,7 +77,7 @@ def test_healthz_falla_si_la_base_no_responde(client, monkeypatch):
     assert respuesta.get_json()['status'] == 'error'
 
 
-def test_healthz_no_filtra_el_motivo_del_fallo(client, monkeypatch):
+def test_healthz_no_filtra_el_motivo_del_fallo(client, sin_constancia, monkeypatch):
     """Es un punto sin autenticar: el detalle del error va al log, no al
     cuerpo de la respuesta."""
     def _explota(*args, **kwargs):
@@ -70,6 +88,46 @@ def test_healthz_no_filtra_el_motivo_del_fallo(client, monkeypatch):
 
     assert 'password' not in cuerpo
     assert 'newlink' not in cuerpo
+
+
+def test_healthz_no_consulta_la_base_si_el_trafico_acaba_de_hacerlo(client, monkeypatch):
+    """El motivo del cambio: la sonda llega cada treinta segundos y la base se
+    factura por el tiempo que pasa despierta. Con constancia reciente del
+    trafico real, preguntar otra vez solo sirve para no dejarla dormir."""
+    def _no_deberia_llamarse(*args, **kwargs):
+        raise AssertionError('la sonda consulto la base teniendo constancia fresca')
+
+    _constancia(ok=True, antiguedad=1)
+    monkeypatch.setattr(db.session, 'execute', _no_deberia_llamarse)
+    respuesta = client.get('/healthz')
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['database'] == 'reachable'
+
+
+def test_healthz_falla_si_el_trafico_real_encontro_la_base_caida(client):
+    """La constancia sirve en los dos sentidos: si lo ultimo que se supo de la
+    base es que no respondia, hay que salir del balanceador igual."""
+    _constancia(ok=False, antiguedad=1)
+    respuesta = client.get('/healthz')
+
+    assert respuesta.status_code == 503
+    assert respuesta.get_json()['database'] == 'unreachable'
+
+
+def test_healthz_no_despierta_la_base_tras_un_rato_ocioso(client, monkeypatch):
+    """Constancia vieja significa que nadie ha usado la aplicacion desde
+    entonces. Sin trafico no hay a quien servirle mal, y sondear aqui es
+    justo lo que impedia que la base se suspendiera."""
+    def _no_deberia_llamarse(*args, **kwargs):
+        raise AssertionError('la sonda desperto la base estando ociosa')
+
+    _constancia(ok=True, antiguedad=app_module.HEALTHZ_DB_TTL + 60)
+    monkeypatch.setattr(db.session, 'execute', _no_deberia_llamarse)
+    respuesta = client.get('/healthz')
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['database'] == 'idle'
 
 
 # ─────────────────────────────────────────────────────────────

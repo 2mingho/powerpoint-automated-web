@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function loadBadge() {
-    requestJson('/api/notifications?unread_only=1&limit=20').then(function (data) {
+    requestJson('/api/notifications/unread-count').then(function (data) {
       if (!data.success) return;
       setBadge(data.unread_count || 0);
     });
@@ -111,6 +111,35 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  loadBadge();
-  window.setInterval(loadBadge, 90000);
+  // Solo se sondea con la pestana a la vista. Una pestana olvidada en segundo
+  // plano consultaba cada 90 s para siempre y no dejaba que la base se
+  // suspendiera, que es justo lo que busca el NullPool de app.py. Al volver a
+  // la pestana se refresca en el acto, asi que no se pierde nada.
+  const BADGE_INTERVAL_MS = 90000;
+  let badgeTimer = null;
+
+  function startBadgePolling() {
+    if (badgeTimer !== null) return;
+    badgeTimer = window.setInterval(loadBadge, BADGE_INTERVAL_MS);
+  }
+
+  function stopBadgePolling() {
+    if (badgeTimer === null) return;
+    window.clearInterval(badgeTimer);
+    badgeTimer = null;
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      stopBadgePolling();
+    } else {
+      loadBadge();
+      startBadgePolling();
+    }
+  });
+
+  if (!document.hidden) {
+    loadBadge();
+    startBadgePolling();
+  }
 });

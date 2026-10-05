@@ -223,8 +223,13 @@ class TestGenerateInsights(unittest.TestCase):
         # La ficha viaja otra vez: sin ella el modelo no tiene con qué corregir.
         self.assertIn('FICHA DE DATOS', prompts[1])
 
-    def test_gives_up_after_the_retry(self):
-        """Dos intentos y se para: hay un suelo determinista esperando."""
+    def test_gives_up_after_the_retry_but_keeps_the_good_fields(self):
+        """Dos intentos y se para, salvando lo que si vale.
+
+        Antes un solo campo malo se llevaba por delante los otros doce, que
+        estaban bien. El reintento no siempre arregla las cosas, asi que lo que
+        importa es que agotarlo no equivalga a perderlo todo.
+        """
         llamadas = []
         malo = _valid_payload()
         malo['volume_take'] = 'Se registraron 45000 menciones en el periodo.'
@@ -235,18 +240,31 @@ class TestGenerateInsights(unittest.TestCase):
 
         insights, meta = insight_harness.generate_insights(_context(), complete_fn=_terco)
 
-        self.assertIsNone(insights)
-        self.assertFalse(meta['ok'])
         self.assertEqual(len(llamadas), insight_harness.MAX_INTENTOS)
-        self.assertIn('45000', meta['reason'])
-        self.assertIn('intentos', meta['reason'])
+        self.assertTrue(meta['parcial'])
 
-    def test_discards_hallucinating_model(self):
+        # El campo con la cifra inventada no llega, y ningun otro se pierde.
+        self.assertNotIn('volume_take', insights)
+        self.assertEqual(set(insights), set(insight_harness.SLOTS) - {'volume_take'})
+        self.assertIn('volume_take', meta['descartados'])
+        self.assertIn('45000', meta['descartados']['volume_take'])
+
+    def test_drops_only_the_hallucinated_field(self):
         payload = _valid_payload()
         payload['volume_take'] = 'Hubo 999999 menciones.'
         ctx = _context()
         insights, meta = insight_harness.generate_insights(
             ctx, complete_fn=_fake_model(payload)
+        )
+        self.assertNotIn('volume_take', insights)
+        self.assertIn('sentiment_take', insights)
+        self.assertIn('999999', meta['descartados']['volume_take'])
+
+    def test_returns_nothing_when_no_field_survives(self):
+        """Si no se salva nada, se dice que no hay nada: sin insights a medias."""
+        payload = {slot: 'Hubo 999999 menciones.' for slot in insight_harness.SLOTS}
+        insights, meta = insight_harness.generate_insights(
+            _context(), complete_fn=_fake_model(payload)
         )
         self.assertIsNone(insights)
         self.assertFalse(meta['ok'])
@@ -334,8 +352,8 @@ class TestMeltwaterAnalysis(unittest.TestCase):
 
         insights, meta = insight_harness.generate_insights(
             ctx, complete_fn=_fake_model(payload))
-        self.assertIsNone(insights)
-        self.assertIn('99999', meta['reason'])
+        self.assertNotIn('topics_take', insights)
+        self.assertIn('99999', meta['descartados']['topics_take'])
 
 
 if __name__ == '__main__':

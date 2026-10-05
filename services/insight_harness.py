@@ -299,44 +299,82 @@ def _numbers_in(text):
     return enteros, decimales
 
 
-def validate(payload, nums, pcts):
-    """
-    Check the model's answer against the schema and the fact sheet.
-    Returns (ok, motivo).
-    """
-    if not isinstance(payload, dict):
-        return False, 'la respuesta no es un objeto JSON'
+def _revisar_campo(slot, texto, nums, pcts):
+    """El motivo por el que este campo no vale, o None si esta bien."""
+    if not str(texto).strip():
+        return 'está vacío'
 
-    faltantes = [s for s in SLOTS if not str(payload.get(s, '')).strip()]
-    if faltantes:
-        return False, f"faltan campos: {', '.join(faltantes)}"
-
-    for slot, (_, limite) in SLOTS.items():
-        texto = str(payload[slot]).strip()
-        # Un margen del 25% evita descartar un texto bueno por unos caracteres.
-        if len(texto) > limite * 1.25:
-            return False, f"'{slot}' excede la longitud ({len(texto)} > {limite})"
+    _, limite = SLOTS[slot]
+    # Un margen del 25% evita descartar un texto bueno por unos caracteres.
+    if len(str(texto).strip()) > limite * 1.25:
+        return f'excede la longitud ({len(str(texto).strip())} > {limite})'
 
     # El guardarrail que importa: ninguna cifra inventada.
+    enteros, decimales = _numbers_in(str(texto))
+
+    for valor in sorted(enteros):
+        if valor < LITERAL_FLOOR:
+            continue  # retorico, no es un dato
+        if valor not in nums:
+            return f'cita una cifra que no está en los datos: {valor}'
+
+    # Un decimal es casi siempre un porcentaje, y el contrato prohibe citar
+    # cifras fuera de la ficha: si no cuadra con ninguna, se descarta.
+    for valor in sorted(decimales):
+        if any(abs(valor - permitido) <= PCT_TOLERANCE for permitido in pcts):
+            continue
+        if valor in nums or int(valor) in nums:
+            continue
+        return f'cita una cifra decimal que no está en los datos: {valor}'
+
+    return None
+
+
+def revisar(payload, nums, pcts):
+    """Revisa la respuesta entera y devuelve (fallo_global, problemas_por_campo).
+
+    Se revisan TODOS los campos y no se para en el primero a proposito. Antes
+    el primer fallo tumbaba la respuesta completa, asi que una sola frase con
+    una cifra de mas se llevaba por delante los otros doce campos, que estaban
+    bien. Sabiendo cuales fallan se puede conservar lo bueno y rellenar solo el
+    hueco con el texto por reglas.
+
+    `fallo_global` es para lo que no se puede arreglar por campos: que la
+    respuesta no sea un objeto, o que falten claves.
+    """
+    if not isinstance(payload, dict):
+        return 'la respuesta no es un objeto JSON', {}
+
+    ausentes = [s for s in SLOTS if s not in payload]
+    if ausentes:
+        return f"faltan campos: {', '.join(ausentes)}", {}
+
+    problemas = {}
     for slot in SLOTS:
-        enteros, decimales = _numbers_in(str(payload[slot]))
+        motivo = _revisar_campo(slot, payload[slot], nums, pcts)
+        if motivo:
+            problemas[slot] = motivo
+    return None, problemas
 
-        for valor in enteros:
-            if valor < LITERAL_FLOOR:
-                continue  # retorico, no es un dato
-            if valor not in nums:
-                return False, f"'{slot}' cita una cifra que no está en los datos: {valor}"
 
-        # Un decimal es casi siempre un porcentaje, y el contrato prohibe
-        # citar cifras fuera de la ficha: si no cuadra con ninguna, se descarta.
-        for valor in decimales:
-            if any(abs(valor - permitido) <= PCT_TOLERANCE for permitido in pcts):
-                continue
-            if valor in nums or int(valor) in nums:
-                continue
-            return False, f"'{slot}' cita una cifra decimal que no está en los datos: {valor}"
+def validate(payload, nums, pcts):
+    """Check the model's answer against the schema and the fact sheet.
 
+    Returns (ok, motivo). Se conserva porque expresa la pregunta «¿esta
+    perfecta?», que es la que hace falta para decidir si merece la pena
+    reintentar; el rescate por campos usa revisar().
+    """
+    fallo, problemas = revisar(payload, nums, pcts)
+    if fallo:
+        return False, fallo
+    if problemas:
+        slot, motivo = next(iter(problemas.items()))
+        return False, f"'{slot}' {motivo}"
     return True, 'ok'
+
+
+def _motivos_en_texto(problemas):
+    return '; '.join(f"'{slot}' {motivo}" for slot, motivo in problemas.items())
 
 
 # ─────────────────────────────────────────────────────────────
@@ -366,15 +404,15 @@ def generate_insights(context, complete_fn=None):
     """
     Ask the configured model for the report's written insights.
 
-    Returns (insights, meta). `insights` is None when no model is configured or
-    the answer failed validation — the caller then keeps the deterministic
-    narrative. `meta` always explains what happened, so the editor can show it.
+    Devuelve (insights, meta). `insights` es None cuando no hay modelo o cuando
+    no se salvo ni un campo; puede ser PARCIAL, con solo los campos que pasaron
+    la validacion. Quien llama rellena los que falten con el texto por reglas,
+    que siempre existe. `meta` explica siempre que paso, para poder ensenarlo.
 
     Un rechazo no es definitivo: se reintenta una vez diciendole al modelo que
-    fallo. La mayoria de los descartes son de una sola frase —una cifra de mas,
-    un campo largo— y el resto del texto era bueno; tirarlo entero por eso
-    desperdicia trece campos correctos y deja al analista con el texto por
-    reglas sin saber que faltó tan poco.
+    fallo y por que. Y si el reintento tampoco sale limpio, se conserva lo que
+    si vale en vez de tirarlo todo: la mayoria de los descartes son de una sola
+    frase, y perder doce campos buenos por el decimotercero no le sirve a nadie.
 
     Un solo reintento, no varios: si con el motivo delante el modelo vuelve a
     fallar, el problema no es un desliz y las llamadas siguientes solo anaden
@@ -387,6 +425,8 @@ def generate_insights(context, complete_fn=None):
     prompt, nums, pcts = build_prompt(context)
 
     motivo = None
+    ultimo_payload, ultimos_problemas = None, {}
+
     for intento in range(1, MAX_INTENTOS + 1):
         # La primera pasada es redaccion y la segunda es correccion, asi que
         # baja la temperatura: en el reintento no se busca otra idea sino que
@@ -408,14 +448,34 @@ def generate_insights(context, complete_fn=None):
         if payload is None:
             motivo = 'la respuesta no contenía JSON válido'
         else:
-            ok, motivo = validate(payload, nums, pcts)
-            if ok:
+            fallo, problemas = revisar(payload, nums, pcts)
+            if fallo:
+                motivo = fallo
+            elif not problemas:
                 limpio = {slot: str(payload[slot]).strip() for slot in SLOTS}
-                return limpio, {'ok': True, 'reason': 'ok', 'intentos': intento}
+                return limpio, {'ok': True, 'reason': 'ok', 'intentos': intento,
+                                'descartados': {}}
+            else:
+                # Sirve para el reintento y, si tampoco cuela, para el rescate.
+                motivo = _motivos_en_texto(problemas)
+                ultimo_payload, ultimos_problemas = payload, problemas
 
         logger.warning('Insights rechazados en el intento %d/%d: %s',
                        intento, MAX_INTENTOS, motivo)
 
+    # Agotados los intentos: se rescata lo que valga del ultimo que al menos
+    # trajo los trece campos. Sin eso no hay nada que salvar.
+    if ultimo_payload is not None:
+        salvados = {slot: str(ultimo_payload[slot]).strip()
+                    for slot in SLOTS if slot not in ultimos_problemas}
+        if salvados:
+            logger.warning('Insights parciales: %d de %d campos descartados',
+                           len(ultimos_problemas), len(SLOTS))
+            return salvados, {'ok': True, 'parcial': True, 'intentos': MAX_INTENTOS,
+                              'reason': f'{len(ultimos_problemas)} campo(s) descartado(s)',
+                              'descartados': dict(ultimos_problemas)}
+
     return None, {'ok': False,
                   'reason': f'{motivo} (tras {MAX_INTENTOS} intentos)',
-                  'intentos': MAX_INTENTOS}
+                  'intentos': MAX_INTENTOS,
+                  'descartados': dict(ultimos_problemas)}

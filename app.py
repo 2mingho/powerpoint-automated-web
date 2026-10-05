@@ -1,4 +1,5 @@
 import os
+import time
 import io
 import pandas as pd
 import uuid
@@ -16,11 +17,10 @@ from services.classifier import classify_mentions
 from services.file_loader import detect_format, read_full_as_tsv
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
 from babel.dates import format_datetime
 from sqlalchemy import inspect, text, event
+from sqlalchemy.engine import Engine
+from sqlalchemy.pool import NullPool
 from dotenv import load_dotenv
 from flask_talisman import Talisman
 from werkzeug.exceptions import HTTPException
@@ -38,8 +38,7 @@ from models import User, Report, ActivityLog, ClassificationPreset, Task, TempAr
 from services import calculation as report
 from services import meltwater_ingest
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
-# El reporte se renderiza en la web y se exporta a PDF desde el navegador; el
-# paquete pptx_builder/ queda en el repositorio pero ya no entra en el flujo.
+# El reporte se renderiza en la web y se exporta a PDF desde el navegador.
 from services.csv_analysis import analyze_csv, generate_summary_csv
 
 # Load environment variables
@@ -135,10 +134,31 @@ if _is_production_mode() and app.config['SQLALCHEMY_DATABASE_URI'].startswith('s
 app.config['ALLOW_SELF_REGISTRATION'] = _env_bool('ALLOW_SELF_REGISTRATION', False)
 
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_pre_ping': True,
-        'pool_recycle': 300,
-    }
+    # La base vive en un compute que se suspende solo cuando lleva un rato sin
+    # nadie conectado, y se factura por el tiempo que pasa despierto. Un pool
+    # normal guarda conexiones ociosas abiertas mientras el proceso viva:
+    # SQLAlchemy no las cierra por su cuenta —pool_recycle solo descarta la
+    # conexion vieja en el momento de pedirla, no antes—, asi que el compute
+    # no llegaba a suspenderse nunca y el mes se gasto en horas ociosas.
+    #
+    # NullPool abre la conexion al empezar cada operacion y la cierra al
+    # terminar, de modo que entre peticion y peticion no queda ninguna en pie.
+    # Se paga un saludo TCP+TLS por operacion; contra una base interna con
+    # trafico bajo eso son milisegundos, y a cambio la base duerme. Con
+    # NullPool sobran pool_pre_ping (la conexion es siempre nueva) y
+    # pool_recycle (ninguna envejece).
+    #
+    # Todo lo anterior vale para una base serverless como la de Neon. Con la
+    # base en Coolify, en el mismo servidor, no hay compute que dejar dormir y
+    # produccion usa DB_POOL=persistent: el pool de siempre, sin pagar un
+    # saludo TCP por cada operacion.
+    if os.environ.get('DB_POOL', 'ephemeral').strip().lower() == 'persistent':
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_pre_ping': True,
+            'pool_recycle': 300,
+        }
+    else:
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'poolclass': NullPool}
 
 # Session security
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -247,6 +267,12 @@ from flask_login import logout_user
 @app.before_request
 def check_force_logout():
     """If admin has flagged this user for forced logout, log them out immediately."""
+    # Los estaticos no necesitan saber quien es el usuario. Sin esta salida,
+    # cada CSS, JS e imagen hacia una consulta y, con NullPool, abria su propia
+    # conexion: cargar /tasks eran una decena de saludos TCP+TLS a la base.
+    if request.endpoint == 'static':
+        return None
+
     session_user_id = session.get('_user_id')
     if session_user_id:
         try:
@@ -301,14 +327,16 @@ def auto_log_request(response):
     if PAGE_VIEW_LOG_SAMPLE_RATE < 1.0 and random.random() > PAGE_VIEW_LOG_SAMPLE_RATE:
         return response
 
-    if (current_user.is_authenticated
-            and response.status_code < 400
+    # current_user va al final: leerlo carga el usuario de la base, y hacerlo
+    # antes de descartar los estaticos costaba una consulta por cada CSS o JS.
+    if (response.status_code < 400
             and request.endpoint
             and not request.endpoint.startswith('static')
             and not request.endpoint.startswith('admin.')
             and request.endpoint not in _MANUALLY_LOGGED
             and not request.is_json
-            and request.method == 'GET'):
+            and request.method == 'GET'
+            and current_user.is_authenticated):
         try:
             log_activity('page_view', f'{request.method} {request.endpoint}')
         except Exception:
@@ -435,11 +463,23 @@ def prune_activity_logs(retention_days=ACTIVITY_LOG_RETENTION_DAYS, max_rows=ACT
 
 
 def prune_report_metadata(retention_days=REPORT_METADATA_RETENTION_DAYS):
-    """Prune report metadata rows older than retention window."""
+    """Limpia las filas que solo eran metadatos de un fichero que ya no existe.
+
+    Esta poda nacio cuando la fila describia un .pptx en disco: borrarla a los
+    180 dias no perdia nada porque el fichero se habia ido mucho antes. Desde
+    que el reporte se guarda entero, la fila YA NO es un metadato: es el
+    trabajo del analista, con sus textos reescritos a mano.
+
+    Por eso solo se barre lo que no tiene contenido. Borrar reportes de verdad
+    puede ser razonable, pero es una decision de retencion de datos del cliente
+    que alguien tiene que tomar a proposito, no algo que se herede de una
+    funcion que antes borraba nombres de fichero.
+    """
     cutoff = datetime.utcnow() - timedelta(days=retention_days)
     deleted = (
         Report.query
         .filter(Report.created_at < cutoff)
+        .filter(Report.context_json.is_(None))
         .delete(synchronize_session=False)
     )
     db.session.commit()
@@ -987,27 +1027,32 @@ def upload_meltwater():
             return volver_al_formulario()
 
         parsed = meltwater_ingest.parse_widgets(widgets)
+
+        # Sin IA aqui a proposito. La generacion vivia dentro de esta peticion,
+        # con la llamada al modelo en medio y Gunicorn cortando a los 180s: un
+        # proveedor lento era un 504, y el 504 se llevaba por delante todo el
+        # trabajo. Ahora el reporte se arma con el texto por reglas —que es
+        # inmediato y no depende de la red—, se guarda, y la pagina pide los
+        # textos del modelo por su cuenta cuando ya se esta viendo.
         report_context = report.create_report_context_from_widgets(
             parsed, report_title=titulo, warnings=warnings, unique_authors=autores,
-            meltwater_analysis=analisis
+            meltwater_analysis=analisis, use_ai_insights=False
         )
 
-        # Porcentajes de reparto: se calculan aqui y no en la plantilla para
-        # que Jinja no tenga que hacer aritmetica ni protegerse del cero.
-        total = report_context['kpis']['total_mentions'] or 1
-        pct_redes = round(report_context['kpis']['mentions_redes'] / total * 100)
-        pct_prensa = round(report_context['kpis']['mentions_prensa'] / total * 100)
+        guardado = Report(
+            token=Report.nuevo_token(),
+            title=titulo,
+            user_id=current_user.id,
+            context_json=json.dumps(report_context, ensure_ascii=False),
+            insights_source='reglas',
+            insights_status=Report.INSIGHTS_PENDIENTE,
+        )
+        db.session.add(guardado)
+        db.session.commit()
 
-        top_authors = sorted(
-            report_context['content'].get('top_authors', []),
-            key=lambda a: a['posts'], reverse=True
-        )[:8]
-
-        return render_template('reporte.html',
-                               context=report_context,
-                               pct_redes=pct_redes,
-                               pct_prensa=pct_prensa,
-                               top_authors=top_authors)
+        # Redirect y no render: asi el reporte tiene una URL a la que volver, y
+        # recargar deja de reenviar el formulario con los ficheros.
+        return redirect(url_for('ver_reporte', token=guardado.token))
 
     except Exception as e:
         app.logger.error(f"ERROR procesando widgets de Meltwater: {e}")
@@ -1015,6 +1060,160 @@ def upload_meltwater():
               "Comprueba que son los export .xlsx de Meltwater sin modificar.", 'error')
         return volver_al_formulario()
 
+
+
+# ─────────────────────────────────────────────────────────────
+# Un reporte guardado: verlo, editarlo y pedirle los textos al modelo
+# ─────────────────────────────────────────────────────────────
+
+def _reporte_por_token(token):
+    """El reporte, o 404. Ver exige el enlace; editar exige ser su dueno.
+
+    Se identifica por un token aleatorio y no por el id porque el enlace se
+    comparte con companeros: con /reporte/7 cualquiera prueba /reporte/8 y
+    averigua cuantos reportes hay y de quien son. El token no es un permiso por
+    si solo —sigue haciendo falta sesion y acceso al modulo de reportes—, es lo
+    que evita que la URL sea adivinable.
+    """
+    guardado = Report.query.filter_by(token=token).first()
+    if guardado is None:
+        abort(404)
+    return guardado
+
+
+def _puede_editar_reporte(guardado):
+    return guardado.user_id == current_user.id or current_user.is_admin
+
+
+def _vista_de_reporte(contexto):
+    """Los calculos que la plantilla no debe hacer.
+
+    Viven aqui y no en Jinja para que la plantilla no tenga que hacer
+    aritmetica ni protegerse de la division por cero.
+    """
+    total = contexto['kpis']['total_mentions'] or 1
+    return {
+        'pct_redes': round(contexto['kpis']['mentions_redes'] / total * 100),
+        'pct_prensa': round(contexto['kpis']['mentions_prensa'] / total * 100),
+        'top_authors': sorted(
+            contexto['content'].get('top_authors', []),
+            key=lambda a: a['posts'], reverse=True
+        )[:8],
+    }
+
+
+@app.route('/reporte/<token>')
+@login_required
+@tool_required('reports')
+def ver_reporte(token):
+    guardado = _reporte_por_token(token)
+    contexto = guardado.contexto
+    if contexto is None:
+        # Filas de la epoca en que esto describia un fichero .pptx.
+        flash('Ese reporte se generó con una versión anterior y no se guardó su contenido.', 'error')
+        return redirect(url_for('mis_reportes'))
+
+    contexto['insights_source'] = guardado.insights_source or 'reglas'
+
+    return render_template('reporte.html',
+                           context=contexto,
+                           reporte=guardado,
+                           puede_editar=_puede_editar_reporte(guardado),
+                           **_vista_de_reporte(contexto))
+
+
+@app.route('/api/reportes/<token>/insights', methods=['POST'])
+@login_required
+@tool_required('reports')
+@limiter.limit('10 per hour')
+def api_reporte_insights(token):
+    """Pide los textos al modelo y los guarda.
+
+    Es una peticion aparte de la que sirve la pagina porque el modelo puede
+    tardar —o no contestar— y eso no puede costar el reporte. Limitada por hora
+    porque cada llamada se paga.
+    """
+    guardado = _reporte_por_token(token)
+    if not _puede_editar_reporte(guardado):
+        return jsonify({'success': False, 'error': 'Este reporte no es tuyo.'}), 403
+
+    # Ya se pidieron: no se repite el gasto porque alguien recargue la pagina.
+    if guardado.insights_status == Report.INSIGHTS_LISTO:
+        return jsonify({'success': True, 'estado': guardado.insights_status,
+                        'source': guardado.insights_source,
+                        'insights': (json.loads(guardado.context_json).get('insights') or {}),
+                        'warnings': (json.loads(guardado.context_json).get('warnings') or [])})
+
+    contexto = json.loads(guardado.context_json or '{}')
+    if not contexto:
+        return jsonify({'success': False, 'error': 'El reporte no tiene contenido guardado.'}), 400
+
+    meta = report.aplicar_insights_de_ia(contexto)
+
+    if meta.get('ok'):
+        guardado.insights_status = Report.INSIGHTS_LISTO
+        guardado.insights_source = 'ia'
+        guardado.insights_error = None
+    else:
+        # Que el modelo falle no invalida el reporte: se queda con el texto por
+        # reglas, que ya estaba escrito, y se recuerda el motivo para poder
+        # ensenarlo en vez de dejar la pagina girando para siempre.
+        guardado.insights_status = Report.INSIGHTS_FALLIDO
+        guardado.insights_error = meta.get('reason')
+
+    guardado.context_json = json.dumps(contexto, ensure_ascii=False)
+    db.session.commit()
+
+    # Lo que el analista ya retoco a mano manda sobre lo que traiga el modelo.
+    editados = guardado.slots_editados()
+    insights = {k: v for k, v in (contexto.get('insights') or {}).items() if k not in editados}
+
+    return jsonify({
+        'success': bool(meta.get('ok')),
+        'estado': guardado.insights_status,
+        'source': guardado.insights_source,
+        'insights': insights,
+        'warnings': contexto.get('warnings') or [],
+        'error': guardado.insights_error,
+    })
+
+
+@app.route('/api/reportes/<token>/textos', methods=['POST'])
+@login_required
+@tool_required('reports')
+def api_reporte_textos(token):
+    """Guarda los retoques del analista.
+
+    Se guardan aparte del contexto y no encima: asi volver a pedirle el texto
+    al modelo no pisa lo que ya escribio a mano.
+    """
+    guardado = _reporte_por_token(token)
+    if not _puede_editar_reporte(guardado):
+        return jsonify({'success': False, 'error': 'Este reporte no es tuyo.'}), 403
+
+    entrantes = (request.get_json(silent=True) or {}).get('textos')
+    if not isinstance(entrantes, dict):
+        return jsonify({'success': False, 'error': 'Nada que guardar.'}), 400
+
+    permitidos = set(insight_slots()) | {'client_name'}
+    retoques = json.loads(guardado.edits_json) if guardado.edits_json else {}
+    for slot, texto in entrantes.items():
+        if slot in permitidos and isinstance(texto, str):
+            # Un limite generoso: corta un pegado accidental de un documento
+            # entero sin estorbar a nadie que escriba de verdad.
+            retoques[slot] = texto.strip()[:2000]
+
+    guardado.edits_json = json.dumps(retoques, ensure_ascii=False)
+    if 'client_name' in retoques and retoques['client_name']:
+        guardado.title = retoques['client_name'][:255]
+    db.session.commit()
+
+    return jsonify({'success': True, 'guardados': len(retoques)})
+
+
+def insight_slots():
+    from services.insight_harness import SLOTS
+    return list(SLOTS)
 
 
 @app.route('/download/<path:filename>')
@@ -1053,6 +1252,20 @@ def download_file(filename):
 def mis_reportes():
     user_reports = Report.query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
     return render_template('mis_reportes.html', reports=user_reports)
+
+
+@app.template_filter('fecha_es')
+def _filtro_fecha_es(valor):
+    """26 de agosto de 2026, 14:50.
+
+    strftime('%B') da el mes en el idioma de la locale del contenedor, que es
+    la de C: la lista salia como "26 de August, 2026". El mes se traduce a mano
+    porque depender de la locale del sistema hace que el idioma de la interfaz
+    cambie con el servidor donde se despliegue.
+    """
+    if valor is None:
+        return ''
+    return f"{valor.day} de {report.MESES_ES[valor.month - 1]} de {valor.year}, {valor:%H:%M}"
 
 
 @app.context_processor
@@ -1786,6 +1999,42 @@ def download_csv_summary(file_id):
 # Sonda de salud
 # ─────────────────────────────────────────────────────────────
 
+# Cuanto vale como prueba de vida el ultimo contacto real con la base, en
+# segundos. Por debajo de esa edad la sonda responde con lo que ya sabe en vez
+# de preguntar otra vez. En 0 vuelve a preguntar en cada sonda.
+HEALTHZ_DB_TTL = _env_int('HEALTHZ_DB_TTL', 300)
+
+# Ultimo contacto con la base y como fue. `momento` es un reloj monotono, que
+# no lo mueven los ajustes de hora del sistema. Lo escriben hilos distintos
+# (cada worker de gunicorn atiende varios), pero son dos asignaciones sueltas
+# sobre un dict: el peor cruce posible es leer un veredicto un instante viejo,
+# y la sonda ya trabaja con informacion de hasta HEALTHZ_DB_TTL segundos.
+_contacto_db = {'momento': None, 'ok': False}
+
+
+def _anotar_contacto_db(ok):
+    _contacto_db['ok'] = ok
+    _contacto_db['momento'] = time.monotonic()
+
+
+@event.listens_for(Engine, 'checkout')
+def _registrar_conexion_viva(dbapi_connection, connection_record, connection_proxy):
+    """Una conexion entregada a la aplicacion es prueba de que la base responde."""
+    _anotar_contacto_db(True)
+
+
+@event.listens_for(Engine, 'handle_error')
+def _registrar_conexion_rota(contexto):
+    """Y un error de conexion es prueba de lo contrario.
+
+    Solo cuentan los que dejan la conexion invalida —la base caida, la red
+    cortada—. Un SQL mal escrito o una constraint violada tambien pasan por
+    aqui y no dicen nada sobre la salud de la base.
+    """
+    if contexto.is_disconnect:
+        _anotar_contacto_db(False)
+
+
 @app.route('/healthz')
 @csrf.exempt
 @limiter.exempt
@@ -1798,9 +2047,24 @@ def healthz():
     arranque aplica migraciones antes de levantar los workers, tambien hace
     falta para distinguir "todavia arrancando" de "roto".
 
-    Se consulta la base de verdad —un SELECT 1— en vez de responder que si a
-    secas: un proceso vivo con la conexion perdida es justo el caso que hay que
-    sacar del balanceador.
+    Hace falta saber de la base —un proceso vivo con la conexion perdida es
+    justo el caso que hay que sacar del balanceador—, pero preguntarselo a la
+    base en cada sonda salia caro: el orquestador llama cada treinta segundos
+    y la base se factura por el tiempo que pasa despierta, asi que la propia
+    sonda le impedia dormirse y se comio la cuota del mes en horas ociosas.
+
+    Asi que la sonda aprovecha el trafico real: cada conexion que la aplicacion
+    usa deja constancia de si la base respondio, y mientras esa constancia sea
+    reciente se responde con ella sin tocar la base. Solo se pregunta cuando no
+    la hay: al arrancar, o tras un rato largo sin actividad.
+
+    Cuando no hay constancia fresca y la aplicacion lleva ociosa, la respuesta
+    es que si. Suena arriesgado y no lo es: con la base caida el contenedor no
+    habria llegado a arrancar —el arranque migra primero—, y sin trafico no hay
+    nadie a quien este sirviendo mal. En cuanto llegue una peticion de verdad,
+    esa peticion actualiza la constancia y la siguiente sonda ya lo refleja.
+    Sacarlo del balanceador por adelantado solo cambia un error de aplicacion
+    por un "sin servidor disponible", que no es mejor para nadie.
 
     Exenta de tres cosas por necesidad: de CSRF y del limitador porque la sonda
     no trae sesion ni cookies, y de force_https porque quien la llama es el
@@ -1808,13 +2072,27 @@ def healthz():
     301 y lo leeria como fallo. No expone version ni detalles del error: es un
     punto sin autenticar.
     """
+    momento = _contacto_db['momento'] if HEALTHZ_DB_TTL > 0 else None
+
+    if momento is not None:
+        if (time.monotonic() - momento) < HEALTHZ_DB_TTL:
+            if _contacto_db['ok']:
+                return jsonify({'status': 'ok', 'database': 'reachable'}), 200
+            return jsonify({'status': 'error', 'database': 'unreachable'}), 503
+
+        # Hubo contacto, pero ya es viejo: nadie ha usado la aplicacion desde
+        # entonces. Preguntar aqui es exactamente lo que despertaba la base
+        # cada treinta segundos.
+        return jsonify({'status': 'ok', 'database': 'idle'}), 200
+
     try:
         db.session.execute(text('SELECT 1'))
     except Exception as e:
         app.logger.error(f"[healthz] base inaccesible: {e}")
+        _anotar_contacto_db(False)
         return jsonify({'status': 'error', 'database': 'unreachable'}), 503
 
-    return jsonify({'status': 'ok'}), 200
+    return jsonify({'status': 'ok', 'database': 'reachable'}), 200
 
 
 # ─────────────────────────────────────────────────────────────

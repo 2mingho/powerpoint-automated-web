@@ -5,6 +5,7 @@ from extensions import login_manager
 from datetime import datetime
 from sqlalchemy import false
 import json
+import secrets
 
 
 class Role(db.Model):
@@ -209,7 +210,9 @@ class User(UserMixin, db.Model):
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
     is_area_lead = db.Column(db.Boolean, default=False, server_default=false())
-    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
+    # Indexada: el alcance de unidad filtra usuarios por area_id en cada
+    # consulta de tareas.
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
 
     # Cadena de mando. Un director no lidera unidades directamente: llega a
     # ellas a traves de los managers que le reportan.
@@ -261,25 +264,98 @@ class User(UserMixin, db.Model):
 
 
 class Report(db.Model):
+    """Un reporte de escucha social, guardado entero.
+
+    Hasta ahora esta tabla describia un fichero (.pptx) que se generaba y se
+    dejaba en disco, y no se escribia ni una fila: el reporte vivia solo como
+    una pagina renderizada en la pestana del analista. Recargar, cerrar sin
+    querer o que se cayera el navegador lo perdia todo, habia que volver a
+    subir los widgets, y la IA se pagaba otra vez.
+
+    Ahora se guarda el contexto completo en JSON. De ahi salen, sin trabajo
+    extra: volver al reporte por su URL, retomarlo otro dia, pasarle el enlace
+    a un companero, y rehacer el PDF sin regenerar nada.
+    """
     __tablename__ = 'reports'
+    # /mis-reportes: los de una persona, del mas reciente al mas antiguo.
+    __table_args__ = (
+        db.Index('ix_reports_user_created', 'user_id', 'created_at'),
+    )
+
+    # Estados del texto escrito por el modelo. Se guardan porque la generacion
+    # dejo de ocurrir dentro de la peticion: la pagina se sirve con el texto
+    # por reglas y pregunta despues, asi que hace falta saber en que punto va.
+    INSIGHTS_PENDIENTE = 'pendiente'
+    INSIGHTS_LISTO = 'listo'
+    INSIGHTS_FALLIDO = 'fallido'
+    INSIGHTS_OMITIDO = 'omitido'      # el analista no pidio IA
 
     id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(255), nullable=False)
+
+    # La URL publica del reporte. Un identificador aleatorio y no el id porque
+    # el enlace se comparte: con /reporte/7 cualquiera prueba /reporte/8 y sabe
+    # cuantos reportes existen y de quien son.
+    token = db.Column(db.String(32), unique=True, nullable=False, index=True)
+
     title = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # El contexto entero tal y como lo arma services/calculation.py.
+    context_json = db.Column(db.Text, nullable=True)
+
+    # Los retoques del analista, aparte del contexto y no encima. Mezclarlos
+    # haria imposible volver a pedirle el texto al modelo sin pisar lo que el
+    # ya escribio a mano, que es justo lo que no se le puede hacer.
+    edits_json = db.Column(db.Text, nullable=True)
+
+    insights_source = db.Column(db.String(10), nullable=True)   # 'reglas' | 'ia'
+    insights_status = db.Column(db.String(20), nullable=True)
+    insights_error = db.Column(db.Text, nullable=True)
+
+    # Restos de la epoca en que esto era un fichero. Se dejan nulables para no
+    # perder las filas viejas de nadie que las tuviera.
+    filename = db.Column(db.String(255), nullable=True)
     template_name = db.Column(db.String(255), nullable=True)
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     user = db.relationship('User', backref='reports')
 
     def __repr__(self):
-        return f"<Report {self.title or self.filename}>"
+        return f"<Report {self.title or self.token}>"
+
+    @staticmethod
+    def nuevo_token():
+        return secrets.token_urlsafe(18)[:24]
+
+    @property
+    def contexto(self):
+        """El contexto guardado, ya con los retoques del analista encima."""
+        if not self.context_json:
+            return None
+        datos = json.loads(self.context_json)
+        retoques = json.loads(self.edits_json) if self.edits_json else {}
+        if retoques:
+            insights = dict(datos.get('insights') or {})
+            for slot, texto in retoques.items():
+                if slot == 'client_name':
+                    datos.setdefault('meta', {})['client_name'] = texto
+                elif slot in insights:
+                    insights[slot] = texto
+            datos['insights'] = insights
+        return datos
+
+    def slots_editados(self):
+        return set(json.loads(self.edits_json).keys()) if self.edits_json else set()
 
 
 class ActivityLog(db.Model):
     __tablename__ = 'activity_logs'
+    # El historial de un usuario en admin filtra por user_id y ordena por fecha.
+    __table_args__ = (
+        db.Index('ix_activity_logs_user_ts', 'user_id', 'timestamp'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -342,6 +418,11 @@ class TempArtifact(db.Model):
 class Task(db.Model):
     """Task management model for area-based task assignment."""
     __tablename__ = 'tasks'
+    # Calendario, carga por persona y avisos de vencimiento: siempre por
+    # asignado y con la fecha de entrega como rango u orden.
+    __table_args__ = (
+        db.Index('ix_tasks_assignee_due', 'assignee_id', 'due_date'),
+    )
 
     # Se conserva como respaldo para bases anteriores a la revision 0007. La
     # lista viva sale de services/catalogo.py, que lee task_statuses.
@@ -360,13 +441,13 @@ class Task(db.Model):
     budget_type = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    due_date = db.Column(db.Date, nullable=False)
+    due_date = db.Column(db.Date, nullable=False, index=True)
     status = db.Column(db.String(30), nullable=False, default='Pendiente')
     priority = db.Column(db.String(10), nullable=False, default='Media',
                          server_default='Media', index=True)
     is_recurrent = db.Column(db.Boolean, default=False)
     recurrence_type = db.Column(db.String(20), nullable=True)
-    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True, index=True)
     area = db.Column(db.String(20), nullable=False)
     visibility = db.Column(db.String(15), nullable=False, default='unit',
                            server_default='unit')

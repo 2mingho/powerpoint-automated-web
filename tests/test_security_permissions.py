@@ -107,7 +107,8 @@ def test_download_requires_report_ownership(client):
         with open(report_path, 'wb') as file_handle:
             file_handle.write(b'test-content')
 
-        report = Report(filename=report_name, user_id=owner, title='Owned report')
+        report = Report(token=Report.nuevo_token(), filename=report_name,
+                        user_id=owner, title='Owned report')
         db.session.add(report)
         db.session.commit()
 
