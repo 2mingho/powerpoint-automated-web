@@ -210,7 +210,9 @@ class User(UserMixin, db.Model):
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
     is_area_lead = db.Column(db.Boolean, default=False, server_default=false())
-    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
+    # Indexada: el alcance de unidad filtra usuarios por area_id en cada
+    # consulta de tareas.
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
 
     # Cadena de mando. Un director no lidera unidades directamente: llega a
     # ellas a traves de los managers que le reportan.
@@ -275,6 +277,10 @@ class Report(db.Model):
     a un companero, y rehacer el PDF sin regenerar nada.
     """
     __tablename__ = 'reports'
+    # /mis-reportes: los de una persona, del mas reciente al mas antiguo.
+    __table_args__ = (
+        db.Index('ix_reports_user_created', 'user_id', 'created_at'),
+    )
 
     # Estados del texto escrito por el modelo. Se guardan porque la generacion
     # dejo de ocurrir dentro de la peticion: la pagina se sirve con el texto
@@ -346,6 +352,10 @@ class Report(db.Model):
 
 class ActivityLog(db.Model):
     __tablename__ = 'activity_logs'
+    # El historial de un usuario en admin filtra por user_id y ordena por fecha.
+    __table_args__ = (
+        db.Index('ix_activity_logs_user_ts', 'user_id', 'timestamp'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -408,6 +418,11 @@ class TempArtifact(db.Model):
 class Task(db.Model):
     """Task management model for area-based task assignment."""
     __tablename__ = 'tasks'
+    # Calendario, carga por persona y avisos de vencimiento: siempre por
+    # asignado y con la fecha de entrega como rango u orden.
+    __table_args__ = (
+        db.Index('ix_tasks_assignee_due', 'assignee_id', 'due_date'),
+    )
 
     # Se conserva como respaldo para bases anteriores a la revision 0007. La
     # lista viva sale de services/catalogo.py, que lee task_statuses.
@@ -426,13 +441,13 @@ class Task(db.Model):
     budget_type = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    due_date = db.Column(db.Date, nullable=False)
+    due_date = db.Column(db.Date, nullable=False, index=True)
     status = db.Column(db.String(30), nullable=False, default='Pendiente')
     priority = db.Column(db.String(10), nullable=False, default='Media',
                          server_default='Media', index=True)
     is_recurrent = db.Column(db.Boolean, default=False)
     recurrence_type = db.Column(db.String(20), nullable=True)
-    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True, index=True)
     area = db.Column(db.String(20), nullable=False)
     visibility = db.Column(db.String(15), nullable=False, default='unit',
                            server_default='unit')
