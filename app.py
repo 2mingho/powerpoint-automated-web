@@ -148,8 +148,10 @@ if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
     # NullPool sobran pool_pre_ping (la conexion es siempre nueva) y
     # pool_recycle (ninguna envejece).
     #
-    # DB_POOL=persistent vuelve al pool de siempre si algun dia el trafico
-    # hace que el coste por conexion pese mas que las horas ociosas.
+    # Todo lo anterior vale para una base serverless como la de Neon. Con la
+    # base en Coolify, en el mismo servidor, no hay compute que dejar dormir y
+    # produccion usa DB_POOL=persistent: el pool de siempre, sin pagar un
+    # saludo TCP por cada operacion.
     if os.environ.get('DB_POOL', 'ephemeral').strip().lower() == 'persistent':
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
             'pool_pre_ping': True,

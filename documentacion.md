@@ -473,7 +473,8 @@ Las grillas (`.form-row` y `.card`), con las iteraciones ligeras (`.animate-fade
 
 - **`SECRET_KEY`**: Absolutamente forzada y crashea si lo olvidas en modo de producción para garantizar session cryptografica a prueba del acceso general.
 - **`GROQ_API_KEY`**: Variable para habilitar funciones lógicas y conectividad a Meta (Llama 3).
-- **`DATABASE_URL`**: Recomendado para producción (Neon/Postgres). Si falta, la app cae a SQLite local (`instance/users.db`).
+- **`DATABASE_URL`**: Recomendado para producción. En producción es un PostgreSQL gestionado por Coolify en el mismo servidor, al que se llega por su URL interna. Si falta, la app cae a SQLite local (`instance/users.db`).
+- **`DB_POOL`**: Cómo se conecta a PostgreSQL. `persistent` mantiene un pool normal de conexiones y es lo que corresponde con una base propia como la de Coolify. El valor por defecto, `ephemeral`, abre una conexión por operación; solo tiene sentido con una base serverless que se factura por tiempo despierta.
 - **`ACTIVITY_LOG_RETENTION_DAYS` / `ACTIVITY_LOG_MAX_ROWS`**: Controlan retención y tope de logs para limitar almacenamiento.
 - Todas las salidas están dadas a crearse en base al limite interno de red a traves del var de App `MAX_CONTENT_LENGTH` de `200 * 1024 * 1024` megabytes (200MBs) evitando llenados forzosos no intencionados.
 
