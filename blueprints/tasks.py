@@ -316,11 +316,30 @@ def ensure_due_notifications(user):
     tomorrow = today + timedelta(days=1)
     created = 0
 
+    # Solo las que vencen como muy tarde manana: las demas no generan aviso y
+    # traerlas era leer toda la agenda del usuario en cada visita a /tasks.
     tasks = Task.active_query().filter(
         Task.assignee_id == user.id,
         ~Task.status.in_(estados_finales()),
         Task.due_date.isnot(None),
+        Task.due_date <= tomorrow,
     ).all()
+    if not tasks:
+        return 0
+
+    # Los avisos de hoy, en una sola consulta en vez de una por tarea. Un rango
+    # sobre created_at y no func.date(created_at), que impide usar el indice.
+    inicio_hoy = datetime.combine(today, datetime.min.time())
+    ya_avisadas = set(
+        db.session.query(Notification.kind, Notification.entity_id).filter(
+            Notification.user_id == user.id,
+            Notification.entity_type == 'task',
+            Notification.kind.in_(('task_overdue', 'task_due_soon')),
+            Notification.entity_id.in_([task.id for task in tasks]),
+            Notification.created_at >= inicio_hoy,
+            Notification.created_at < inicio_hoy + timedelta(days=1),
+        ).all()
+    )
 
     for task in tasks:
         kind = None
@@ -336,13 +355,7 @@ def ensure_due_notifications(user):
         if not kind:
             continue
 
-        exists_today = Notification.query.filter_by(
-            user_id=user.id,
-            kind=kind,
-            entity_type='task',
-            entity_id=task.id,
-        ).filter(func.date(Notification.created_at) == today).first()
-        if exists_today:
+        if (kind, task.id) in ya_avisadas:
             continue
 
         notify_user(
@@ -1545,6 +1558,10 @@ def api_tasks_create():
         db.session.add(task)
         created_tasks.append(task)
 
+    # El flush da id a las tareas antes de notificar: sin el, una tarea no
+    # recurrente se notificaba con link_url '/tasks?task=None' y sin entity_id.
+    db.session.flush()
+
     primary_task = created_tasks[0] if created_tasks else None
     if primary_task and assignee.id != current_user.id:
         notify_user(
@@ -1557,19 +1574,23 @@ def api_tasks_create():
             actor_id=current_user.id,
         )
 
-    db.session.commit()
-
     from blueprints.admin import log_activity
     log_activity(
         'task_create',
         f'Tarea creada: {title} ({len(created_tasks)} instancia(s))',
         entity_type='task',
         entity_id=primary_task.id if primary_task else None,
+        commit=False,
     )
+
+    # Se serializa antes del commit: despues, cada tarea esta caducada y
+    # to_dict() la volveria a leer con un SELECT propio (365 en una recurrencia).
+    payload = [t.to_dict() for t in created_tasks]
+    db.session.commit()
 
     return jsonify({
         'success': True,
-        'tasks': [t.to_dict() for t in created_tasks],
+        'tasks': payload,
         'count': len(created_tasks),
     })
 
@@ -1656,15 +1677,21 @@ def api_tasks_bulk_create():
         db.session.add(task)
         created_tasks.append(task)
 
+    payload = []
     if created_tasks:
-        db.session.commit()
+        # Ids, registro y serializacion antes del unico commit: despues de el
+        # cada tarea estaria caducada y se releeria una a una (2N consultas).
+        db.session.flush()
 
         from blueprints.admin import log_activity
         log_activity(
             'task_bulk_create',
             f'Pegado masivo de tareas: {len(created_tasks)} creadas. ids={[task.id for task in created_tasks]}',
             entity_type='task_bulk',
+            commit=False,
         )
+        payload = [t.to_dict() for t in created_tasks]
+        db.session.commit()
     else:
         db.session.rollback()
 
@@ -1673,7 +1700,7 @@ def api_tasks_bulk_create():
         'created': len(created_tasks),
         'failed': len(failures),
         'failures': failures,
-        'tasks': [t.to_dict() for t in created_tasks],
+        'tasks': payload,
     })
 
 
@@ -1887,12 +1914,17 @@ def api_tasks_update(task_id):
             actor_id=current_user.id,
         )
 
+    from blueprints.admin import log_activity
+    log_activity('task_update', f'Tarea actualizada: {task.title} (id={task.id})',
+                 entity_type='task', entity_id=task.id, commit=False)
+
+    # El flush fija updated_at; serializar antes del commit evita releer la
+    # tarea y sus usuarios por una conexion nueva.
+    db.session.flush()
+    payload = task.to_dict()
     db.session.commit()
 
-    from blueprints.admin import log_activity
-    log_activity('task_update', f'Tarea actualizada: {task.title} (id={task.id})', entity_type='task', entity_id=task.id)
-
-    return jsonify({'success': True, 'task': task.to_dict()})
+    return jsonify({'success': True, 'task': payload})
 
 
 @tasks_bp.route('/api/tasks/<int:task_id>')

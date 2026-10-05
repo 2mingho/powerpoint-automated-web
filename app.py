@@ -265,6 +265,12 @@ from flask_login import logout_user
 @app.before_request
 def check_force_logout():
     """If admin has flagged this user for forced logout, log them out immediately."""
+    # Los estaticos no necesitan saber quien es el usuario. Sin esta salida,
+    # cada CSS, JS e imagen hacia una consulta y, con NullPool, abria su propia
+    # conexion: cargar /tasks eran una decena de saludos TCP+TLS a la base.
+    if request.endpoint == 'static':
+        return None
+
     session_user_id = session.get('_user_id')
     if session_user_id:
         try:
@@ -319,14 +325,16 @@ def auto_log_request(response):
     if PAGE_VIEW_LOG_SAMPLE_RATE < 1.0 and random.random() > PAGE_VIEW_LOG_SAMPLE_RATE:
         return response
 
-    if (current_user.is_authenticated
-            and response.status_code < 400
+    # current_user va al final: leerlo carga el usuario de la base, y hacerlo
+    # antes de descartar los estaticos costaba una consulta por cada CSS o JS.
+    if (response.status_code < 400
             and request.endpoint
             and not request.endpoint.startswith('static')
             and not request.endpoint.startswith('admin.')
             and request.endpoint not in _MANUALLY_LOGGED
             and not request.is_json
-            and request.method == 'GET'):
+            and request.method == 'GET'
+            and current_user.is_authenticated):
         try:
             log_activity('page_view', f'{request.method} {request.endpoint}')
         except Exception:

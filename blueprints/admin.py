@@ -35,20 +35,30 @@ def is_default_admin(user):
     return user.email == DEFAULT_ADMIN_EMAIL
 
 
-def log_activity(action, detail="", user_id=None, entity_type=None, entity_id=None):
-    """Log an action to the activity_logs table."""
+def log_activity(action, detail="", user_id=None, entity_type=None, entity_id=None, commit=True):
+    """Log an action to the activity_logs table.
+
+    Con commit=False el registro solo se anade a la sesion y viaja en el commit
+    de quien llama. Es lo que conviene cuando el registro acompana a un cambio:
+    un segundo commit caduca todos los objetos de la sesion, y con NullPool
+    cada commit cierra la conexion, asi que lo que se lea despues vuelve a
+    consultarse fila a fila por una conexion nueva.
+    """
     uid = user_id or (current_user.id if current_user.is_authenticated else None)
     if uid is None:
         return
+    log = ActivityLog(
+        user_id=uid,
+        action=action,
+        detail=detail[:500] if detail else "",
+        entity_type=entity_type,
+        entity_id=entity_id,
+        ip_address=request.remote_addr if request else None,
+    )
+    if not commit:
+        db.session.add(log)
+        return
     try:
-        log = ActivityLog(
-            user_id=uid,
-            action=action,
-            detail=detail[:500] if detail else "",
-            entity_type=entity_type,
-            entity_id=entity_id,
-            ip_address=request.remote_addr if request else None,
-        )
         db.session.add(log)
         db.session.commit()
     except Exception:

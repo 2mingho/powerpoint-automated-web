@@ -36,6 +36,21 @@ def api_notifications_list():
     })
 
 
+@notifications_bp.route('/api/notifications/unread-count')
+@login_required
+def api_notifications_unread_count():
+    """Solo el numero de la campanita.
+
+    Lo sondea cada pestana abierta, asi que tiene que ser la consulta mas
+    barata posible: un COUNT sobre ix_notif_user_unread, sin traer filas que
+    el contador no ensena.
+    """
+    unread_count = Notification.query.filter_by(user_id=current_user.id).filter(
+        Notification.read_at.is_(None)
+    ).count()
+    return jsonify({'success': True, 'unread_count': unread_count})
+
+
 @notifications_bp.route('/api/notifications/<int:notif_id>/read', methods=['POST'])
 @login_required
 def api_notifications_mark_read(notif_id):
