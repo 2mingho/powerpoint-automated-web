@@ -2838,9 +2838,117 @@ body.app-prompt-open {
   .perm-grid { grid-template-columns: 1fr; }
 }
 
+/* ─── BARRA INFERIOR (MOVIL) ───
+   --bottom-nav-h es el contrato con el resto de la app: lo que se ancle al
+   borde inferior (hojas, toasts) se coloca con bottom: var(--bottom-nav-h, 0px)
+   y asi nunca queda tapado. Fuera de movil vale 0 y no hay que ramificar.
+   z-index 990: por encima del contenido, pero por debajo de la cortina del
+   sidebar (999), del propio sidebar (1000) y de los modales (2000+), para que
+   el cajon y las hojas la cubran en vez de quedar cortados por ella. */
+:root { --bottom-nav-h: 0px; }
+
+.bottom-nav { display: none; }
+
+@media (max-width: 768px) {
+  :root { --bottom-nav-h: calc(64px + env(safe-area-inset-bottom, 0px)); }
+
+  .main-content { padding-bottom: var(--bottom-nav-h); }
+
+  .bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 990;
+    display: grid;
+    /* Columnas automaticas iguales: si faltan entradas por permisos, las que
+       quedan se reparten el ancho sin huecos. */
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    align-items: stretch;
+    height: var(--bottom-nav-h);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--c-white);
+    border-top: 1px solid var(--c-border-light);
+  }
+
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 44px;
+    min-width: 0;
+    padding: 6px 2px;
+    background: none;
+    border: none;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.1;
+    color: var(--c-text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bottom-nav-item i { font-size: 1.15rem; }
+
+  .bottom-nav-item span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bottom-nav-item:hover { color: var(--c-text); }
+
+  .bottom-nav-item.active {
+    color: var(--c-text);
+    font-weight: 700;
+  }
+
+  .bottom-nav-item:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: -4px;
+    border-radius: var(--r-md);
+  }
+
+  /* El "+" sobresale de la barra: es la accion principal y debe leerse como
+     tal, no como un destino mas. */
+  .bottom-nav-nueva-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin-top: -22px;
+    border-radius: 16px;
+    background: var(--c-primary);
+    color: var(--c-primary-text);
+    font-size: 1.3rem;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+    transition: transform var(--t-fast);
+  }
+
+  .bottom-nav-nueva:active .bottom-nav-nueva-btn { transform: scale(0.94); }
+
+  .bottom-nav-nueva:focus-visible { outline: none; }
+  .bottom-nav-nueva:focus-visible .bottom-nav-nueva-btn {
+    outline: 2px solid var(--c-text);
+    outline-offset: 2px;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .bottom-nav-nueva-btn { transition: none; }
+  .bottom-nav-nueva:active .bottom-nav-nueva-btn { transform: none; }
+}
+
 /* ─── PRINT ─── */
 @media print {
-  .sidebar, .topbar, .sidebar-overlay { display: none !important; }
+  .sidebar, .topbar, .sidebar-overlay, .bottom-nav { display: none !important; }
   .main-content { margin-left: 0 !important; padding-top: 0 !important; }
 }
 

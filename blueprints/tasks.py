@@ -7,7 +7,7 @@ import unicodedata
 from datetime import datetime, timedelta, date
 from flask import Blueprint, render_template, request, jsonify, Response, abort
 from flask_login import login_required, current_user
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, case
 from sqlalchemy.orm import joinedload
 from extensions import db
 from models import User, Task, Area, Notification, TaskComment, ActivityLog, TaskWatcher, TaskChecklistItem, TaskTemplate
@@ -167,6 +167,56 @@ def _can_view_task(task):
 
 def _can_edit_task(task):
     return current_user.is_admin or _task_in_current_unit(task)
+
+
+def _task_engagement_counts(task_ids):
+    """Avance de checklist, comentarios y si el actual observa, por tarea.
+
+    Una consulta agrupada por metrica sobre los ids ya filtrados: la bandeja
+    pinta estos numeros en cada fila y resolverlos tarea a tarea seria el mismo
+    N+1 de FUN-04. Solo recibe ids que ya pasaron por el alcance, asi que no
+    puede contar nada de tareas que el usuario no ve.
+    """
+    ids = [tid for tid in task_ids if tid is not None]
+    if not ids:
+        return {}
+
+    checklist_rows = db.session.query(
+        TaskChecklistItem.task_id,
+        func.count(TaskChecklistItem.id),
+        func.sum(case((TaskChecklistItem.is_completed.is_(True), 1), else_=0)),
+    ).filter(TaskChecklistItem.task_id.in_(ids)).group_by(TaskChecklistItem.task_id).all()
+
+    comment_rows = db.session.query(
+        TaskComment.task_id, func.count(TaskComment.id),
+    ).filter(
+        TaskComment.task_id.in_(ids),
+        TaskComment.deleted_at.is_(None),
+    ).group_by(TaskComment.task_id).all()
+
+    watching = {
+        row[0] for row in db.session.query(TaskWatcher.task_id).filter(
+            TaskWatcher.task_id.in_(ids),
+            TaskWatcher.user_id == current_user.id,
+        ).all()
+    }
+
+    checklist = {tid: (int(total or 0), int(done or 0)) for tid, total, done in checklist_rows}
+    comments = {tid: int(total or 0) for tid, total in comment_rows}
+
+    result = {}
+    for tid in ids:
+        total, done = checklist.get(tid, (0, 0))
+        result[tid] = {
+            'checklist_total': total,
+            'checklist_done': done,
+            'comments_count': comments.get(tid, 0),
+            'is_watching': tid in watching,
+            # Apuntarse uno mismo solo pide poder ver la tarea (ver
+            # api_task_watchers_add); aqui solo llegan tareas visibles.
+            'can_watch': True,
+        }
+    return result
 
 
 # FUN-04: to_dict() resuelve creator.username y assignee.username de forma
@@ -925,8 +975,17 @@ def api_tasks_list():
     assignee_id = request.args.get('assignee_id', '').strip()
     client = request.args.get('client', '').strip()
     area = request.args.get('area', '').strip()
+    scope = request.args.get('scope', '').strip()
+    with_counts = request.args.get('counts', '').strip() == '1'
 
     query = _apply_unit_scope(Task.active_query())
+
+    # Los chips de la bandeja solo estrechan lo que ya permite la unidad: se
+    # aplican despues de _apply_unit_scope para que nunca amplien visibilidad.
+    if scope == 'mine':
+        query = query.filter(Task.assignee_id == current_user.id)
+    elif scope == 'created':
+        query = query.filter(Task.creator_id == current_user.id)
 
     if q and len(q) >= 2:
         q_param = f'%{q}%'
@@ -969,7 +1028,18 @@ def api_tasks_list():
                 pass
 
     tasks = _with_task_relations(query).order_by(Task.due_date.asc()).limit(TASK_FEED_MAX_ROWS).all()
-    return jsonify([t.to_dict() for t in tasks])
+    if not with_counts:
+        return jsonify([t.to_dict() for t in tasks])
+
+    # Los contadores se piden aparte porque el calendario no los usa y cuestan
+    # tres consultas mas; la bandeja los necesita en cada fila.
+    counts = _task_engagement_counts([t.id for t in tasks])
+    payload = []
+    for t in tasks:
+        item = t.to_dict()
+        item.update(counts.get(t.id, {}))
+        payload.append(item)
+    return jsonify(payload)
 
 
 @tasks_bp.route('/api/tasks/watching')
@@ -1162,11 +1232,15 @@ def api_task_watchers_add(task_id):
 @task_access_required
 def api_task_watchers_remove(task_id, user_id):
     task = Task.active_query().filter_by(id=task_id).first_or_404()
+    # El permiso va antes de buscar la fila: con el orden inverso, el 404 o el
+    # 403 delataba si alguien observa una tarea fuera del alcance de quien
+    # pregunta. Salir uno mismo no pide nada mas, asi que sigue funcionando
+    # aunque la tarea solo se vea por observarla.
+    if current_user.id != user_id and not _can_edit_task(task):
+        return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
     watcher = TaskWatcher.query.filter_by(task_id=task.id, user_id=user_id).first()
     if not watcher:
         return jsonify({'success': False, 'error': 'Observador no encontrado.'}), 404
-    if not _can_edit_task(task) and current_user.id != user_id:
-        return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
 
     db.session.delete(watcher)
     db.session.commit()
@@ -1818,7 +1892,11 @@ def api_tasks_update(task_id):
     if not _can_edit_task(task):
         return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
 
-    data = request.get_json(force=True)
+    # Un cuerpo vacio, 'null' o que no sea un objeto (lista, texto, numero) se
+    # trata como una edicion sin cambios; antes llegaba a data.get y daba 500.
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        data = {}
     expected_updated_at = (data.get('expected_updated_at') or '').strip()
     current_updated_at = task.updated_at.isoformat() if task.updated_at else ''
     if expected_updated_at and expected_updated_at != current_updated_at:
@@ -1934,7 +2012,10 @@ def api_tasks_get(task_id):
     task = Task.active_query().filter_by(id=task_id).first_or_404()
     if not _can_view_task(task):
         return jsonify({'success': False, 'error': 'Sin permisos.'}), 403
-    payload = task.to_dict(include_counts=True)
+    payload = task.to_dict()
+    # Mismos campos que la lista con counts=1, para que el panel lateral pinte
+    # la fila y el detalle con una sola forma de datos.
+    payload.update(_task_engagement_counts([task.id]).get(task.id, {}))
     payload['can_edit'] = _can_edit_task(task)
     payload['is_watcher'] = _is_task_watcher(task)
     payload['current_user_id'] = current_user.id
