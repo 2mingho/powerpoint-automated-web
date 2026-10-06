@@ -4453,9 +4453,32 @@
 
   .bandeja-alta-btn { min-height: 44px; }
 
-  .bandeja-herramientas { flex-wrap: wrap; }
+  /* La barra inferior ya trae su "+": repetir "Nueva tarea" arriba solo
+     empujaba la lista hacia abajo. */
+  .tasks-bar-actions #btnNewTask { display: none; }
 
-  .bandeja-chip { height: 30px; }
+  /* Las tres pastillas caben en una linea si se desplazan en horizontal;
+     envolverlas costaba dos filas mas antes de llegar a la primera tarea. */
+  .bandeja-herramientas { flex-wrap: nowrap; }
+
+  .bandeja-alcance {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .bandeja-alcance::-webkit-scrollbar { display: none; }
+
+  .bandeja-chip { height: 30px; flex: none; }
+
+  /* Actualizar es secundario: queda en icono, con su aria-label. */
+  #btnTodayRefresh .btn-label-desktop { display: none; }
+  #btnTodayRefresh { flex: none; min-width: 36px; height: 30px; padding: 0 10px; }
+
+  /* En 390px el titulo pierde frente a la fecha y las iniciales; en "Asignadas
+     a mi" las iniciales son siempre las propias, asi que se sacrifican. */
+  .bandeja-avatar { display: none; }
 
   /* Filas como tarjetas de 72px, con el area de toque completa. */
   .bandeja-fila-frente {
