@@ -15,12 +15,20 @@
  *    siguiente y sigue donde estaba: el recorrido se guarda en sessionStorage
  *    antes de saltar y se recupera al cargar. Un tour que solo cubriera la
  *    pagina de inicio no ensena la plataforma, ensena una pantalla.
+ *
+ * 3. Movil y escritorio no comparten pantalla. En el telefono el sidebar vive
+ *    fuera de la vista tras la hamburguesa, "Nueva tarea" se oculta en favor
+ *    del + de la barra inferior y Ctrl + K no existe. Un paso puede llevar una
+ *    variante `movil` o limitarse con `solo`; el corte es el mismo de
+ *    style.css, asi que el tour ve la misma pantalla que el usuario.
  */
 (function () {
   'use strict';
 
   const CLAVE_SESION = 'newlinkTourEnCurso';
   const MARGEN = 12;
+  // Mismo corte que el bloque "Mobile" de style.css y la barra inferior.
+  const MOVIL = window.matchMedia('(max-width: 768px)');
 
   // ─────────────────────────────────────────────────────────────
   // Guion
@@ -32,6 +40,11 @@
   //          centra en vez de iluminar un hueco.
   // centro:  el paso presenta una pantalla entera, no una pieza de ella;
   //          iluminar el contenido completo no destaca nada.
+  // requiere:selector que tiene que existir para que el paso tenga sentido
+  //          (p. ej. los dos espacios solo si el usuario tiene ambos).
+  // solo:    'movil' o 'escritorio' para pasos que no existen en la otra.
+  // movil:   campos que sustituyen a los del paso en el telefono (objetivo,
+  //          titulo, texto...). Lo que no se repite se hereda.
 
   const GUION = [
     {
@@ -48,13 +61,28 @@
       texto: 'Esta columna es el índice de la plataforma. Solo aparecen las herramientas ' +
              'habilitadas para tu cuenta: si algo no está en la lista, no es que esté escondido, ' +
              'es que no lo tienes asignado.',
+      movil: {
+        objetivo: '.bottom-nav',
+        titulo: 'Lo de cada día, al alcance del pulgar',
+        texto: 'Esta barra te acompaña en todas las pantallas: inicio, tus tareas, el + para crear ' +
+               'una y tus solicitudes. Solo aparece lo habilitado para tu cuenta.',
+      },
     },
     {
       id: 'espacios',
       objetivo: '.sidebar-spaces',
+      requiere: '.sidebar-spaces',
       titulo: 'Dos espacios, no una lista larga',
       texto: '«Trabajo» es tu día a día: tareas y solicitudes. «Herramientas» son los procesos ' +
              'de datos y reportes. Cambiar de espacio no te saca de donde estás.',
+      // En el telefono el sidebar esta fuera de la vista; se ilumina el boton
+      // que lo abre en vez de un hueco a la izquierda de la pantalla.
+      movil: {
+        objetivo: '.bottom-nav [data-abrir-sidebar]',
+        titulo: 'Todo lo demás, en «Menú»',
+        texto: '«Menú» abre el índice completo, separado en dos espacios: «Trabajo» para tareas y ' +
+               'solicitudes, y «Herramientas» para los procesos de datos y reportes.',
+      },
     },
     {
       id: 'notificaciones',
@@ -65,7 +93,9 @@
              'directamente a lo que la provocó.',
     },
     {
+      // Sin teclado fisico no hay atajo que ensenar.
       id: 'buscador',
+      solo: 'escritorio',
       centro: true,
       titulo: 'Un atajo que sirve para todo',
       texto: 'Pulsa Ctrl + K (o ⌘ + K) en cualquier pantalla para buscar una tarea, saltar a una ' +
@@ -78,25 +108,58 @@
       destino: '.sidebar-item[aria-label="Mis tareas"]',
       objetivo: '.tasks-views',
       titulo: 'Tus tareas, en tres vistas',
-      texto: '«Hoy» es con lo que abres el día: lo que vence y lo que está en marcha. ' +
+      texto: '«Hoy» es tu bandeja: lo vencido y lo que vence en los próximos siete días. ' +
              '«Calendario» es la misma información repartida en el mes. ' +
              '«Observadas» son las que sigues sin que sean tuyas.',
     },
     {
+      id: 'alta-rapida',
+      objetivo: '#tasksQuickAdd',
+      titulo: 'Crear cuesta un título',
+      texto: 'Escribe y pulsa Enter. Si añades @persona se la asignas, «mañana» o una fecha fija ' +
+             'la entrega y !alta la prioridad. Si no pones nada más, es tuya y vence hoy.',
+    },
+    {
+      id: 'alcance',
+      objetivo: '.bandeja-alcance',
+      titulo: 'Qué tareas ves',
+      texto: '«Asignadas a mí» es lo que te toca hacer. «Creadas por mí» es lo que encargaste a ' +
+             'otros. «Mi unidad» es todo lo de tu equipo.',
+    },
+    {
+      id: 'detalle',
+      objetivo: '#tasksDetailPanel',
+      titulo: 'El detalle, sin salir de la lista',
+      texto: 'Selecciona una tarea y aquí cambias su estado o prioridad, marcas su checklist y ' +
+             'comentas. El círculo de cada fila la da por hecha, y puedes deshacerlo.',
+      // En el telefono el panel es una hoja que sube al tocar una fila; cerrada
+      // no hay nada que iluminar, asi que se ilumina la lista.
+      movil: {
+        objetivo: '#todayGroups',
+        texto: 'Toca una tarea y su detalle sube desde abajo: estado, prioridad, checklist y ' +
+               'comentarios. Desliza una fila a la izquierda para pasarla a mañana o darla por hecha.',
+      },
+    },
+    {
       id: 'nueva-tarea',
       objetivo: '#btnNewTask',
-      titulo: 'Crear cuesta un título',
-      texto: 'Solo el título es obligatorio. El resto — cliente, fechas, recurrencia — está ' +
-             'plegado en acordeones porque hace falta en menos de un tercio de las tareas. ' +
-             'Puedes completarlo más tarde.',
+      titulo: 'El formulario completo, cuando haga falta',
+      texto: 'Para cliente, fechas de inicio y fin, recurrencia o plantillas está «Nueva tarea». ' +
+             'Hace falta en menos de un tercio de las tareas; el resto cabe en la línea de arriba.',
+      movil: {
+        objetivo: '.bottom-nav [data-nueva-tarea]',
+        titulo: 'Crear desde cualquier pantalla',
+        texto: 'El + de la barra abre una hoja para crear una tarea con título, día y prioridad, ' +
+               'estés donde estés.',
+      },
     },
     {
       id: 'observadas',
       objetivo: '.tasks-view-btn[data-vista="observadas"]',
       titulo: 'Observar es seguir sin cargar',
-      texto: 'Abre cualquier tarea y verás la pestaña «Observadores». Observar una tarea te avisa ' +
-             'de sus cambios y comentarios, pero no te la asigna ni suma a tu carga de trabajo. ' +
-             'Sirve para enterarte de lo que hace otra unidad sin meterte en medio.',
+      texto: 'En el detalle de cualquier tarea está el botón «Observar». Te avisa de sus cambios y ' +
+             'comentarios, pero no te la asigna ni suma a tu carga de trabajo. Sirve para ' +
+             'enterarte de lo que hace otra unidad sin meterte en medio.',
     },
     {
       id: 'solicitar',
@@ -233,8 +296,13 @@
      destino solo se guarda el href, no el enlace, porque tras navegar el enlace
      original ya no existe. */
   function prepararGuion() {
+    const enMovil = MOVIL.matches;
     return GUION.map(function (paso) {
-      const copia = Object.assign({}, paso);
+      if (paso.solo === 'movil' && !enMovil) return null;
+      if (paso.solo === 'escritorio' && enMovil) return null;
+      if (paso.requiere && !document.querySelector(paso.requiere)) return null;
+      const copia = Object.assign({}, paso, enMovil ? paso.movil : null);
+      delete copia.movil;
       if (paso.destino) {
         const enlace = document.querySelector(paso.destino);
         if (!enlace || !enlace.getAttribute('href')) return null;
@@ -248,6 +316,26 @@
     if (!paso.url) return true;
     // Comparacion por ruta: los enlaces del sidebar no llevan query.
     return paso.url.split('?')[0].replace(/\/$/, '') === rutaActual().replace(/\/$/, '');
+  }
+
+  /* Que el selector exista no basta: en el telefono el sidebar sigue en el DOM
+     pero desplazado fuera de la pantalla, y "Nueva tarea" esta con
+     display:none. Iluminar eso es iluminar un hueco. Lo vertical no se mira:
+     un elemento mas abajo de la pagina se alcanza desplazandose. */
+  function esVisible(elemento) {
+    const caja = elemento.getBoundingClientRect();
+    if (caja.width <= 0 || caja.height <= 0) return false;
+    if (caja.right <= 0 || caja.left >= window.innerWidth) return false;
+    return window.getComputedStyle(elemento).visibility !== 'hidden';
+  }
+
+  function buscarObjetivo(paso) {
+    if (!paso || paso.centro || !paso.objetivo) return null;
+    const candidatos = document.querySelectorAll(paso.objetivo);
+    for (let i = 0; i < candidatos.length; i += 1) {
+      if (esVisible(candidatos[i])) return candidatos[i];
+    }
+    return null;
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -292,6 +380,30 @@
     document.addEventListener('keydown', alPulsarTecla);
     window.addEventListener('resize', recolocarPronto);
     window.addEventListener('scroll', recolocarPronto, true);
+    MOVIL.addEventListener('change', alCambiarDeModo);
+  }
+
+  /* Girar el telefono o estrechar la ventana cruza el corte: los pasos y sus
+     objetivos ya no son los mismos. Se rehace el guion y se sigue en el mismo
+     paso, o en el siguiente que exista si este no tiene version en el modo
+     nuevo (el atajo de teclado, por ejemplo). */
+  function alCambiarDeModo() {
+    if (!capa) return;
+    const idActual = pasos[indice] && pasos[indice].id;
+    const ordenActual = GUION.findIndex(function (p) { return p.id === idActual; });
+    pasos = prepararGuion();
+    let nuevo = pasos.findIndex(function (p) {
+      return GUION.findIndex(function (g) { return g.id === p.id; }) >= ordenActual;
+    });
+    if (nuevo < 0) nuevo = pasos.length - 1;
+    indice = Math.max(0, nuevo);
+    const paso = pasos[indice];
+    if (paso && !esDeEstaPagina(paso)) {
+      guardar({ id: paso.id });
+      window.location.href = paso.url;
+      return;
+    }
+    pintarPaso();
   }
 
   function alPulsarTecla(evento) {
@@ -305,7 +417,7 @@
     const paso = pasos[indice];
     if (!paso) { terminar(true); return; }
 
-    objetivoActual = paso.centro ? null : document.querySelector(paso.objetivo);
+    objetivoActual = buscarObjetivo(paso);
 
     globo.querySelector('#tourTitulo').textContent = paso.titulo;
     globo.querySelector('#tourTexto').textContent = paso.texto;
@@ -363,6 +475,26 @@
 
     const anchoGlobo = globo.offsetWidth;
     const altoGlobo = globo.offsetHeight;
+
+    if (MOVIL.matches) {
+      // El globo ocupa el ancho (lo fija tour.css): solo se elige la altura.
+      // Debajo si cabe, encima si no; y si el objetivo es tan alto que no
+      // cabe por ningun lado (la lista de tareas), al extremo con mas sitio,
+      // tapando lo menos posible.
+      let y = caja.bottom + MARGEN;
+      if (y + altoGlobo > window.innerHeight - MARGEN) {
+        y = caja.top - altoGlobo - MARGEN;
+        if (y < MARGEN) {
+          const sitioArriba = caja.top;
+          const sitioAbajo = window.innerHeight - caja.bottom;
+          y = sitioAbajo >= sitioArriba ? window.innerHeight - altoGlobo - MARGEN : MARGEN;
+        }
+      }
+      y = Math.min(y, window.innerHeight - altoGlobo - MARGEN);
+      globo.style.top = Math.max(MARGEN, y) + 'px';
+      globo.style.left = '';
+      return;
+    }
 
     // Debajo si cabe; si no, encima; y si tampoco, al lado. Con el sidebar,
     // que es alto y estrecho, el unico sitio razonable es a la derecha.
@@ -432,6 +564,7 @@
     document.removeEventListener('keydown', alPulsarTecla);
     window.removeEventListener('resize', recolocarPronto);
     window.removeEventListener('scroll', recolocarPronto, true);
+    MOVIL.removeEventListener('change', alCambiarDeModo);
     objetivoActual = null;
 
     // Salir a medias tambien cuenta como visto: repetir la oferta en cada
@@ -458,10 +591,10 @@
     }
 
     // Si el paso al que llegamos no tiene su elemento en pantalla —una pagina
-    // que tardo en montar su interfaz, o un boton que no existe para este
-    // usuario— se avanza hasta el primero que si esta, en vez de ensenar un
-    // recuadro vacio.
-    while (pasos[indice] && !pasos[indice].centro && !document.querySelector(pasos[indice].objetivo)) {
+    // que tardo en montar su interfaz, o un boton que no existe o esta oculto
+    // para este usuario— se avanza hasta el primero que si esta, en vez de
+    // ensenar un recuadro vacio.
+    while (pasos[indice] && !pasos[indice].centro && !buscarObjetivo(pasos[indice])) {
       if (!esDeEstaPagina(pasos[indice + 1] || {})) break;
       indice += 1;
     }
