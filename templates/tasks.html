@@ -7,7 +7,8 @@
 
 <div class="tasks-shell" id="tasksShell" data-vista="hoy" data-hoy="{{ hoy }}"
      data-initial-status="{{ initial_status }}" data-default-priority="{{ default_priority }}"
-     data-final-statuses='{{ final_statuses|tojson }}'>
+     data-final-statuses='{{ final_statuses|tojson }}' data-user-id="{{ current_user.id }}"
+     data-statuses='{{ task_statuses|tojson }}' data-priorities='{{ task_priorities|tojson }}'>
   {#
     Barra unica de pagina. Antes habia un hero de 152px cuyo <h1> repetia
     literalmente el nombre que la barra superior ya muestra, mas una linea de
@@ -41,7 +42,10 @@
       <button class="btn btn-secondary btn-sm" id="btnRequestTask" type="button" data-abrir-solicitud aria-label="Solicitar a otra unidad">
         <i class="fa-solid fa-arrow-right-arrow-left"></i> <span class="btn-label-desktop">Solicitar</span>
       </button>
-      <button class="btn btn-primary btn-sm" id="btnNewTask" aria-label="Nueva tarea">
+      {# El alta rapida de la bandeja cubre lo habitual; este boton queda para el
+         formulario completo (cliente, recurrencia, plantillas). #}
+      <button class="btn btn-primary btn-sm" id="btnNewTask" aria-label="Nueva tarea con formulario completo"
+              title="Formulario completo: cliente, fechas, recurrencia y plantillas">
         <i class="fa-solid fa-plus"></i> <span class="btn-label-desktop">Nueva tarea</span>
       </button>
     </div>
@@ -51,17 +55,71 @@
 
   <section class="tasks-grid">
     <div class="tasks-main-column">
-      {# ─── Vista Hoy (RED-2) ─── #}
+      {# ─── Vista Hoy (RED-2) -> Bandeja ───
+        Lista + panel lateral. Antes cada fila abria el modal grande: para
+        marcar una tarea como hecha o dejar un comentario habia que entrar,
+        buscar la pestana y salir. Ahora la fila se completa con un clic y el
+        detalle se edita al lado sin perder la lista de vista. En movil el
+        panel pasa a hoja inferior. El modal completo sigue a un boton
+        ("Mas detalles") para lo que se usa poco: encargo, fechas, actividad.
+        La logica vive en static/js/tasks_bandeja.js. #}
       <section class="tasks-panel tasks-panel--today" id="tasksTodayView" aria-labelledby="tasksTodayTitle">
-        <div class="tasks-panel-tools">
-          <h2 id="tasksTodayTitle" class="visually-hidden">Tu trabajo</h2>
-          <button class="btn btn-secondary btn-sm" id="btnTodayRefresh" type="button">
-            <i class="fa-solid fa-rotate"></i> Actualizar
-          </button>
-        </div>
+        <h2 id="tasksTodayTitle" class="visually-hidden">Tu trabajo</h2>
+        <div class="bandeja">
+          <div class="bandeja-lista">
+            {# Alta rapida: la mayoria de tareas son un titulo, alguien y un dia.
+               El modal de catorce campos queda para quien necesite el resto. #}
+            <form class="bandeja-alta" id="tasksQuickAdd" autocomplete="off" novalidate>
+              <label for="tasksQuickAddInput" class="visually-hidden">Añadir tarea</label>
+              <input type="text" class="form-input bandeja-alta-input" id="tasksQuickAddInput" maxlength="255"
+                     placeholder="Añadir tarea… escribe y pulsa Enter (@persona  mañana  !alta)"
+                     aria-describedby="tasksQuickAddPreview">
+              <button type="submit" class="btn btn-primary btn-sm bandeja-alta-btn" id="tasksQuickAddBtn">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i> Añadir
+              </button>
+            </form>
+            <p class="bandeja-alta-preview" id="tasksQuickAddPreview" aria-live="polite">
+              Para cliente, descripción o recurrencia usa <strong>Nueva tarea</strong>.
+            </p>
 
-        <div class="today-groups" id="todayGroups" aria-busy="true">
-          <p class="today-loading">Cargando tu trabajo...</p>
+            <div class="bandeja-herramientas">
+              <div class="bandeja-alcance" role="group" aria-label="Qué tareas ver">
+                <button type="button" class="bandeja-chip" data-scope="mine" aria-pressed="true">Asignadas a mí</button>
+                <button type="button" class="bandeja-chip" data-scope="created" aria-pressed="false">Creadas por mí</button>
+                <button type="button" class="bandeja-chip" data-scope="unit" aria-pressed="false">Mi unidad</button>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btnTodayRefresh" type="button" aria-label="Actualizar lista">
+                <i class="fa-solid fa-rotate" aria-hidden="true"></i> <span class="btn-label-desktop">Actualizar</span>
+              </button>
+            </div>
+
+            <p class="bandeja-pista-movil modal-hidden" id="tasksSwipeHint">
+              <span>Toca una tarea para abrirla · desliza a la izquierda para acciones rápidas</span>
+              <button type="button" class="bandeja-pista-cerrar" id="tasksSwipeHintClose" aria-label="Ocultar pista">&times;</button>
+            </p>
+
+            <div class="today-groups" id="todayGroups" aria-busy="true">
+              <p class="today-loading">Cargando tu trabajo...</p>
+            </div>
+          </div>
+
+          {# El panel no se cierra con la cortina en escritorio: es parte de la
+             pagina, no un dialogo. En movil el JS le pone role="dialog". #}
+          <button type="button" class="bandeja-cortina" id="tasksDetailOverlay" aria-label="Cerrar detalle" tabindex="-1"></button>
+          <aside class="bandeja-detalle" id="tasksDetailPanel" aria-label="Detalle de la tarea" data-estado="vacio">
+            <div class="bandeja-detalle-asa" aria-hidden="true"></div>
+            <div class="bandeja-detalle-vacio" id="tasksDetailEmpty">
+              <i class="fa-regular fa-hand-pointer" aria-hidden="true"></i>
+              <p>Selecciona una tarea para ver y editar su detalle aquí, sin salir de la lista.</p>
+            </div>
+            <div class="bandeja-detalle-contenido" id="tasksDetailContent"></div>
+            <form class="bandeja-detalle-pie" id="tasksDetailFooter" autocomplete="off">
+              <label for="tasksDetailComment" class="visually-hidden">Escribe un comentario</label>
+              <input type="text" class="form-input" id="tasksDetailComment" maxlength="2000" placeholder="Escribe un comentario…">
+              <button type="submit" class="btn btn-secondary btn-sm" id="tasksDetailCommentSend">Enviar</button>
+              <button type="button" class="btn btn-primary bandeja-detalle-hecha" id="tasksDetailDone">Hecha</button>
+            </form>
+          </aside>
         </div>
       </section>
 
@@ -154,8 +212,11 @@
           <div id="tasksCalendar"></div>
         </div>
       </section>
-    </div>
 
+      {# Observadas va dentro de la columna, como las demas vistas. Antes habia
+         un segundo panel con el mismo id fuera de la pagina, restos de cuando
+         vivia en una columna lateral, y etiquetas de cierre huerfanas que
+         sacaban de #tasksShell todo lo que venia detras. #}
       <section class="tasks-panel tasks-panel--watching" id="tasksWatchingPanel" aria-labelledby="tasksWatchingTitle">
         <div class="tasks-section-head">
           <div>
@@ -171,21 +232,6 @@
         </div>
       </section>
     </div>
-  </section>
-
-      <section class="tasks-panel tasks-panel--watching modal-hidden" id="tasksWatchingPanel">
-        <div class="tasks-watching-header">
-          <div>
-            <h2>Tareas que observo</h2>
-            <p>Accede a trabajo seguido sin buscarlo otra vez.</p>
-          </div>
-          <button class="btn btn-secondary btn-sm" id="btnWatchingRefresh" type="button">Actualizar</button>
-        </div>
-        <div class="tasks-watching-list" id="tasksWatchingList">
-          <div class="task-comments-empty">No observas ninguna tarea. Observar una te avisa de sus cambios sin que sea tuya.</div>
-        </div>
-      </section>
-    </aside>
   </section>
 
   <div class="tasks-bulk-actions modal-hidden" id="tasksBulkActions">
@@ -453,6 +499,48 @@
   </div>
 </div>
 
+{# ─── Nueva tarea en movil ───
+   La abre el "+" de la barra inferior ([data-nueva-tarea]) o ?nueva=1.
+   Tres decisiones y un boton: en un telefono el modal completo es una
+   pared de campos. Quien necesite mas, usa "Nueva tarea" de la barra. #}
+<div class="bandeja-hoja-nueva" id="tasksNewSheet" hidden>
+  <button type="button" class="bandeja-cortina is-visible" data-cerrar-nueva aria-label="Cerrar nueva tarea" tabindex="-1"></button>
+  <form class="bandeja-hoja" role="dialog" aria-modal="true" aria-labelledby="tasksNewSheetTitle" id="tasksNewSheetForm" autocomplete="off" novalidate>
+    <div class="bandeja-detalle-asa" aria-hidden="true"></div>
+    <div class="bandeja-hoja-cabecera">
+      <h2 id="tasksNewSheetTitle">Nueva tarea</h2>
+      <button type="button" class="bandeja-icono-btn" data-cerrar-nueva aria-label="Cerrar">&times;</button>
+    </div>
+    <label class="form-label" for="tasksNewSheetInput">Qué hay que hacer</label>
+    <input type="text" class="form-input bandeja-hoja-titulo" id="tasksNewSheetInput" maxlength="255" placeholder="Título de la tarea">
+    <p class="form-label bandeja-hoja-rotulo" id="tasksNewSheetWhenLabel">Cuándo</p>
+    <div class="bandeja-segmentos" role="group" aria-labelledby="tasksNewSheetWhenLabel" id="tasksNewSheetWhen">
+      <button type="button" class="bandeja-segmento" data-cuando="hoy" aria-pressed="true">Hoy</button>
+      <button type="button" class="bandeja-segmento" data-cuando="manana" aria-pressed="false">Mañana</button>
+      <button type="button" class="bandeja-segmento" data-cuando="semana" aria-pressed="false">Esta semana</button>
+    </div>
+    <p class="form-label bandeja-hoja-rotulo" id="tasksNewSheetPrioLabel">Prioridad</p>
+    <div class="bandeja-segmentos" role="group" aria-labelledby="tasksNewSheetPrioLabel" id="tasksNewSheetPriority">
+      {% for priority in task_priorities %}
+      <button type="button" class="bandeja-segmento" data-prioridad="{{ priority }}" aria-pressed="{{ 'true' if priority == default_priority else 'false' }}">{{ priority }}</button>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-primary bandeja-hoja-crear" id="tasksNewSheetCreate">Crear tarea</button>
+  </form>
+</div>
+
+{# Aviso propio de la bandeja: el de la app no admite "Deshacer" con estado,
+   y completar sin poder deshacer convierte un mal toque en un problema. #}
+<div class="bandeja-aviso" id="tasksUndoToast" role="status" aria-live="polite" hidden>
+  <span class="bandeja-aviso-texto" id="tasksUndoToastText"></span>
+  <button type="button" class="bandeja-aviso-deshacer" id="tasksUndoToastAction">Deshacer</button>
+  <button type="button" class="bandeja-aviso-cerrar" id="tasksUndoToastClose" aria-label="Cerrar aviso">&times;</button>
+</div>
+
+{# Solo id y nombre: es lo que necesita el "@persona" del alta rapida.
+   tojson escapa <, > y & para que un nombre no pueda cerrar el script. #}
+<script type="application/json" id="tasksAreaUsers">[{% for u in area_users %}{{ {'id': u.id, 'username': u.username}|tojson }}{% if not loop.last %},{% endif %}{% endfor %}]</script>
+
 <!-- ═══ Request Task Modal ═══ -->
 {% include "_solicitud_modal.html" %}
 
@@ -463,5 +551,6 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/muelle.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tasks_bandeja.js') }}"></script>
 <script src="{{ url_for('static', filename='js/task_request_form.js') }}"></script>
 {% endblock %}

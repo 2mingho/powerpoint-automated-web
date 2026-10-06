@@ -568,6 +568,22 @@ class TaskComment(db.Model):
         'comments', lazy='dynamic', order_by='TaskComment.created_at'))
     user = db.relationship('User', backref='task_comments')
 
+    def _created_at_local(self):
+        """Hora del comentario en la zona de negocio, mismo formato de siempre.
+
+        Se guarda con utcnow, pero la interfaz la compara con today_local()
+        para decir 'hoy' o 'ayer': un comentario de las 22:00 en Santo Domingo
+        ya es el dia siguiente en UTC y salia fechado manana.
+        """
+        if not self.created_at:
+            return ''
+        from datetime import timezone
+        from services.clock import APP_TIMEZONE
+        valor = self.created_at
+        if valor.tzinfo is None:
+            valor = valor.replace(tzinfo=timezone.utc)
+        return valor.astimezone(APP_TIMEZONE).strftime('%Y-%m-%d %H:%M')
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -575,7 +591,7 @@ class TaskComment(db.Model):
             'user_id': self.user_id,
             'user_name': self.user.username if self.user else '',
             'body': self.body,
-            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M'),
+            'created_at': self._created_at_local(),
             'edited': self.edited_at is not None,
         }
 
