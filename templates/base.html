@@ -269,6 +269,46 @@
       </div>
     </main>
 
+    {#
+      Barra inferior para movil. En el telefono el sidebar vive escondido tras
+      la hamburguesa de arriba, fuera del alcance del pulgar; aqui quedan los
+      destinos de uso diario. Repite las mismas condiciones de permiso que el
+      sidebar (puede_tareas) para no ofrecer nunca un enlace que devuelva 403.
+      Las paginas sin sesion (p. ej. error.html para un anonimo) no la dibujan.
+    #}
+    {% if current_user.is_authenticated %}
+    <nav class="bottom-nav" aria-label="Navegacion inferior">
+      <a href="{{ url_for('menu') }}" class="bottom-nav-item{% if ep == 'menu' %} active{% endif %}"
+         {% if ep == 'menu' %}aria-current="page"{% endif %}>
+        <i class="fa-solid fa-house" aria-hidden="true"></i>
+        <span>Inicio</span>
+      </a>
+      {% if puede_tareas %}
+      <a href="{{ url_for('tasks.tasks_page') }}" class="bottom-nav-item{% if ep == 'tasks.tasks_page' %} active{% endif %}"
+         {% if ep == 'tasks.tasks_page' %}aria-current="page"{% endif %}>
+        <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
+        <span>Tareas</span>
+      </a>
+      {# Contrato con la pagina de tareas: alli su JS intercepta [data-nueva-tarea]
+         y abre la creacion sin navegar; desde otras paginas el enlace llega con
+         ?nueva=1 y la pagina abre la creacion al cargar. #}
+      <a href="{{ url_for('tasks.tasks_page') }}?nueva=1" class="bottom-nav-item bottom-nav-nueva"
+         data-nueva-tarea aria-label="Nueva tarea">
+        <span class="bottom-nav-nueva-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>
+      </a>
+      <a href="{{ url_for('task_requests.task_requests_page') }}" class="bottom-nav-item{% if ep == 'task_requests.task_requests_page' %} active{% endif %}"
+         {% if ep == 'task_requests.task_requests_page' %}aria-current="page"{% endif %}>
+        <i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i>
+        <span>Solicitudes</span>
+      </a>
+      {% endif %}
+      <button type="button" class="bottom-nav-item" data-abrir-sidebar aria-controls="sidebar">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+        <span>Menú</span>
+      </button>
+    </nav>
+    {% endif %}
+
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script>
       // Global loading overlay helpers
@@ -285,6 +325,15 @@
         document.getElementById('loadingText').textContent = 'Procesando...';
         document.getElementById('loadingHint').textContent = 'Por favor espera, esto puede tardar unos segundos.';
       }
+
+      // "Menu" de la barra inferior: delega en la hamburguesa de la topbar
+      // para que el estado del sidebar (clases open/show) siga teniendo un
+      // unico dueno en main.js.
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('[data-abrir-sidebar]')) return;
+        const toggle = document.getElementById('sidebarToggle');
+        if (toggle) toggle.click();
+      });
     </script>
     {% if current_user.is_authenticated %}
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>

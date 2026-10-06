@@ -494,9 +494,32 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  /* Pedir los eventos de un calendario que no se ve gasta peticiones del
+     limite por usuario (600/h) sin que nadie mire el resultado. Si esta
+     oculto se marca como pendiente y se pide al volver a la vista. La cuenta
+     de vencidas si se actualiza, porque su aviso esta siempre a la vista; si
+     el calendario se recarga, ya la recalcula el (ver events). */
+  let calendarioPendiente = false;
+
+  function calendarioVisible() {
+    const contenedor = document.getElementById('tasksShell');
+    return !!contenedor && contenedor.dataset.vista === 'calendario';
+  }
+
+  function refetchCalendarIfVisible() {
+    if (!calendar) return;
+    if (calendarioVisible()) {
+      calendarioPendiente = false;
+      calendar.refetchEvents();
+    } else {
+      calendarioPendiente = true;
+      loadOverdueCount();
+    }
+  }
+
   function refreshCalendar() {
     actualizarContadorDeFiltros();
-    if (calendar) calendar.refetchEvents();
+    refetchCalendarIfVisible();
     // La vista Hoy se alimenta de los mismos datos: si no se recarga aqui, las
     // dos vistas se contradicen en cuanto se crea, mueve o completa una tarea.
     if (typeof window.recargarVistaHoy === 'function') window.recargarVistaHoy();
@@ -1172,8 +1195,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // La paleta de comandos manda ?nueva=1 cuando se pide "Nueva tarea" desde
     // otra pagina: se llega aqui y se abre el formulario sin un clic extra.
+    // Si la pagina trae la bandeja, es ella quien abre la creacion rapida
+    // (hoja en movil, barra de alta en escritorio) y limpia el parametro.
     if (params.get('nueva') === '1') {
-      openModal(false);
+      if (!document.getElementById('tasksQuickAdd')) openModal(false);
       return;
     }
 
@@ -2742,164 +2767,21 @@ document.addEventListener('DOMContentLoaded', function () {
   loadClients();
 
   /* ═══════════════════════════════════════════════════════
-     VISTA "HOY" (RED-2)
-     Tres bloques —vencidas, hoy, esta semana— sobre los mismos endpoints
-     que ya alimentaban el calendario. El cambio es de composicion, no de
-     backend: /api/tasks admite overdue=1 y rango de fechas.
+     VISTA "HOY" (RED-2) -> BANDEJA
+     La lista, el panel lateral y la creacion rapida viven en
+     tasks_bandeja.js: este fichero ya pasaba de 2900 lineas y la bandeja
+     es una pieza con estado propio. Aqui solo queda el cambio de vista,
+     que comparten Hoy, Calendario y Observadas.
      ═══════════════════════════════════════════════════════ */
 
   const shell = document.getElementById('tasksShell');
-  const todayGroups = document.getElementById('todayGroups');
 
   // El dia de referencia lo fija el servidor en la zona de negocio. Usar el
   // reloj del navegador desplazaria "hoy" para quien se conecte desde otro huso.
   const HOY = (shell && shell.dataset.hoy) || '';
 
-  function sumarDias(iso, dias) {
-    const d = new Date(`${iso}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return iso;
-    d.setDate(d.getDate() + dias);
-    return d.toISOString().slice(0, 10);
-  }
-
-  function diasEntre(desdeIso, hastaIso) {
-    const a = new Date(`${desdeIso}T00:00:00`);
-    const b = new Date(`${hastaIso}T00:00:00`);
-    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
-    return Math.round((b - a) / 86400000);
-  }
-
-  function etiquetaVencimiento(dueIso) {
-    if (!dueIso || !HOY) return '';
-    const dias = diasEntre(HOY, dueIso);
-    if (dias === 0) return 'hoy';
-    if (dias === 1) return 'mañana';
-    if (dias === -1) return 'venció ayer';
-    if (dias < -1) return `venció hace ${Math.abs(dias)} d`;
-    const d = new Date(`${dueIso}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return dueIso;
-    return d.toLocaleDateString('es-DO', { weekday: 'long' });
-  }
-
-  function claseDePrioridad(prioridad) {
-    const p = (prioridad || '').toLowerCase();
-    if (p === 'alta') return 'prio-alta';
-    if (p === 'baja') return 'prio-baja';
-    return 'prio-media';
-  }
-
-  function fichaDeTarea(tarea) {
-    const clases = ['today-card', claseDePrioridad(tarea.priority)];
-    if (tarea.is_overdue) clases.push('is-overdue');
-    if (FINAL_STATUSES.includes(tarea.status)) clases.push('is-done');
-
-    const meta = [tarea.client, tarea.assignee_name, tarea.status]
-      .filter(Boolean)
-      .map(escapeHtml)
-      .join(' · ');
-
-    return ''
-      + `<li><button type="button" class="${clases.join(' ')}" data-tarea="${tarea.id}">`
-      +   '<span class="today-card-main">'
-      +     `<span class="today-card-title">${escapeHtml(tarea.title || '(sin titulo)')}</span>`
-      +     (meta ? `<span class="today-card-meta">${meta}</span>` : '')
-      +   '</span>'
-      +   `<span class="today-card-when">${escapeHtml(etiquetaVencimiento(tarea.due_date))}</span>`
-      +   `<span class="today-card-prio">${escapeHtml(tarea.priority || DEFAULT_PRIORITY)}</span>`
-      + '</button></li>';
-  }
-
-  function bloqueDeGrupo(grupo) {
-    if (!grupo.tareas.length) return '';
-    const colapsado = grupo.colapsado ? ' is-collapsed' : '';
-    const extra = grupo.destacado ? ' is-vencidas' : '';
-    return ''
-      + `<section class="today-group${extra}${colapsado}" data-grupo="${grupo.clave}">`
-      +   '<div class="today-group-head">'
-      +     `<h3 class="today-group-title">${escapeHtml(grupo.titulo)}</h3>`
-      +     `<span class="today-group-count">${grupo.tareas.length}</span>`
-      +     (grupo.plegable
-              ? `<button type="button" class="today-group-toggle" data-plegar="${grupo.clave}">`
-                + (grupo.colapsado ? 'desplegar' : 'plegar') + '</button>'
-              : '')
-      +   '</div>'
-      +   `<ul class="today-list">${grupo.tareas.map(fichaDeTarea).join('')}</ul>`
-      + '</section>';
-  }
-
-  function pintarVistaHoy(vencidas, delRango) {
-    if (!todayGroups) return;
-
-    const finSemana = sumarDias(HOY, 7);
-    const hoyTareas = [];
-    const semana = [];
-
-    delRango.forEach(function (t) {
-      if (!t.due_date) return;
-      if (t.due_date === HOY) hoyTareas.push(t);
-      else if (t.due_date > HOY && t.due_date <= finSemana) semana.push(t);
-    });
-
-    const grupos = [
-      { clave: 'vencidas', titulo: 'Vencidas', tareas: vencidas, destacado: true, plegable: false, colapsado: false },
-      { clave: 'hoy', titulo: 'Hoy', tareas: hoyTareas, plegable: false, colapsado: false },
-      { clave: 'semana', titulo: 'Esta semana', tareas: semana, plegable: true, colapsado: gruposColapsados.has('semana') }
-    ];
-
-    const html = grupos.map(bloqueDeGrupo).join('');
-    todayGroups.innerHTML = html || '<p class="today-empty">Nada vencido ni pendiente para los proximos siete dias. Usa <strong>Nueva tarea</strong> para anadir trabajo, o abre el calendario para ver mas adelante.</p>';
-    todayGroups.setAttribute('aria-busy', 'false');
-  }
-
-  // 'Esta semana' abre plegada a proposito: la vista de entrada debe responder
-  // que hay que hacer ahora, no mostrar los siete dias de golpe.
-  const gruposColapsados = new Set(['semana']);
-
-  function mostrarFalloDeCarga(motivo) {
-    todayGroups.innerHTML = '<p class="today-error">'
-      + '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> '
-      + escapeHtml(motivo)
-      + '</p>';
-    todayGroups.setAttribute('aria-busy', 'false');
-  }
-
-  /* Una peticion caida no es una agenda vacia. Sin esta distincion, un 429 o un
-     500 pintaban "Nada vencido ni pendiente": el peor estado vacio posible,
-     porque tranquiliza al usuario justo cuando no se le pudo preguntar nada al
-     servidor. */
-  function pedirTareas(url) {
-    return fetch(url).then(function (respuesta) {
-      if (!respuesta.ok) {
-        const error = new Error('http ' + respuesta.status);
-        error.estado = respuesta.status;
-        throw error;
-      }
-      return respuesta.json();
-    }).then(function (datos) {
-      if (!Array.isArray(datos)) throw new Error('respuesta inesperada');
-      return datos;
-    });
-  }
-
-  function cargarVistaHoy() {
-    if (!todayGroups || !HOY) return Promise.resolve();
-    todayGroups.setAttribute('aria-busy', 'true');
-
-    const finSemana = sumarDias(HOY, 7);
-    return Promise.all([
-      pedirTareas('/api/tasks?overdue=1'),
-      pedirTareas(`/api/tasks?start=${HOY}&end=${finSemana}`)
-    ]).then(function (respuestas) {
-      pintarVistaHoy(respuestas[0], respuestas[1]);
-    }).catch(function (error) {
-      mostrarFalloDeCarga(error && error.estado === 429
-        ? 'Demasiadas peticiones seguidas. Espera unos segundos y pulsa Actualizar.'
-        : 'No se pudo cargar tu trabajo. Comprueba la conexión y pulsa Actualizar.');
-    });
-  }
-
   function initVistaHoy() {
-    if (!shell || !todayGroups) return;
+    if (!shell) return;
 
     const botones = document.querySelectorAll('.tasks-view-btn');
     const CLAVE_VISTA = 'nl-vista-tareas';
@@ -2912,6 +2794,10 @@ document.addEventListener('DOMContentLoaded', function () {
       // FullCalendar mide mal si se dibuja oculto; al volver hay que reajustarlo.
       if (vista === 'calendario' && typeof calendar !== 'undefined' && calendar) {
         calendar.updateSize();
+        if (calendarioPendiente) {
+          calendarioPendiente = false;
+          calendar.refetchEvents();
+        }
       }
       // Observadas se carga al entrar, no al arrancar la pagina: es la vista
       // menos usada y no merece una peticion que casi nadie va a mirar.
@@ -2935,36 +2821,32 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     });
 
-    todayGroups.addEventListener('click', function (evento) {
-      const plegar = evento.target.closest('[data-plegar]');
-      if (plegar) {
-        const clave = plegar.dataset.plegar;
-        const grupo = todayGroups.querySelector(`[data-grupo="${clave}"]`);
-        if (!grupo) return;
-        const seColapsa = !grupo.classList.contains('is-collapsed');
-        grupo.classList.toggle('is-collapsed', seColapsa);
-        plegar.textContent = seColapsa ? 'desplegar' : 'plegar';
-        if (seColapsa) gruposColapsados.add(clave);
-        else gruposColapsados.delete(clave);
-        return;
-      }
-
-      const ficha = evento.target.closest('[data-tarea]');
-      if (!ficha) return;
-      requestJson(`/api/tasks/${ficha.dataset.tarea}`).then(function (data) {
-        if (data && data.success && data.task) openModal(true, data.task);
-      }).catch(function () {});
-    });
-
-    const btnRefrescar = document.getElementById('btnTodayRefresh');
-    if (btnRefrescar) btnRefrescar.addEventListener('click', cargarVistaHoy);
-
-    // Cualquier cambio que refresque el calendario debe refrescar tambien Hoy,
-    // o las dos vistas se contradicen tras crear o mover una tarea.
-    window.recargarVistaHoy = cargarVistaHoy;
-
-    cargarVistaHoy();
+    // La bandeja necesita saber volver a Hoy, p. ej. al llegar con ?nueva=1
+    // habiendo dejado el calendario como vista recordada.
+    window.TareasApp.aplicarVista = aplicarVista;
   }
+
+  /* La bandeja reutiliza estas piezas en vez de copiarlas: la misma peticion
+     con su manejo de errores, el mismo modal completo para "Mas detalles" y
+     la misma configuracion de estados y prioridades. Se cuelgan de window
+     porque tasks_bandeja.js es otro fichero y todo esto vive en el cierre
+     del DOMContentLoaded. */
+  window.TareasApp = {
+    requestJson: requestJson,
+    escapeHtml: escapeHtml,
+    notify: notify,
+    openModal: openModal,
+    INITIAL_STATUS: INITIAL_STATUS,
+    DEFAULT_PRIORITY: DEFAULT_PRIORITY,
+    FINAL_STATUSES: FINAL_STATUSES,
+    HOY: HOY,
+    loadOverdueCount: function () { loadOverdueCount(); },
+    loadWatchingTasks: loadWatchingTasks,
+    // Solo el calendario: refreshCalendar() tambien recarga Hoy, y la bandeja
+    // ya actualiza su fila en sitio tras cada cambio. Incluye la cuenta de
+    // vencidas, asi que la bandeja no la pide aparte.
+    refrescarCalendario: refetchCalendarIfVisible
+  };
 
   actualizarContadorDeFiltros();
   initVistaHoy();
