@@ -329,24 +329,41 @@ def aplicar_insights_de_ia(context):
     return meta
 
 
+def _sin_progreso(fase, progreso=None, mensaje=None):
+    return None
+
+
 def create_report_context_from_widgets(parsed_widgets, report_title=None, warnings=None,
                                        use_ai_insights=True, unique_authors=None,
-                                       meltwater_analysis=None):
+                                       meltwater_analysis=None, progreso=None):
     """
     FUNCIÓN PRINCIPAL (v2)
     Orquesta la construcción del contexto JSON maestro a partir de los
     widgets .xlsx de Meltwater ya parseados (services.meltwater_ingest.parse_widgets).
+
+    `progreso(fase, porcentaje, mensaje)` es opcional: lo pasa quien quiere
+    ensenar en que punto va el proceso (la API interna). Se llama entre pasos
+    reales, nunca con un avance inventado.
     """
+    avisar = progreso or _sin_progreso
     client_name = report_title if report_title else "Reporte General"
+
+    avisar('calculo', 10, 'Sumando menciones, alcance y reparto por red')
+    kpis = _build_kpis(parsed_widgets, unique_authors=unique_authors)
+    avisar('graficos', 30, 'Preparando las series de los gráficos')
+    charts = _build_charts(parsed_widgets)
+    # La traduccion de los temas es la primera llamada al modelo del proceso.
+    avisar('ia', 10, 'Traduciendo los temas detectados')
+    content = _build_content(parsed_widgets)
 
     context = {
         'meta': {
             'client_name': client_name,
             'date_generated': _fecha_es(datetime.now()),
         },
-        'kpis': _build_kpis(parsed_widgets, unique_authors=unique_authors),
-        'charts': _build_charts(parsed_widgets),
-        'content': _build_content(parsed_widgets),
+        'kpis': kpis,
+        'charts': charts,
+        'content': content,
         'warnings': warnings or [],
         # Contexto cualitativo opcional que el analista pega de Meltwater. Solo
         # lo consume el harness; no se muestra en el reporte.
@@ -360,6 +377,7 @@ def create_report_context_from_widgets(parsed_widgets, report_title=None, warnin
     context['insights_source'] = 'reglas'
 
     if use_ai_insights:
+        avisar('ia', 40, 'Redactando los textos del reporte')
         aplicar_insights_de_ia(context)
 
     # Ya cumplió su función: se retira para no viajar al navegador dentro del
