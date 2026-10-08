@@ -29,6 +29,7 @@ from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
 from blueprints.notifications import notifications_bp
 from blueprints.tasks import tasks_bp
+from blueprints.tasks_tablero import tablero_bp
 from blueprints.task_requests import task_requests_bp
 from blueprints.tour import tour_bp
 
@@ -256,6 +257,7 @@ app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(tasks_bp)
+app.register_blueprint(tablero_bp)
 app.register_blueprint(task_requests_bp)
 app.register_blueprint(tour_bp)
 

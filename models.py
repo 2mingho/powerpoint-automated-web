@@ -454,6 +454,10 @@ class Task(db.Model):
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
     deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     deleted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # Orden dentro de su columna del tablero. Es un real para poder soltar una
+    # tarjeta entre otras dos sin renumerar la columna entera. Nula = nunca se
+    # ha colocado a mano; esas van al final, por fecha de entrega.
+    board_position = db.Column(db.Float, nullable=True)
 
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     assignee_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -500,6 +504,7 @@ class Task(db.Model):
             'assignee_id': self.assignee_id,
             'assignee_name': self.assignee.username if self.assignee else '',
             'updated_at': self.updated_at.isoformat() if self.updated_at else '',
+            'board_position': self.board_position,
             'is_overdue': bool(self.due_date and self.due_date < today_local() and self.status != 'Completado'),
         }
         if include_counts:
@@ -674,6 +679,80 @@ class TaskTemplate(db.Model):
             'payload': payload,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
         }
+
+
+task_tag_links = db.Table(
+    'task_tag_links',
+    db.Column('task_id', db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True),
+    # Indexada aparte: filtrar el tablero por etiqueta busca por tag_id, y la
+    # clave primaria solo sirve empezando por task_id.
+    db.Column('tag_id', db.Integer, db.ForeignKey('task_tags.id', ondelete='CASCADE'),
+              primary_key=True, index=True),
+)
+
+
+class TaskTag(db.Model):
+    """Etiqueta de color para clasificar tareas, varias por tarea.
+
+    Pertenece a una unidad, como las plantillas: cada equipo clasifica su
+    trabajo a su manera y no deberia ver las etiquetas de los demas. area_id
+    nulo es una etiqueta comun, que solo crea un admin y ven todos.
+
+    El color es un token del sistema (neutro, info, aviso...), no un hex, por
+    el mismo motivo que en estados y prioridades: el tema oscuro lo resuelve
+    aparte.
+    """
+    __tablename__ = 'task_tags'
+    __table_args__ = (
+        db.UniqueConstraint('area_id', 'nombre', name='uq_task_tags_area_nombre'),
+    )
+
+    COLORES = ('neutro', 'info', 'aviso', 'alerta', 'bien', 'violeta')
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(40), nullable=False)
+    color = db.Column(db.String(20), nullable=False, default='neutro')
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    area = db.relationship('Area')
+    tasks = db.relationship('Task', secondary=task_tag_links, lazy='dynamic',
+                            backref=db.backref('tags', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'color': self.color,
+            'area_id': self.area_id,
+            'area_name': self.area.name if self.area else '',
+        }
+
+
+class TaskDependency(db.Model):
+    """Una tarea que no deberia cerrarse hasta que otra lo este.
+
+    blocker_task_id es la que va primero; blocked_task_id, la que espera. La
+    relacion es dirigida y no puede formar ciclos: eso lo comprueba quien la
+    crea, porque una restriccion de la base no sabe recorrer un grafo.
+    """
+    __tablename__ = 'task_dependencies'
+    __table_args__ = (
+        db.UniqueConstraint('blocker_task_id', 'blocked_task_id', name='uq_task_dependency'),
+        db.CheckConstraint('blocker_task_id <> blocked_task_id', name='ck_task_dependency_distintas'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    blocker_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'),
+                                nullable=False, index=True)
+    blocked_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'),
+                                nullable=False, index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    blocker = db.relationship('Task', foreign_keys=[blocker_task_id])
+    blocked = db.relationship('Task', foreign_keys=[blocked_task_id])
 
 
 class TaskRequest(db.Model):
