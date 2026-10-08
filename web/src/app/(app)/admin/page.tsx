@@ -62,7 +62,7 @@ async function Indice() {
   const l = lineas(r);
   const atencion = Object.values(l).filter((x) => x.estado.tono === "alerta" || x.estado.tono === "aviso").length;
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section aria-labelledby="indice" className="rounded-md border border-hilo bg-superficie shadow-1">
         <header className="flex min-h-12 items-center justify-between border-b border-hilo px-4">
           <h2 id="indice" className="font-rotulo text-sm font-semibold uppercase tracking-[0.14em]">Secciones</h2>
@@ -128,7 +128,7 @@ async function Indice() {
 
 function EsqueletoIndice() {
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]" aria-busy="true" aria-label="Cargando">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]" aria-busy="true" aria-label="Cargando">
       <div className="rounded-md border border-hilo bg-superficie">
         {SECCIONES.map((s) => (
           <div key={s.href} className="flex min-h-16 items-center gap-6 border-b border-hilo px-4 last:border-0">

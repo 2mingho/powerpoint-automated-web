@@ -40,7 +40,7 @@ export function PantallaOrganizacion({ inicial }: { inicial: DatosOrganizacion }
   const { raices, sinLider, sueltas } = datos.arbol;
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
       <section aria-labelledby="cadena" className="rounded-md border border-hilo bg-superficie shadow-1">
         <header className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-hilo px-4 py-2">
           <h2 id="cadena" className="font-rotulo text-sm font-semibold uppercase tracking-[0.14em]">Cadena de mando</h2>
