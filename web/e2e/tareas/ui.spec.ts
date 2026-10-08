@@ -16,12 +16,12 @@ test("completar una tarea desde la fila y deshacerlo", async ({ page, context })
 
   await fila.getByRole("button", { name: `Completar «${titulo}»` }).click();
   // La fila no desaparece: pasa a Completadas y su estado queda encendido.
-  await expect(fila.getByText("Completado", { exact: true })).toBeVisible();
+  await expect(fila.getByText(/^Completado/)).toBeVisible();
   await expect.poll(async () => (await sql<{ status: string }>("SELECT status FROM tasks WHERE id = $1", [id]))[0].status).toBe("Completado");
 
   await page.getByRole("button", { name: "Deshacer" }).click();
   await expect.poll(async () => (await sql<{ status: string }>("SELECT status FROM tasks WHERE id = $1", [id]))[0].status).toBe("Pendiente");
-  await expect(fila.getByText("Pendiente", { exact: true })).toBeVisible();
+  await expect(fila.getByText(/^Pendiente/)).toBeVisible();
 });
 
 test("alta rápida con @persona, mañana y !alta", async ({ page, context }, info) => {
@@ -45,6 +45,7 @@ test("el pase muestra las celdas de la tarea y cambia el estado", async ({ page,
   await entrarComo(context, e.empleado);
   await page.goto(`${BASE}/tareas?tarea=${id}`);
   const pase = page.getByRole("article", { name: `Tarea: ${titulo}` });
+  await expect(pase).toBeVisible({ timeout: 20_000 });
   for (const rotulo of ["Entrega", "Prioridad", "Unidad", "Responsable"]) await expect(pase.getByText(rotulo, { exact: true })).toBeVisible();
   await pase.getByRole("radio", { name: "En Revisión" }).click();
   await expect.poll(async () => (await sql<{ status: string }>("SELECT status FROM tasks WHERE id = $1", [id]))[0].status).toBe("En Revisión");

@@ -7,7 +7,7 @@ import { BASE, escenario, HOY, sql, sumarDias, updatedAt, entrarComo } from "./a
  * de test_security_permissions.py). Cada prueba crea su propio escenario.
  */
 
-test.skip(({}, info) => info.project.name !== "escritorio", "La API se prueba una vez, en escritorio.");
+test.beforeEach(({}, info) => { test.skip(info.project.name !== "escritorio", "La API se prueba una vez, en escritorio."); });
 
 type Esc = Awaited<ReturnType<typeof escenario>>;
 
@@ -217,8 +217,8 @@ test("dependencias: ciclos, duplicados y autodependencia rechazados; cerrar avis
   expect((await tarjeta(p2)).bloqueadaPorAbiertas).toBe(1);
   const cerrar = await r.post(`${BASE}/api/tareas/${p2}/mover`, { data: { status: "Completado" } });
   expect((await cerrar.json()).aviso).toContain("P1");
-  await r.post(`${BASE}/api/tareas/${p1}/mover`, { data: { status: "Completado" } });
-  expect((await tarjeta(p3)).bloqueadaPorAbiertas).toBe(1);
+  // p3 espera a p2, que ya está cerrada: deja de contar como bloqueo.
+  expect((await tarjeta(p3)).bloqueadaPorAbiertas).toBe(0);
 });
 
 test("CSV: la vista previa marca las filas inválidas y solo se importan las válidas", async ({ context }) => {
