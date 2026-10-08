@@ -72,8 +72,8 @@ export function PanelSalidas({ seleccionando, marcadas, alMarcar }: {
 
   return (
     <div role="table" aria-label="Panel de salidas" aria-busy={cargando || undefined} className="min-w-0">
-      <div role="row" className={cx("sticky top-14 z-10 hidden h-9 items-center border-b border-hilo bg-superficie md:grid", COLUMNAS)}>
-        <span role="columnheader" className="sr-only">Completar</span>
+      <div role="row" className={cx("sticky top-14 z-10 hidden h-9 items-center border-b border-hilo bg-superficie pr-3 md:grid", COLUMNAS)}>
+        <span role="columnheader"><span className="sr-only">Completar</span></span>
         <span role="columnheader" className="rotulo">Entrega</span>
         <span role="columnheader" className="rotulo">Tarea</span>
         <span role="columnheader" className="rotulo hidden xl:block">Unidad</span>
@@ -141,12 +141,12 @@ function Fila({ t, transicion, seleccionando, marcada, alMarcar }: {
         )}
       </span>
       <span role="cell" className="hidden flex-col leading-tight md:flex">
-        <span className={cx("font-mono text-sm font-medium cifras", vencida ? "text-alerta" : "text-texto")}>{fechaCorta(t.entrega)}</span>
-        <span className={cx("text-xs", vencida ? "text-alerta" : "text-texto-3")}>{relativo(t.entrega, hoy)}</span>
+        <span className={cx("font-mono text-sm font-medium leading-5 cifras", vencida ? "text-alerta" : "text-texto")}>{fechaCorta(t.entrega)}</span>
+        <span className={cx("text-xs leading-4", vencida ? "text-alerta" : "text-texto-3")}>{relativo(t.entrega, hoy)}</span>
       </span>
-      <span role="cell" className="min-w-0 py-1.5">
+      <span role="cell" className="min-w-0 py-1">
         <button type="button" onClick={(e) => { e.stopPropagation(); if (seleccionando) alMarcar(t.id); else seleccionar(t.id); }}
-          className={cx("block max-w-full truncate text-left text-base font-medium", hecha ? "text-texto-3 line-through decoration-texto-3/60" : "text-texto")}>
+          className={cx("block max-w-full truncate text-left text-sm font-medium leading-5", hecha ? "text-texto-3 line-through decoration-texto-3/60" : "text-texto")}>
           {t.titulo}
         </button>
         <Meta t={t} vencida={vencida} />
@@ -163,7 +163,7 @@ function Fila({ t, transicion, seleccionando, marcada, alMarcar }: {
 function Meta({ t, vencida }: { t: TareaDTO; vencida: boolean }) {
   const { hoy } = useTareas();
   return (
-    <span className="mt-0.5 flex min-w-0 items-center gap-2.5 text-xs text-texto-3">
+    <span className="flex min-w-0 items-center gap-2.5 text-xs leading-4 text-texto-3">
       {/* En movil la entrega y el responsable van aqui; en escritorio tienen columna. */}
       <span className={cx("font-mono cifras md:hidden", vencida && "text-alerta")}>{fechaCorta(t.entrega)} · {relativo(t.entrega, hoy)}</span>
       <span className="truncate md:hidden">{t.asignado}</span>

@@ -32,7 +32,7 @@ const ALCANCES: Array<{ clave: Alcance; rotulo: string }> = [
   { clave: "unidad", rotulo: "Mi unidad" },
 ];
 
-const VISTAS: Array<{ clave: Vista; rotulo: string; icono: React.ReactNode }> = [
+export const VISTAS: Array<{ clave: Vista; rotulo: string; icono: React.ReactNode }> = [
   { clave: "panel", rotulo: "Panel", icono: <Rows3 aria-hidden className="size-4" /> },
   { clave: "tablero", rotulo: "Tablero", icono: <Columns3 aria-hidden className="size-4" /> },
   { clave: "calendario", rotulo: "Calendario", icono: <CalendarDays aria-hidden className="size-4" /> },
@@ -59,7 +59,7 @@ export function Segmentos<T extends string>({ opciones, valor, alElegir, etiquet
 
 /* Alcance, busqueda, vista y filtros plegados. */
 export function BarraFiltros() {
-  const { filtros, setFiltros, vista, setVista, prioridades, personas, clientes, etiquetas, unidades, usuario } = useTareas();
+  const { filtros, setFiltros, prioridades, personas, clientes, etiquetas, unidades, usuario } = useTareas();
   const [q, setQ] = useState(filtros.q);
   useEffect(() => {
     const t = setTimeout(() => { if (q !== filtros.q && (q.length === 0 || q.length >= 2)) setFiltros({ q }); }, 300);
@@ -83,7 +83,6 @@ export function BarraFiltros() {
           className={cx("inline-flex h-10 items-center gap-2 rounded-sm border px-3 text-sm", activos ? "border-texto text-texto" : "border-hilo text-texto-2 hover:text-texto")}>
           <ListFilter aria-hidden className="size-4" />Filtros{activos > 0 && <span className="font-mono text-xs cifras">{activos}</span>}
         </button>
-        <Segmentos etiqueta="Vista" opciones={VISTAS} valor={vista} alElegir={setVista} />
       </div>
       {abierto && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">

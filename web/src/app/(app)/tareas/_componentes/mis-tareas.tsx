@@ -6,7 +6,7 @@ import { Boton } from "@/components/ui/boton";
 import { Entrada, Selector } from "@/components/ui/campo";
 import { Dialogo } from "@/components/ui/dialogo";
 import { cx } from "@/components/ui/cx";
-import { AltaRapida, BarraFiltros, Franja } from "./barra";
+import { AltaRapida, BarraFiltros, Franja, Segmentos, VISTAS } from "./barra";
 import { Calendario } from "./calendario";
 import { pedir } from "./cliente";
 import { ProveedorTareas, useTareas, type Inicial } from "./estado";
@@ -55,12 +55,14 @@ function Pantalla() {
           className="grid size-9 place-items-center rounded-sm text-texto-3 hover:bg-superficie-2 hover:text-texto">
           <RefreshCw aria-hidden className={cx("size-4", cargando && "motion-safe:animate-spin")} />
         </button>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <Segmentos etiqueta="Vista" opciones={VISTAS} valor={vista} alElegir={ctx.setVista} />
+        <div className="ml-auto flex flex-wrap items-center gap-1 sm:gap-2">
           <Herramientas />
           {vista === "panel" && (
             <Boton variante={seleccionando ? "secundario" : "fantasma"} icono={<SquareCheckBig aria-hidden className="size-4" />}
-              aria-pressed={seleccionando} onClick={() => (seleccionando ? salirSeleccion() : setSeleccionando(true))}>
-              {seleccionando ? "Terminar" : "Seleccionar"}
+              aria-pressed={seleccionando} aria-label={seleccionando ? "Terminar la selección" : "Seleccionar varias"}
+              onClick={() => (seleccionando ? salirSeleccion() : setSeleccionando(true))} className="px-2.5 sm:px-4">
+              <span className="hidden sm:inline">{seleccionando ? "Terminar" : "Seleccionar"}</span>
             </Boton>
           )}
           <NuevaTarea />
@@ -74,7 +76,7 @@ function Pantalla() {
           <section aria-label="Panel de salidas" className="flex min-w-0 flex-col gap-3">
             <AltaRapida />
             <BarraFiltros />
-            <div className="overflow-hidden rounded-md border border-hilo bg-superficie shadow-1">
+            <div className="overflow-clip rounded-md border border-hilo bg-superficie shadow-1">
               <PanelSalidas seleccionando={seleccionando} marcadas={marcadas} alMarcar={alMarcar} />
             </div>
             {truncada && <p className="text-sm text-texto-3">Se muestran las primeras 500 tareas. Usa los filtros para acotar.</p>}

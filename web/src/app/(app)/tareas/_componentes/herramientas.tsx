@@ -20,9 +20,9 @@ export function Herramientas() {
   const cerrar = () => setAbierto("");
   return (
     <>
-      <Boton variante="fantasma" icono={<LayoutTemplate aria-hidden className="size-4" />} onClick={() => setAbierto("plantillas")}>Plantillas</Boton>
-      <Boton variante="fantasma" icono={<Tag aria-hidden className="size-4" />} onClick={() => setAbierto("etiquetas")}>Etiquetas</Boton>
-      <Boton variante="fantasma" icono={<FileDown aria-hidden className="size-4" />} onClick={() => setAbierto("csv")}>CSV</Boton>
+      <Boton variante="fantasma" icono={<LayoutTemplate aria-hidden className="size-4" />} onClick={() => setAbierto("plantillas")} aria-label="Plantillas" className="px-2.5 sm:px-4"><span className="hidden sm:inline">Plantillas</span></Boton>
+      <Boton variante="fantasma" icono={<Tag aria-hidden className="size-4" />} onClick={() => setAbierto("etiquetas")} aria-label="Etiquetas" className="px-2.5 sm:px-4"><span className="hidden sm:inline">Etiquetas</span></Boton>
+      <Boton variante="fantasma" icono={<FileDown aria-hidden className="size-4" />} onClick={() => setAbierto("csv")} aria-label="CSV" className="px-2.5 sm:px-4"><span className="hidden sm:inline">CSV</span></Boton>
       {abierto === "plantillas" && <Plantillas alCerrar={cerrar} />}
       {abierto === "etiquetas" && <Etiquetas alCerrar={cerrar} />}
       {abierto === "csv" && <Csv alCerrar={cerrar} />}

@@ -89,11 +89,11 @@ export function Pase({ id, alCerrar }: { id: number; alCerrar: () => void }) {
   return (
     <article aria-label={`Tarea: ${t.titulo}`} className="flex min-h-0 flex-col">
       <CabeceraPase titulo={`#${t.id}`} alCerrar={alCerrar} />
-      <div className="flex flex-col gap-5 overflow-y-auto px-5 pb-6">
+      <div className="flex flex-col gap-5 overflow-y-auto px-5 pb-6 [&>*]:shrink-0">
         <Titulo key={`t-${t.titulo}`} t={t} editable={editable} alGuardar={(v) => void guardar({ title: v })} />
 
         {/* Pase segmentado */}
-        <dl className="grid grid-cols-2 overflow-hidden rounded-sm border border-hilo sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-hilo bg-hilo">
           <Celda rotulo="Entrega">
             {editable ? (
               <input type="date" aria-label="Fecha de entrega" value={t.entrega} required
@@ -192,7 +192,7 @@ function CabeceraPase({ titulo, alCerrar }: { titulo: string; alCerrar: () => vo
 
 function Celda({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 border-b border-r border-hilo px-3 py-2.5 last:border-r-0 sm:border-b-0 [&:nth-child(2)]:border-r-0 sm:[&:nth-child(2)]:border-r">
+    <div className="flex min-w-0 flex-col gap-1 bg-superficie px-3 py-2.5">
       <dt className="rotulo">{rotulo}</dt>
       <dd className="flex min-w-0 flex-col">{children}</dd>
     </div>

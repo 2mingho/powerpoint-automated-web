@@ -31,6 +31,12 @@ function describir(accion: string, detalle: string): string {
   return "la actualizó";
 }
 
+/* Desde cuando contar "cambió desde tu última visita". Sin visita apuntada, los dos últimos días. */
+export function desdeUltimaVisita(cookie: string | undefined): Date {
+  const marca = cookie ? new Date(decodeURIComponent(cookie)) : null;
+  return marca && !Number.isNaN(marca.getTime()) ? marca : new Date(Date.now() - 48 * 3_600_000);
+}
+
 export async function datosInicio(u: UsuarioActual, desde: Date) {
   const conTareas = tieneHerramienta(u, "tasks");
   const hoy = hoyNegocio();
