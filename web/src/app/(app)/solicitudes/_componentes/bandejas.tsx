@@ -109,7 +109,7 @@ export function Bandejas(p: Props) {
       setBandeja("enviadas");
       const d = await cargar("enviadas", true);
       const nueva = d?.solicitudes.find((s) => s.id === id);
-      if (nueva) { setAutomatica(false); setSeleccion(nueva); setEncendidas((x) => new Set([...x, nueva.id])); }
+      if (nueva) { setAutomatica(true); setSeleccion(nueva); setEncendidas((x) => new Set([...x, nueva.id])); }
     };
     window.addEventListener(EVENTO_SOLICITUD_ENVIADA, alEnviar);
     return () => window.removeEventListener(EVENTO_SOLICITUD_ENVIADA, alEnviar);

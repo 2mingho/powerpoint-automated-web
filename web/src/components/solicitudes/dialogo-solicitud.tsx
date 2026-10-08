@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Dialogo } from "@/components/ui/dialogo";
 import { Boton } from "@/components/ui/boton";
@@ -30,8 +30,6 @@ type Errores = Partial<Record<"titulo" | "unidad" | "entrega" | "general", strin
  */
 export function DialogoSolicitud() {
   const { avisar } = useAvisos();
-  const router = useRouter();
-  const pathname = usePathname();
   const params = useSearchParams();
   const [abierto, setAbierto] = useState(false);
   const [opciones, setOpciones] = useState<Opciones | null>(null);
@@ -65,11 +63,11 @@ export function DialogoSolicitud() {
     // La URL es la orden externa de abrir.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     abrir();
-    const resto = new URLSearchParams(params.toString());
-    resto.delete("solicitar");
-    const q = resto.toString();
-    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
-  }, [params, pathname, router, abrir]);
+    // Sin router.replace: una navegacion al servidor podria volver a montar la cabecera y cerrar el dialogo.
+    const u = new URL(window.location.href);
+    u.searchParams.delete("solicitar");
+    window.history.replaceState(window.history.state, "", u);
+  }, [params, abrir]);
 
   const enviar = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
