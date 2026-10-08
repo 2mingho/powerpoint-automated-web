@@ -114,8 +114,8 @@ export function Tour({ items, pendiente }: { items: ItemNav[]; pendiente: boolea
   // Primer acceso: se ofrece una vez, cuando la pagina ya esta montada.
   useEffect(() => {
     if (!pendiente || ofrecido.current) return;
-    ofrecido.current = true;
-    const t = setTimeout(() => { setIndice(0); setActivo(true); }, 500);
+    // La marca se pone al dispararse, no al programarse: en modo estricto el efecto se monta dos veces.
+    const t = setTimeout(() => { ofrecido.current = true; setIndice(0); setActivo(true); }, 500);
     return () => clearTimeout(t);
   }, [pendiente]);
 
@@ -213,7 +213,7 @@ export function Tour({ items, pendiente }: { items: ItemNav[]; pendiente: boolea
       <div aria-hidden className={cx("absolute inset-0", centrado ? "bg-tinta/55" : "bg-transparent")} />
       {caja && (
         <div aria-hidden
-          className="pointer-events-none absolute rounded-sm ring-2 ring-marca motion-safe:transition-[top,left,width,height] motion-safe:duration-[var(--dur)] motion-safe:ease-salida"
+          className="pointer-events-none absolute rounded-sm outline-2 outline-marca motion-safe:transition-[top,left,width,height] motion-safe:duration-[var(--dur)] motion-safe:ease-salida"
           style={{ ...caja, boxShadow: "0 0 0 200vmax color-mix(in srgb, var(--tinta) 55%, transparent)" }} />
       )}
       <div ref={globo} key={paso.id}

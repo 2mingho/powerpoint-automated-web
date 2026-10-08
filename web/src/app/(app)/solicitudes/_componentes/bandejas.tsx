@@ -60,6 +60,8 @@ export function Bandejas(p: Props) {
     const primera = p.inicial.solicitudes.find((s) => s.estado === "Pendiente" && s.puedeResolver);
     return p.bandejaInicial === "recibidas" ? primera ?? null : null;
   });
+  // La que se elige sola (lo primero por decidir) se ve en el pase de escritorio, pero no abre la hoja del movil.
+  const [automatica, setAutomatica] = useState(!p.seleccionInicial);
   const [aviso, setAviso] = useState(p.avisoSeleccion);
   const reducir = useReducedMotion();
   const bandejaRef = useRef(bandeja);
@@ -107,7 +109,7 @@ export function Bandejas(p: Props) {
       setBandeja("enviadas");
       const d = await cargar("enviadas", true);
       const nueva = d?.solicitudes.find((s) => s.id === id);
-      if (nueva) { setSeleccion(nueva); setEncendidas((x) => new Set([...x, nueva.id])); }
+      if (nueva) { setAutomatica(false); setSeleccion(nueva); setEncendidas((x) => new Set([...x, nueva.id])); }
     };
     window.addEventListener(EVENTO_SOLICITUD_ENVIADA, alEnviar);
     return () => window.removeEventListener(EVENTO_SOLICITUD_ENVIADA, alEnviar);
@@ -195,8 +197,8 @@ export function Bandejas(p: Props) {
                 {filas.map((s) => (
                   <motion.li key={s.id} layout={reducir ? false : "position"} transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}>
                     <Fila s={s} bandeja={bandeja} hoy={p.hoy} tonosPrioridad={p.tonosPrioridad}
-                      seleccionada={seleccion?.id === s.id} encendida={encendidas.has(s.id)}
-                      onElegir={() => setSeleccion(s)} />
+                      seleccionada={seleccion?.id === s.id} soloEscritorio={automatica} encendida={encendidas.has(s.id)}
+                      onElegir={() => { setAutomatica(false); setSeleccion(s); }} />
                   </motion.li>
                 ))}
               </ul>
@@ -204,17 +206,20 @@ export function Bandejas(p: Props) {
           </div>
         </Panel>
 
-        <Detalle s={seleccion} hoy={p.hoy} tonosPrioridad={p.tonosPrioridad} encendida={!!seleccion && encendidas.has(seleccion.id)}
+        <Detalle s={seleccion} automatica={automatica} hoy={p.hoy} tonosPrioridad={p.tonosPrioridad} encendida={!!seleccion && encendidas.has(seleccion.id)}
           onCerrar={() => setSeleccion(null)} onResuelta={alResolver} onRefrescar={() => void cargar(bandeja, true)} />
       </div>
     </div>
   );
 }
 
-function Fila({ s, bandeja, hoy, tonosPrioridad, seleccionada, encendida, onElegir }: {
+function Fila({ s, bandeja, hoy, tonosPrioridad, seleccionada, soloEscritorio, encendida, onElegir }: {
   s: SolicitudVista; bandeja: Bandeja; hoy: string; tonosPrioridad: Record<string, Tono>;
-  seleccionada: boolean; encendida: boolean; onElegir: () => void;
+  seleccionada: boolean; soloEscritorio: boolean; encendida: boolean; onElegir: () => void;
 }) {
+  // Elegida sola: solo se marca donde se ve su pase (escritorio).
+  const fondo = !seleccionada ? "hover:bg-superficie-2/60" : soloEscritorio ? "hover:bg-superficie-2/60 lg:bg-superficie-2" : "bg-superficie-2";
+  const filo = !seleccionada ? "scale-y-0" : soloEscritorio ? "scale-y-0 lg:scale-y-100" : "scale-y-100";
   const pendiente = s.estado === "Pendiente";
   const entrega = pendiente ? entregaRelativa(s.entrega, hoy) : { texto: s.entrega ? entregaRelativa(s.entrega, hoy).texto : "Sin fecha", tono: "neutro" as const };
   const origen = s.origen?.nombre ?? "Sin unidad";
@@ -222,7 +227,7 @@ function Fila({ s, bandeja, hoy, tonosPrioridad, seleccionada, encendida, onEleg
     ? <><span className="text-texto">{origen}</span><span className="text-texto-3"> · {s.solicitante.nombre}</span></>
     : bandeja === "enviadas"
       ? <span className="text-texto">{s.destino.nombre}</span>
-      : <span className="inline-flex min-w-0 items-center gap-1"><span className="truncate">{origen}</span><ArrowRight className="size-3 shrink-0 text-texto-3" aria-label="a" /><span className="truncate text-texto">{s.destino.nombre}</span></span>;
+      : <span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate">{origen}</span><ArrowRight className="size-3 shrink-0 text-texto-3" aria-label="a" /><span className="min-w-0 truncate text-texto">{s.destino.nombre}</span></span>;
   const tonoPrioridad = tonosPrioridad[s.prioridad] ?? "neutro";
 
   return (
@@ -231,10 +236,10 @@ function Fila({ s, bandeja, hoy, tonosPrioridad, seleccionada, encendida, onEleg
       className={cx(
         "relative grid w-full gap-x-3 gap-y-1 px-4 py-2.5 text-left transition-colors duration-[var(--dur-instante)]",
         "grid-cols-[minmax(0,1fr)_auto] md:h-11 md:grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,11rem)_5.5rem_7.5rem] md:items-center md:py-0",
-        seleccionada ? "bg-superficie-2" : "hover:bg-superficie-2/60",
+        fondo,
         !pendiente && "text-texto-2",
       )}>
-      <span aria-hidden className={cx("absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-texto transition-transform duration-[var(--dur)] ease-salida", seleccionada ? "scale-y-100" : "scale-y-0")} />
+      <span aria-hidden className={cx("absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-texto transition-transform duration-[var(--dur)] ease-salida", filo)} />
       <time dateTime={s.enviada} className="order-3 col-span-2 font-mono text-xs text-texto-3 cifras md:order-none md:col-span-1 md:text-sm">
         {momentoCorto(s.enviada, hoy)}
         <span className="md:hidden"> · {bandeja === "enviadas" ? `Para ${s.destino.nombre}` : `De ${origen}`} · Entrega {entrega.texto}</span>

@@ -163,7 +163,7 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
           aria-activedescendant={activo ? `${idLista}-${activo.id}` : undefined}
           aria-label="Buscar una tarea, una pantalla o una acción"
           placeholder={puedeTareas ? "Busca una tarea, una pantalla o una acción" : "Busca una pantalla o una acción"}
-          className="h-full min-w-0 flex-1 bg-transparent text-lg text-texto placeholder:text-texto-3 focus:outline-none" />
+          className="h-full min-w-0 flex-1 bg-transparent text-lg text-texto placeholder:text-texto-3 focus:outline-none focus-visible:outline-none" />
         <kbd className="hidden rounded-sm border border-hilo px-1.5 font-mono text-xs text-texto-3 sm:inline">Esc</kbd>
       </div>
 

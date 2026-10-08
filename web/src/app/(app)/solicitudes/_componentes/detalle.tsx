@@ -19,6 +19,7 @@ const TONO_TEXTO: Record<Tono, string> = {
 
 type PropsDetalle = {
   s: SolicitudVista | null;
+  automatica?: boolean;
   hoy: string;
   tonosPrioridad: Record<string, Tono>;
   encendida: boolean;
@@ -57,7 +58,7 @@ export function Detalle(p: PropsDetalle) {
           </div>
         )}
       </aside>
-      {ancho === false && p.s && <Hoja onCerrar={p.onCerrar}><Pase key={p.s.id} {...p} s={p.s} /></Hoja>}
+      {ancho === false && p.s && !p.automatica && <Hoja onCerrar={p.onCerrar}><Pase key={p.s.id} {...p} s={p.s} /></Hoja>}
     </>
   );
 }
