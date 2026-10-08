@@ -62,6 +62,8 @@ export function DialogoSolicitud() {
   // ?solicitar=1: se abre y el parametro se retira, para que recargar no lo vuelva a abrir.
   useEffect(() => {
     if (params.get("solicitar") !== "1") return;
+    // La URL es la orden externa de abrir.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     abrir();
     const resto = new URLSearchParams(params.toString());
     resto.delete("solicitar");

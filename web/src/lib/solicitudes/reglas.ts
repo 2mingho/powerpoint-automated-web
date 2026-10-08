@@ -24,6 +24,11 @@ export function esBandeja(v: unknown): v is Bandeja {
 /* Lo resuelto deja la bandeja de trabajo pasados estos dias y queda en Historial. */
 export const DIAS_EN_BANDEJA = 14;
 
+/* Resuelta hace mas de DIAS_EN_BANDEJA: ya solo vive en Historial. */
+export function salioDeLaBandeja(resuelta: string | null, ahora = Date.now()) {
+  return !!resuelta && ahora - new Date(resuelta).getTime() > DIAS_EN_BANDEJA * 86_400_000;
+}
+
 export const MIN_MOTIVO = 5;
 export const MAX_TITULO = 255;
 export const MAX_CLIENTE = 100;

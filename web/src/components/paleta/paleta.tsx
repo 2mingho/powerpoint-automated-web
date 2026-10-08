@@ -22,6 +22,8 @@ function Icono({ nombre, className }: { nombre: string; className?: string }) {
   return C ? <C className={className} aria-hidden /> : null;
 }
 
+const SIN_TAREAS: TareaEncontrada[] = [];
+
 const normalizar = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 function alternarTema() {
@@ -47,8 +49,7 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
   const [abierta, setAbierta] = useState(false);
   const [consulta, setConsulta] = useState("");
   const [indice, setIndice] = useState(0);
-  const [tareas, setTareas] = useState<TareaEncontrada[]>([]);
-  const [buscando, setBuscando] = useState(false);
+  const [resultado, setResultado] = useState<{ q: string; tareas: TareaEncontrada[] }>({ q: "", tareas: [] });
   const [oscuro, setOscuro] = useState(false);
   const abiertaRef = useRef(false);
   useEffect(() => { abiertaRef.current = abierta; }, [abierta]);
@@ -56,7 +57,6 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
   const abrir = useCallback(() => {
     setConsulta("");
     setIndice(0);
-    setTareas([]);
     setOscuro(document.documentElement.dataset.theme === "dark");
     setAbierta(true);
   }, []);
@@ -82,20 +82,20 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
     return () => { window.removeEventListener("keydown", tecla); window.removeEventListener(EVENTO_ABRIR_PALETA, abrir); };
   }, [abrir]);
 
-  // Tareas en el servidor, con espera corta y cancelando la anterior.
+  // Tareas en el servidor, con espera corta y cancelando la anterior. Lo pintado se deriva de la consulta.
+  const q = consulta.trim();
+  const buscable = abierta && puedeTareas && q.length >= 2;
   useEffect(() => {
-    const q = consulta.trim();
-    if (!abierta || !puedeTareas || q.length < 2) { setTareas([]); setBuscando(false); return; }
+    if (!buscable) return;
     const control = new AbortController();
-    setBuscando(true);
     const t = setTimeout(async () => {
       const r = await buscarTareas(q, control.signal);
-      if (control.signal.aborted) return;
-      setTareas(r);
-      setBuscando(false);
+      if (!control.signal.aborted) setResultado({ q, tareas: r });
     }, 220);
     return () => { clearTimeout(t); control.abort(); };
-  }, [consulta, abierta, puedeTareas]);
+  }, [q, buscable]);
+  const tareas = buscable && resultado.q === q ? resultado.tareas : SIN_TAREAS;
+  const buscando = buscable && resultado.q !== q;
 
   const ir = useCallback((href: string) => { cerrar(); router.push(href); }, [cerrar, router]);
 
@@ -116,7 +116,7 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
       { id: "tema", grupo: "Acciones", titulo: oscuro ? "Cambiar a tema claro" : "Cambiar a tema oscuro", claves: "tema oscuro claro modo", icono: oscuro ? "Sun" : "Moon", ejecutar: () => { cerrar(); alternarTema(); } },
       { id: "tour", grupo: "Acciones", titulo: "Ver el tour de bienvenida", claves: "ayuda recorrido guia", icono: "Compass", ejecutar: () => { cerrar(); iniciarTour(); } },
       // Al final: un Enter mal dado no deberia echarte.
-      { id: "salir", grupo: "Acciones", titulo: "Cerrar sesión", claves: "salir logout", icono: "LogOut", ejecutar: () => { cerrar(); window.location.href = "/api/sesion/salir"; } },
+      { id: "salir", grupo: "Acciones", titulo: "Cerrar sesión", claves: "salir logout", icono: "LogOut", ejecutar: () => { cerrar(); window.location.assign(new URL("/api/sesion/salir", window.location.origin).href); } },
     );
     const navegacion: Comando[] = items.map((i) => ({
       id: `nav:${i.href}`, grupo: "Ir a", titulo: i.rotulo, icono: i.icono, ejecutar: () => ir(i.href),
@@ -125,12 +125,12 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
       id: `tarea:${t.id}`, grupo: "Tareas", titulo: t.titulo, detalle: t.detalle, icono: "CircleCheck",
       ejecutar: () => ir(`/tareas?tarea=${t.id}`),
     }));
-    const q = normalizar(consulta.trim());
-    const coincide = (c: Comando) => !q || normalizar(`${c.titulo} ${c.detalle ?? ""} ${c.claves ?? ""}`).includes(q);
+    const n = normalizar(q);
+    const coincide = (c: Comando) => !n || normalizar(`${c.titulo} ${c.detalle ?? ""} ${c.claves ?? ""}`).includes(n);
     // Con texto, primero adonde ir; sin texto, primero que hacer.
-    const locales = q ? [...navegacion, ...acciones] : [...acciones, ...navegacion];
+    const locales = n ? [...navegacion, ...acciones] : [...acciones, ...navegacion];
     return [...locales.filter(coincide), ...deTareas];
-  }, [items, tareas, consulta, puedeTareas, oscuro, pathname, ir, cerrar]);
+  }, [items, tareas, q, puedeTareas, oscuro, pathname, ir, cerrar]);
 
   const activo = comandos[Math.min(indice, comandos.length - 1)];
 
@@ -214,6 +214,8 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
 /* Boton de la cabecera: en escritorio parece un buscador con su atajo; en movil, un icono. */
 export function BotonPaleta({ onAbrir }: { onAbrir: () => void }) {
   const [mac, setMac] = useState(false);
+  // navigator solo existe en el cliente.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)); }, []);
   return (
     <button type="button" onClick={onAbrir} data-tour="paleta" aria-keyshortcuts="Control+K Meta+K"

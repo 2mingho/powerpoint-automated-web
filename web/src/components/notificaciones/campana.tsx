@@ -45,15 +45,14 @@ export function Campana() {
   const raiz = useRef<HTMLDivElement>(null);
   const boton = useRef<HTMLButtonElement>(null);
 
-  const cargarContador = useCallback(async () => {
-    const r = await pedir<{ noLeidas: number }>("/api/notificaciones/contador");
-    if (r.ok) setNoLeidas(r.datos.noLeidas);
-  }, []);
+  const abiertoRef = useRef(false);
+  useEffect(() => { abiertoRef.current = abierto; }, [abierto]);
 
   const cargarLista = useCallback(async () => {
     const r = await pedir<{ items: Notificacion[]; noLeidas: number }>("/api/notificaciones?limite=20");
     if (!r.ok) { setError(r.error || "No se pudieron cargar las notificaciones."); return; }
     setError("");
+    previo.current = r.datos.noLeidas;
     setNoLeidas(r.datos.noLeidas);
     // La primera carga no es "nueva": solo lo que aparece despues.
     if (vistas.current) {
@@ -64,7 +63,20 @@ export function Campana() {
     setItems(r.datos.items);
   }, []);
 
-  // Sondeo con la pestana visible.
+  /* Si el numero sube, la cifra entra como una paleta y, con el panel abierto, la lista se refresca. */
+  const cargarContador = useCallback(async () => {
+    const r = await pedir<{ noLeidas: number }>("/api/notificaciones/contador");
+    if (!r.ok) return;
+    const n = r.datos.noLeidas;
+    if (previo.current != null && n > previo.current) {
+      setPulso((x) => x + 1);
+      if (abiertoRef.current) void cargarLista();
+    }
+    previo.current = n;
+    setNoLeidas(n);
+  }, [cargarLista]);
+
+  // Sondeo con la pestana visible: suscripcion a visibilitychange, la carga inicial va dentro.
   useEffect(() => {
     let t: ReturnType<typeof setInterval> | null = null;
     const arrancar = () => { if (t === null) t = setInterval(cargarContador, SONDEO_MS); };
@@ -74,19 +86,10 @@ export function Campana() {
       else { void cargarContador(); arrancar(); }
     };
     document.addEventListener("visibilitychange", alCambiar);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!document.hidden) { void cargarContador(); arrancar(); }
     return () => { document.removeEventListener("visibilitychange", alCambiar); parar(); };
   }, [cargarContador]);
-
-  // Si el numero sube: la cifra entra como una paleta y, con el panel abierto, la lista se refresca.
-  useEffect(() => {
-    if (noLeidas == null) return;
-    if (previo.current != null && noLeidas > previo.current) {
-      setPulso((p) => p + 1);
-      if (abierto) void cargarLista();
-    }
-    previo.current = noLeidas;
-  }, [noLeidas, abierto, cargarLista]);
 
   // Cerrar al pulsar fuera o con Escape (devuelve el foco a la campana).
   useEffect(() => {

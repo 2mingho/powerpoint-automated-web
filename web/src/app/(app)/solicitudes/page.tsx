@@ -5,7 +5,7 @@ import { prioridades } from "@/lib/catalogo";
 import { ErrorApi } from "@/lib/api";
 import { hoyNegocio } from "@/lib/reloj";
 import { listar, obtener, type SolicitudVista } from "@/lib/solicitudes/servicio";
-import { DIAS_EN_BANDEJA, esBandeja, type Bandeja } from "@/lib/solicitudes/reglas";
+import { esBandeja, salioDeLaBandeja, type Bandeja } from "@/lib/solicitudes/reglas";
 import { Esqueleto } from "@/components/ui/panel";
 import { Bandejas } from "./_componentes/bandejas";
 import { BotonNuevaSolicitud } from "./_componentes/boton-nueva";
@@ -29,8 +29,7 @@ async function Contenido({ searchParams }: { searchParams: Busqueda }) {
 
   let bandeja: Bandeja | null = esBandeja(p.bandeja) ? p.bandeja : null;
   if (!bandeja && seleccion) {
-    const antigua = seleccion.resuelta && Date.now() - new Date(seleccion.resuelta).getTime() > DIAS_EN_BANDEJA * 86_400_000;
-    bandeja = antigua ? "historial" : seleccion.esMia ? "enviadas" : "recibidas";
+    bandeja = salioDeLaBandeja(seleccion.resuelta) ? "historial" : seleccion.esMia ? "enviadas" : "recibidas";
   }
 
   const [inicialRecibidas, ambito, lista] = await Promise.all([

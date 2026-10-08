@@ -72,6 +72,8 @@ export function Bandejas(p: Props) {
     guardarVistas(lista);
   }, []);
 
+  // localStorage es un sistema externo: solo se puede leer despues de montar.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { marcarVistas(p.inicial.solicitudes); }, [marcarVistas, p.inicial.solicitudes]);
 
   const cargar = useCallback(async (b: Bandeja, silencioso = false) => {

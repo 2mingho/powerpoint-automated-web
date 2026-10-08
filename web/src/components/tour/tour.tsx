@@ -143,6 +143,8 @@ export function Tour({ items, pendiente }: { items: ItemNav[]; pendiente: boolea
     setCaja({ top: m.top - 6, left: m.left - 6, width: m.width + 12, height: m.height + 12 });
   }, [activo, paso]);
 
+  // Medir el DOM es la sincronizacion con un sistema externo que pide useLayoutEffect.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useLayoutEffect(() => { medir(); }, [medir]);
 
   useEffect(() => {
@@ -157,6 +159,7 @@ export function Tour({ items, pendiente }: { items: ItemNav[]; pendiente: boolea
   // Globo: debajo si cabe, si no encima; junto a lo alto y estrecho (la barra lateral), a la derecha.
   useLayoutEffect(() => {
     if (!activo || !globo.current) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!caja) { setPosGlobo(null); return; }
     const ancho = globo.current.offsetWidth;
     const alto = globo.current.offsetHeight;
