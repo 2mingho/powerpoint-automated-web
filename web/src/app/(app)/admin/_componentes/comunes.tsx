@@ -82,11 +82,11 @@ export function Paginacion({ pagina, paginas, total, onPagina, nombre }: { pagin
 }
 
 /* Superficie de tabla: cabecera con filtros, cuerpo que se atenua al recargar. */
-export function Tabla({ cabecera, children, cargando, pie, error, etiqueta }: {
-  cabecera?: ReactNode; children: ReactNode; cargando?: boolean; pie?: ReactNode; error?: string | null; etiqueta: string;
+export function Tabla({ cabecera, children, cargando, pie, error, etiqueta, className }: {
+  cabecera?: ReactNode; children: ReactNode; cargando?: boolean; pie?: ReactNode; error?: string | null; etiqueta: string; className?: string;
 }) {
   return (
-    <section aria-label={etiqueta} className="rounded-md border border-hilo bg-superficie shadow-1">
+    <section aria-label={etiqueta} className={cx("w-full min-w-0 self-start rounded-md border border-hilo bg-superficie shadow-1", className)}>
       {cabecera && <div className="flex flex-wrap items-center gap-2 border-b border-hilo px-4 py-3">{cabecera}</div>}
       {error && <p role="alert" className="border-b border-hilo px-4 py-2 text-sm text-alerta">{error} Los datos de abajo pueden no estar al día.</p>}
       <div aria-busy={cargando || undefined} className={cx("transition-opacity duration-[var(--dur)]", cargando && "opacity-55")}>{children}</div>

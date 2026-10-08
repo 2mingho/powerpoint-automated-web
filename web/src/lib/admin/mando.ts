@@ -132,7 +132,8 @@ export function arbolDeMando(personas: PersonaOrg[], unidades: UnidadOrg[], lide
 
   const raices = personas
     .filter((p) => esMando(p.id) && (p.managerId == null || !esMando(p.managerId) || !porId.has(p.managerId)))
-    .sort(orden)
+    // Directores primero: la jerarquia se lee de arriba abajo.
+    .sort((a, b) => Number(papel.get(a.id) !== "director") - Number(papel.get(b.id) !== "director") || orden(a, b))
     .map((p) => construir(p.id, new Set()));
 
   // Un ciclo entero de mandos no tiene raiz: se cuelga desde el de menor id.
