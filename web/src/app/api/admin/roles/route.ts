@@ -4,7 +4,8 @@ import { registrarActividad } from "@/lib/actividad";
 import { opcionesPersonas } from "@/lib/admin/consultas";
 import { SOLO_ADMIN, texto } from "@/lib/admin/api";
 
-export const GET = conUsuario(async () => ok({ roles: (await opcionesPersonas()).roles }), SOLO_ADMIN);
+/* Roles con su conteo, y las opciones del formulario de personas (unidades y posibles superiores). */
+export const GET = conUsuario(async () => ok(await opcionesPersonas()), SOLO_ADMIN);
 
 export const POST = conUsuario(async (req, u) => {
   const d = await cuerpo(req);
