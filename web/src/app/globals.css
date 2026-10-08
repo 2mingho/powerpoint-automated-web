@@ -162,10 +162,13 @@ body {
 
 /* Las superficies del navegador tambien llevan el diseño */
 ::selection { background: var(--marca); color: var(--marca-tinta); }
-:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; border-radius: 2px; }
-input, textarea { caret-color: var(--texto); }
-a { text-underline-offset: 3px; }
-* { scrollbar-width: thin; scrollbar-color: var(--hilo-fuerte) transparent; }
+/* En la capa base: las utilidades de Tailwind (outline-none, ring…) pueden sobrescribirlo. */
+@layer base {
+  :focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; border-radius: 2px; }
+  input, textarea { caret-color: var(--texto); }
+  a { text-underline-offset: 3px; }
+  * { scrollbar-width: thin; scrollbar-color: var(--hilo-fuerte) transparent; }
+}
 
 /* Cifras de datos siempre tabulares */
 .cifras, .font-mono, time, td { font-variant-numeric: tabular-nums; }

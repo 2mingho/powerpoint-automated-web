@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { cx } from "./cx";
 
 /*
@@ -18,6 +18,7 @@ export function Dialogo({
   ancho?: "sm" | "md" | "lg";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const idTitulo = useId();
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -28,6 +29,7 @@ export function Dialogo({
   return (
     <dialog
       ref={ref}
+      aria-labelledby={idTitulo}
       onClose={onCerrar}
       onClick={(e) => { if (e.target === ref.current) onCerrar(); }}
       className={cx(
@@ -38,7 +40,7 @@ export function Dialogo({
       )}
     >
       <header className="flex items-center justify-between border-b border-hilo px-5 py-3">
-        <h2 className="font-rotulo text-lg font-semibold uppercase tracking-[0.1em]">{titulo}</h2>
+        <h2 id={idTitulo} className="font-rotulo text-lg font-semibold uppercase tracking-[0.1em]">{titulo}</h2>
         <button type="button" onClick={onCerrar} aria-label="Cerrar" className="text-xl text-texto-3 hover:text-texto">×</button>
       </header>
       <div className="max-h-[70dvh] overflow-y-auto px-5 py-4">{children}</div>

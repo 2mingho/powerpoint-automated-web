@@ -2,7 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import * as Iconos from "lucide-react";
 import { cx } from "@/components/ui/cx";
 import { GRUPOS, type ItemNav } from "./navegacion";
@@ -18,14 +18,20 @@ function esActivo(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+/* El tema vive en data-theme de <html>; se observa para que el icono siga cualquier cambio (paleta incluida). */
+function suscribirTema(aviso: () => void) {
+  const obs = new MutationObserver(aviso);
+  obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => obs.disconnect();
+}
+const leerTema = () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+
 export function SelectorTema() {
-  const [tema, setTema] = useState<"light" | "dark" | null>(null);
-  useEffect(() => { setTema((document.documentElement.dataset.theme as "light" | "dark") ?? "light"); }, []);
+  const tema = useSyncExternalStore(suscribirTema, leerTema, () => null);
   const cambiar = () => {
     const nuevo = tema === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = nuevo;
     try { localStorage.setItem("nl-tema", nuevo); } catch { /* modo privado */ }
-    setTema(nuevo);
   };
   return (
     <button type="button" onClick={cambiar} aria-label={tema === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
@@ -92,8 +98,10 @@ export function NavRailEsqueleto() {
 /* Barra inferior del movil: lo de todos los dias y "Mas" con el resto. */
 export function NavMovil({ items, usuario }: { items: ItemNav[]; usuario: UsuarioArmazon }) {
   const pathname = usePathname();
-  const [abierto, setAbierto] = useState(false);
-  useEffect(() => setAbierto(false), [pathname]);
+  // Abierto solo en la ruta donde se abrio: navegar lo cierra sin efectos.
+  const [abiertoEn, setAbiertoEn] = useState<string | null>(null);
+  const abierto = abiertoEn === pathname;
+  const setAbierto = (v: boolean) => setAbiertoEn(v ? pathname : null);
   return (
     <>
       <nav aria-label="Principal" className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t border-rail-hilo bg-rail pb-[env(safe-area-inset-bottom)] md:hidden">

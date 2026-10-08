@@ -14,9 +14,15 @@ export async function iniciarSesion(_: EstadoLogin, form: FormData): Promise<Est
   const email = String(form.get("email") ?? "").trim();
   const contrasena = String(form.get("password") ?? "");
   const h = await headers();
-  const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? "local").trim();
+  // La ultima entrada de x-forwarded-for la añade el proxy de confianza; la
+  // primera la escribe el cliente y se puede falsificar para saltarse el limite.
+  const ip = (h.get("x-forwarded-for")?.split(",").at(-1) ?? h.get("x-real-ip") ?? "local").trim();
 
-  if (!permitir(`login:${ip}`, 5, 60_000)) {
+  // Se limita por IP y por cuenta: aunque alguien rote IPs, una misma cuenta
+  // no admite mas de 5 intentos por minuto.
+  const porIp = permitir(`login:ip:${ip}`, 5, 60_000);
+  const porCuenta = permitir(`login:cuenta:${email.toLowerCase()}`, 5, 60_000);
+  if (!porIp || !porCuenta) {
     return { error: "Demasiados intentos. Espera un minuto y vuelve a probar.", email };
   }
   if (!email || !contrasena) return { error: "Escribe tu correo y tu contraseña.", email };
