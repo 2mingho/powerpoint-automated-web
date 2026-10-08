@@ -35,19 +35,23 @@ export function FlujoReporte() {
   });
 
   // Vista previa: que widget es cada archivo, en cuanto se sueltan.
-  useEffect(() => {
-    if (!archivos.length) { setVista(null); setErrorVista(null); return; }
-    const control = new AbortController();
-    const fd = new FormData();
-    archivos.forEach((a) => fd.append("archivos", a));
-    setLeyendo(true);
+  const vistaEnCurso = useRef<AbortController | null>(null);
+  function cambiarArchivos(lista: File[]) {
+    setArchivos(lista);
+    vistaEnCurso.current?.abort();
     setErrorVista(null);
+    if (!lista.length) { setVista(null); setLeyendo(false); return; }
+    const control = new AbortController();
+    vistaEnCurso.current = control;
+    const fd = new FormData();
+    lista.forEach((a) => fd.append("archivos", a));
+    setLeyendo(true);
     pedirJson<PrevisualizacionReporte>("/api/datos/reportes/previsualizar", { method: "POST", body: fd, signal: control.signal })
       .then(setVista)
       .catch((e: Error) => { if (!control.signal.aborted) setErrorVista(e.message); })
       .finally(() => { if (!control.signal.aborted) setLeyendo(false); });
-    return () => control.abort();
-  }, [archivos]);
+  }
+  useEffect(() => () => vistaEnCurso.current?.abort(), []);
 
   useEffect(() => { if (paso === 1) tituloRef.current?.focus(); }, [paso]);
 
@@ -75,7 +79,7 @@ export function FlujoReporte() {
 
       {paso === 0 && (
         <Panel titulo="Archivos de Meltwater" cuerpoClassName="flex flex-col gap-4 p-4">
-          <ZonaArchivos herramienta="reports" multiple archivos={archivos} alCambiar={setArchivos}
+          <ZonaArchivos herramienta="reports" multiple archivos={archivos} alCambiar={cambiarArchivos}
             titulo="Suelta aquí los widgets" ayuda="o haz clic para elegirlos · varios .xlsx a la vez, hasta 60 MB en total" />
 
           {leyendo && <p className="flex items-center gap-2 text-sm text-texto-2"><Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />Reconociendo los widgets…</p>}

@@ -10,15 +10,15 @@ export const metadata = { title: "Reporte" };
 
 async function Reporte({ params, userId }: { params: PageProps<"/reportes/[token]">["params"]; userId: number }) {
   const { token } = await params;
-  try {
-    const detalle = await servicioGet<DetalleReporte>(`/reportes/${encodeURIComponent(token)}`, { id: userId });
-    return <VistaReporte detalle={detalle} />;
-  } catch (e) {
-    if (e instanceof ErrorApi && e.status === 404) {
-      return <ErrorServicio mensaje="Ese reporte no existe. Revisa el enlace o búscalo en tus reportes." volver={{ href: "/reportes", texto: "Ir a mis reportes" }} />;
-    }
-    return <ErrorServicio mensaje={e instanceof ErrorApi ? e.message : "Error inesperado."} volver={{ href: "/reportes", texto: "Ir a mis reportes" }} />;
-  }
+  const r = await servicioGet<DetalleReporte>(`/reportes/${encodeURIComponent(token)}`, { id: userId })
+    .then((detalle) => ({ ok: true as const, detalle }))
+    .catch((e: unknown) => ({
+      ok: false as const,
+      mensaje: e instanceof ErrorApi && e.status === 404 ? "Ese reporte no existe. Revisa el enlace o búscalo en tus reportes."
+        : e instanceof ErrorApi ? e.message : "Error inesperado.",
+    }));
+  if (!r.ok) return <ErrorServicio mensaje={r.mensaje} volver={{ href: "/reportes", texto: "Ir a mis reportes" }} />;
+  return <VistaReporte detalle={r.detalle} />;
 }
 
 function EsqueletoReporte() {

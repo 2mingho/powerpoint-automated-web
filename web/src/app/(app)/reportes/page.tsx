@@ -11,12 +11,11 @@ import { ListaReportes } from "./lista";
 export const metadata = { title: "Mis reportes" };
 
 async function Datos({ userId }: { userId: number }) {
-  try {
-    const { reportes } = await servicioGet<{ reportes: ReporteResumen[] }>("/reportes", { id: userId });
-    return <ListaReportes reportes={reportes} />;
-  } catch (e) {
-    return <ErrorServicio mensaje={e instanceof ErrorApi ? e.message : "Error inesperado."} volver={{ href: "/reportes", texto: "Reintentar" }} />;
-  }
+  const r = await servicioGet<{ reportes: ReporteResumen[] }>("/reportes", { id: userId })
+    .then((d) => ({ ok: true as const, reportes: d.reportes }))
+    .catch((e: unknown) => ({ ok: false as const, mensaje: e instanceof ErrorApi ? e.message : "Error inesperado." }));
+  if (!r.ok) return <ErrorServicio mensaje={r.mensaje} volver={{ href: "/reportes", texto: "Reintentar" }} />;
+  return <ListaReportes reportes={r.reportes} />;
 }
 
 function EsqueletoLista() {
