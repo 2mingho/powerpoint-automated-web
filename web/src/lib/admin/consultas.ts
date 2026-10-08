@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { HERRAMIENTAS, type Herramienta } from "@/lib/auth/session";
+import { enmascararClave } from "./mascara";
 import { arbolDeMando, cadenaHaciaArriba, calcularAlcances, type PersonaOrg } from "./mando";
 
 /*
@@ -20,12 +21,6 @@ export const esAdminProtegido = (email: string) => email.toLowerCase() === EMAIL
 
 export const POR_PAGINA_USUARIOS = 25;
 export const POR_PAGINA_ACTIVIDAD = 50;
-
-export function enmascararClave(clave: string): string {
-  const k = clave.trim();
-  if (k.length <= 8) return "••••";
-  return `••••${k.slice(-4)}`;
-}
 
 function herramientasDe(role: string, permitidas: string | null): Herramienta[] {
   const todas = Object.keys(HERRAMIENTAS) as Herramienta[];
