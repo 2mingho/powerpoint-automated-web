@@ -18,6 +18,8 @@ export const USUARIOS = {
   analista: "analista@local.test",
   colega: "colega.datos@local.test",
   sinReportes: "sin.reportes@local.test",
+  // Cada spec corre en su worker y un login rota el session_token: usuario propio.
+  herramientas: "herramientas.datos@local.test",
 };
 
 export async function prepararUsuarios() {
@@ -29,6 +31,7 @@ export async function prepararUsuarios() {
     for (const [email, nombre, tools] of [
       [USUARIOS.colega, "Colega Datos", JSON.stringify(["reports", "classification", "file_merge", "csv_analysis"])],
       [USUARIOS.sinReportes, "Sin Reportes", JSON.stringify(["tasks", "classification"])],
+      [USUARIOS.herramientas, "Herramientas Datos", JSON.stringify(["classification", "file_merge", "csv_analysis"])],
     ]) {
       await db.query(
         `insert into users (username, email, password, role, is_active, allowed_tools, area_id, created_at, force_logout, is_area_lead)
@@ -42,13 +45,29 @@ export async function prepararUsuarios() {
   }
 }
 
+/*
+ * El login admite 5 intentos por minuto y por IP: entrar en cada prueba lo
+ * agota. Se entra una vez por usuario y la cookie se reutiliza (en disco, para
+ * que la compartan los workers y las pasadas seguidas).
+ */
+const SESIONES = path.resolve(__dirname, "../../test-results/.sesiones-datos");
+
 export async function entrar(page: Page, email: string) {
+  const archivo = path.join(SESIONES, `${email}.json`);
+  if (fs.existsSync(archivo)) {
+    await page.context().addCookies(JSON.parse(fs.readFileSync(archivo, "utf8")));
+    const r = await page.request.get("/api/datos/trabajos/" + "0".repeat(32));
+    if (r.status() !== 401) return;
+    await page.context().clearCookies();
+  }
   await page.goto("/login");
   await page.getByLabel("Correo").fill(email);
   await page.getByLabel("Contraseña").fill("demo1234");
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page).not.toHaveURL(/\/login/, { timeout: 20_000 });
   await page.waitForLoadState("load");
+  fs.mkdirSync(SESIONES, { recursive: true });
+  fs.writeFileSync(archivo, JSON.stringify((await page.context().cookies()).filter((c) => c.name === "nl_sesion")));
 }
 
 export async function tema(page: Page, t: "light" | "dark") {
