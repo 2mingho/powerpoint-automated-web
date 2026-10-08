@@ -4,6 +4,7 @@ import { papel, puedeVerEquipo } from "@/lib/alcance";
 import { Armazon, NavMovil, NavRail, NavRailEsqueleto } from "@/components/shell/armazon";
 import { NAVEGACION } from "@/components/shell/navegacion";
 import { ProveedorAvisos } from "@/components/ui/avisos";
+import { AccionesCabecera, AccionesCabeceraEsqueleto } from "@/components/cabecera/acciones-cabecera";
 
 const PAPELES = { admin: "Administración", director: "Dirección", manager: "Manager", empleado: "Analista" } as const;
 
@@ -18,6 +19,10 @@ async function datosNav() {
 
 async function Nav() { const d = await datosNav(); return <NavRail {...d} />; }
 async function Movil() { const d = await datosNav(); return <NavMovil {...d} />; }
+async function Cabecera() {
+  const [u, d] = await Promise.all([exigirUsuario(), datosNav()]);
+  return <AccionesCabecera items={d.items} tourPendiente={!u.tourCompletado} puedeTareas={tieneHerramienta(u, "tasks")} />;
+}
 
 export default function LayoutApp({ children }: LayoutProps<"/">) {
   return (
@@ -25,6 +30,7 @@ export default function LayoutApp({ children }: LayoutProps<"/">) {
       <Armazon
         nav={<Suspense fallback={<NavRailEsqueleto />}><Nav /></Suspense>}
         navMovil={<Suspense fallback={null}><Movil /></Suspense>}
+        campana={<Suspense fallback={<AccionesCabeceraEsqueleto />}><Cabecera /></Suspense>}
       >
         {children}
       </Armazon>
