@@ -7,7 +7,7 @@ export async function registrarActividad(
   userId: number,
   action: string,
   detail = "",
-  entidad?: { tipo: string; id: number },
+  entidad?: { tipo: string; id: number | null },
 ) {
   try {
     const h = await headers();
