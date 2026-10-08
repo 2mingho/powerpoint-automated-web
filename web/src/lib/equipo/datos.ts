@@ -146,21 +146,25 @@ export type FilaTareaEquipo = {
   asignado: string; asignadoId: number; unidad: string | null; actualizada: string | null;
 };
 
+/*
+ * Lo de hoy primero: las abiertas por entrega (la mas urgente arriba) y
+ * despues las terminadas, de la mas reciente a la mas antigua.
+ */
 export async function tareasEquipo(u: UsuarioActual, alcance: Alcance, f: FiltrosEquipo) {
   const where = await whereFiltrado(u, alcance.elegidas, f);
-  const [total, filas] = await Promise.all([
+  const finales = await estadosFinales();
+  const select = {
+    id: true, title: true, client: true, status: true, priority: true, due_date: true, assignee_id: true, updated_at: true,
+    asignado: { select: { username: true } }, areas: { select: { name: true } },
+  } as const;
+  const [total, abiertas] = await Promise.all([
     db.tasks.count({ where }),
-    db.tasks.findMany({
-      where,
-      orderBy: [{ due_date: "asc" }, { id: "asc" }],
-      take: MAX_FILAS,
-      select: {
-        id: true, title: true, client: true, status: true, priority: true, due_date: true, assignee_id: true, updated_at: true,
-        asignado: { select: { username: true } }, areas: { select: { name: true } },
-      },
-    }),
+    db.tasks.findMany({ where: { AND: [where, { status: { notIn: finales } }] }, orderBy: [{ due_date: "asc" }, { id: "asc" }], take: MAX_FILAS, select }),
   ]);
-  const tareas: FilaTareaEquipo[] = filas.map((t) => ({
+  const cerradas = abiertas.length < MAX_FILAS
+    ? await db.tasks.findMany({ where: { AND: [where, { status: { in: finales } }] }, orderBy: [{ due_date: "desc" }, { id: "desc" }], take: MAX_FILAS - abiertas.length, select })
+    : [];
+  const tareas: FilaTareaEquipo[] = [...abiertas, ...cerradas].map((t) => ({
     id: t.id, titulo: t.title, cliente: t.client, estado: t.status, prioridad: t.priority, vence: isoDeFecha(t.due_date),
     asignado: t.asignado.username, asignadoId: t.assignee_id, unidad: t.areas?.name ?? null,
     actualizada: t.updated_at?.toISOString() ?? null,
