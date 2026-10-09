@@ -399,7 +399,13 @@ def ensure_due_notifications(user):
 
     # Los avisos de hoy, en una sola consulta en vez de una por tarea. Un rango
     # sobre created_at y no func.date(created_at), que impide usar el indice.
-    inicio_hoy = datetime.combine(today, datetime.min.time())
+    # created_at se guarda en UTC sin zona: el "hoy" de negocio empieza a la
+    # medianoche de Santo Domingo, que hay que pasar a UTC. Tratarla como UTC
+    # desplazaba la ventana 4 h y repetia los avisos entre las 20:00 y las 24:00.
+    from datetime import timezone
+    from services.clock import APP_TIMEZONE
+    inicio_hoy = (datetime.combine(today, datetime.min.time(), tzinfo=APP_TIMEZONE)
+                  .astimezone(timezone.utc).replace(tzinfo=None))
     ya_avisadas = set(
         db.session.query(Notification.kind, Notification.entity_id).filter(
             Notification.user_id == user.id,
