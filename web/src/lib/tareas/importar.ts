@@ -1,4 +1,5 @@
 import "server-only";
+import { resolverClientes } from "@/lib/clientes/resolver";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { ErrorApi } from "@/lib/api";
@@ -98,6 +99,10 @@ export async function importar(u: UsuarioActual, d: Record<string, unknown>) {
       creator_id: u.id, assignee_id: a.id, created_at: ahora, updated_at: ahora,
     } });
   }
+
+  // Un cliente por nombre (mayusculas, acentos y espacios no cuentan), creado si no existe.
+  const clientes = await resolverClientes(db, [...new Set(validas.map((x) => String(x.datos.client ?? "")))]);
+  for (const x of validas) Object.assign(x.datos, clientes.get(String(x.datos.client ?? "")));
 
   let importadas = 0;
   try {

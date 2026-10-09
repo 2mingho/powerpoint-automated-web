@@ -13,6 +13,7 @@ export type TareaDTO = {
   titulo: string;
   descripcion: string;
   cliente: string;
+  clienteId: number | null;
   inicio: string; // YYYY-MM-DD o ""
   fin: string;
   direccion: string; // directorate

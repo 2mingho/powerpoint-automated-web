@@ -1,4 +1,5 @@
 import "server-only";
+import { resolverCliente } from "@/lib/clientes/resolver";
 import { db } from "@/lib/db";
 import { ErrorApi } from "@/lib/api";
 import { registrarActividad } from "@/lib/actividad";
@@ -119,7 +120,7 @@ export async function usarPlantilla(u: UsuarioActual, id: number, d: Record<stri
   const t = await db.$transaction(async (tx) => {
     const t = await tx.tasks.create({
       data: {
-        title: String(datos.title).slice(0, 255), description: String(datos.description ?? ""), client: String(datos.client ?? "").slice(0, 100),
+        title: String(datos.title).slice(0, 255), description: String(datos.description ?? ""), ...(await resolverCliente(tx, datos.client)),
         budget_type: String(datos.budget_type ?? "").slice(0, 255),
         due_date: diaDb(entrega), priority: prioridad, status: await estadoInicial(), ...areaDe(asignado),
         creator_id: u.id, assignee_id: asignado.id, is_recurrent: false, created_at: ahora, updated_at: ahora,

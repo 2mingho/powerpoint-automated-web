@@ -1,0 +1,19 @@
+[
+  { "entrada": "Claro", "clave": "claro" },
+  { "entrada": "  CLARO  ", "clave": "claro" },
+  { "entrada": "Clàro", "clave": "claro" },
+  { "entrada": "Banco  Popular", "clave": "banco popular" },
+  { "entrada": "Banco\tPopular\n", "clave": "banco popular" },
+  { "entrada": "Banco Popular", "clave": "banco popular" },
+  { "entrada": "Nestlé", "clave": "nestle" },
+  { "entrada": "NESTLÉ", "clave": "nestle" },
+  { "entrada": "Nestlé", "clave": "nestle" },
+  { "entrada": "Cámara de Cuentas", "clave": "camara de cuentas" },
+  { "entrada": "Peña", "clave": "peña" },
+  { "entrada": "PEÑA", "clave": "peña" },
+  { "entrada": "Pena", "clave": "pena" },
+  { "entrada": "Claro.", "clave": "claro." },
+  { "entrada": "Claro RD", "clave": "claro rd" },
+  { "entrada": "", "clave": "" },
+  { "entrada": "   ", "clave": "" }
+]

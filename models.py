@@ -3,7 +3,7 @@ from flask_login import UserMixin
 from extensions import db
 from extensions import login_manager
 from datetime import datetime
-from sqlalchemy import false
+from sqlalchemy import false, true
 import json
 import secrets
 
@@ -37,6 +37,29 @@ class Area(db.Model):
 
     def __repr__(self):
         return f"<Area {self.name}>"
+
+
+class Client(db.Model):
+    """Cliente como entidad. Las tareas lo enlazan por client_id y siguen
+    guardando su nombre en tasks.client, siempre igual al de esta fila.
+
+    name_key es el nombre sin mayusculas, acentos ni espacios repetidos: dos
+    textos que dan la misma clave son el mismo cliente (ver 0016_clientes).
+    """
+    __tablename__ = 'clients'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    name_key = db.Column(db.String(100), nullable=False, unique=True)
+    client_type = db.Column(db.String(40), nullable=True)
+    account_lead_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=true())
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    account_lead = db.relationship('User', foreign_keys=[account_lead_id])
+
+    def __repr__(self):
+        return f"<Client {self.name}>"
 
 
 class TaskStatus(db.Model):
@@ -441,6 +464,7 @@ class Task(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     client = db.Column(db.String(100), nullable=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True, index=True)
     start_date = db.Column(db.Date, nullable=True)
     end_date = db.Column(db.Date, nullable=True)
     directorate = db.Column(db.String(255), nullable=True)
@@ -483,6 +507,7 @@ class Task(db.Model):
     creator = db.relationship('User', foreign_keys=[creator_id], backref='created_tasks')
     assignee = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_tasks')
     reviewer = db.relationship('User', foreign_keys=[reviewer_id])
+    client_ref = db.relationship('Client', foreign_keys=[client_id])
     area_ref = db.relationship('Area', foreign_keys=[area_id])
     children = db.relationship('Task', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
 

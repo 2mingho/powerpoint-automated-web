@@ -58,6 +58,7 @@ export function aDTO(t: TareaFila, finales: string[], hoy: string, extras?: Part
     titulo: t.title,
     descripcion: t.description ?? "",
     cliente: t.client ?? "",
+    clienteId: t.client_id,
     inicio: isoDeFecha(t.start_date),
     fin: isoDeFecha(t.end_date),
     direccion: t.directorate ?? "",

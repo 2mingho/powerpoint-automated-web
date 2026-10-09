@@ -26,7 +26,8 @@ import { Pool, type PoolClient } from "pg";
 import { generarHash } from "../src/lib/auth/password";
 import { hoyNegocio } from "../src/lib/reloj";
 import { esFinDeSemana, sumarDias } from "../src/lib/tareas/fechas";
-import { DATABASE_URL } from "./comun";
+import { agruparVariantes } from "../src/lib/clientes/nombre";
+import { DATABASE_URL, exigirBaseDescartable } from "./comun";
 
 export const CLAVE = "demo1234";
 
@@ -100,7 +101,7 @@ async function q<T = Record<string, unknown>>(c: PoolClient, sql: string, p: unk
 /* ── Organizacion ── */
 async function organizacion(c: PoolClient): Promise<Ctx> {
   await q(c, `TRUNCATE notifications, task_requests, task_watchers, task_comments, task_checklist_items, task_tag_links,
-    task_dependencies, task_templates, task_tags, tasks, ai_usage, ai_providers, activity_logs, unit_leads,
+    task_dependencies, task_templates, task_tags, tasks, clients, ai_usage, ai_providers, activity_logs, unit_leads,
     classification_presets, reports, temp_artifacts RESTART IDENTITY CASCADE`);
 
   // Catalogo por defecto (las pruebas lo renombran y lo restauran).
@@ -446,17 +447,12 @@ async function contexto(c: PoolClient): Promise<Ctx> {
   return { c, area, id };
 }
 
-/*
- * La semilla vacia la base. Solo corre contra una descartable (newlink_<algo>):
- * web/.env apunta a la de desarrollo, y Playwright lo carga, asi que olvidar
- * DATABASE_URL en la linea de comandos la borraria. SEMILLA_EN_CUALQUIER_BASE=1
- * levanta la guarda a proposito.
- */
-export function exigirBaseDescartable(url = process.env.DATABASE_URL ?? "") {
-  if (process.env.SEMILLA_EN_CUALQUIER_BASE === "1") return;
-  const nombre = decodeURIComponent(new URL(url || "postgresql://x@h/").pathname.slice(1));
-  if (!/^newlink_\w+$/.test(nombre)) {
-    throw new Error(`La semilla vacia la base «${nombre || "(sin nombre)"}» y solo corre contra una descartable (newlink_<algo>). Pasa DATABASE_URL por la linea de comandos.`);
+/* Un cliente por nombre (mayusculas, acentos y espacios no cuentan), como la migracion 0016, y las tareas enlazadas. */
+async function clientes(c: PoolClient) {
+  const filas = await q<{ client: string; n: number }>(c, "SELECT client, count(*)::int AS n FROM tasks WHERE client IS NOT NULL AND client <> '' GROUP BY client");
+  for (const g of agruparVariantes(filas.map((f) => ({ nombre: f.client, n: f.n })))) {
+    const [{ id }] = await q<{ id: number }>(c, "INSERT INTO clients (name, name_key, is_active, created_at) VALUES ($1, $2, true, now()) RETURNING id", [g.nombre, g.clave]);
+    await q(c, "UPDATE tasks SET client_id = $1, client = $2 WHERE client = ANY($3)", [id, g.nombre, g.variantes.map((v) => v.nombre)]);
   }
 }
 
@@ -469,6 +465,7 @@ export async function sembrarTodo() {
     await historico(ctx);
     await iaYActividad(ctx);
     await solicitudes(ctx);
+    await clientes(c);
     const [n] = await q<{ personas: string; tareas: string; solicitudes: string }>(c,
       "SELECT (SELECT count(*) FROM users) personas, (SELECT count(*) FROM tasks) tareas, (SELECT count(*) FROM task_requests) solicitudes");
     return n;

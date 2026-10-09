@@ -1,4 +1,5 @@
 import "server-only";
+import { resolverCliente } from "@/lib/clientes/resolver";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { ErrorApi } from "@/lib/api";
@@ -303,7 +304,7 @@ export async function aceptar(u: UsuarioActual, id: number, datos: { responsable
       data: {
         title: f.title,
         description: f.description,
-        client: f.client,
+        ...(await resolverCliente(tx, f.client)),
         due_date: entrega!,
         priority: f.priority ?? "Media",
         status: estado,

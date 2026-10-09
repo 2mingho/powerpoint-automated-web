@@ -11,6 +11,7 @@ import { aDTOs, areaDe, descripcion, diaDb, enlaceTarea, filtroVisiblesYObservad
 import { avisarAsignacion, avisarCambioDeEstado } from "./avisos";
 import { esFinDeSemana, generarFechasRecurrencia, parsearFechaEntrada, TIPOS_RECURRENCIA } from "./fechas";
 import { colocar, compararColumna } from "./posiciones";
+import { resolverCliente } from "@/lib/clientes/resolver";
 import { camposDeSeguimiento, efectosDeCambio, exigirPuedeCerrar } from "./seguimiento";
 
 /*
@@ -83,7 +84,7 @@ export async function crearTarea(u: UsuarioActual, d: Record<string, unknown>) {
   const comun = {
     title: titulo,
     description: descripcion(d.description),
-    client: texto(d.client).slice(0, 100),
+    ...(await resolverCliente(db, d.client)),
     start_date: inicio ? diaDb(inicio) : null,
     end_date: fin ? diaDb(fin) : null,
     directorate: texto(d.directorate).slice(0, 255),
@@ -123,7 +124,7 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
 
   if ("title" in d) datos.title = texto(d.title).slice(0, 255) || previa.title;
   if ("description" in d) datos.description = descripcion(d.description);
-  if ("client" in d) datos.client = texto(d.client).slice(0, 100);
+  if ("client" in d) Object.assign(datos, await resolverCliente(db, d.client));
   if ("directorate" in d) datos.directorate = texto(d.directorate).slice(0, 255);
   if ("requested_by" in d) datos.requested_by = texto(d.requested_by).slice(0, 255);
   if ("budget_type" in d) datos.budget_type = texto(d.budget_type).slice(0, 255);

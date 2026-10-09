@@ -79,6 +79,18 @@ model areas {
   users                                           users[]
 }
 
+model clients {
+  id              Int       @id(map: "pk_clients") @default(autoincrement())
+  name            String    @db.VarChar(100)
+  name_key        String    @unique(map: "uq_clients_name_key") @db.VarChar(100)
+  client_type     String?   @db.VarChar(40)
+  account_lead_id Int?
+  is_active       Boolean   @default(true)
+  created_at      DateTime? @db.Timestamp(6)
+  responsable     users?    @relation("clients_account_lead_idTousers", fields: [account_lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_clients_account_lead_id_users")
+  tareas          tasks[]
+}
+
 model classification_presets {
   id         Int       @id @default(autoincrement())
   user_id    Int
@@ -314,6 +326,7 @@ model tasks {
   deleted_at                                                 DateTime?              @db.Timestamp(6)
   deleted_by_id                                              Int?
   board_position                                             Float?
+  client_id                                                  Int?
   estimated_hours                                            Float?
   reviewer_id                                                Int?
   block_reason                                               String?                @db.VarChar(255)
@@ -331,12 +344,14 @@ model tasks {
   areas                                                      areas?                 @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_area_id")
   borrada_por                           users?                 @relation("tasks_deleted_by_idTousers", fields: [deleted_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_deleted_by_id")
   asignado                             users                  @relation("tasks_assignee_idTousers", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cliente_entidad                      clients?               @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_client_id_clients")
   revisor                              users?                 @relation("tasks_reviewer_idTousers", fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_reviewer_id_users")
   creador                              users                  @relation("tasks_creator_idTousers", fields: [creator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   padre                                                      tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   hijas                                                      tasks[]                @relation("tasksTotasks")
 
   @@index([area_id], map: "ix_tasks_area_id")
+  @@index([client_id], map: "ix_tasks_client_id")
   @@index([assignee_id, due_date], map: "ix_tasks_assignee_due")
   @@index([deleted_at], map: "ix_tasks_deleted_at")
   @@index([due_date], map: "ix_tasks_due_date")
@@ -407,6 +422,7 @@ model users {
   tareas_asignadas                    tasks[]                  @relation("tasks_assignee_idTousers")
   tareas_creadas                     tasks[]                  @relation("tasks_creator_idTousers")
   tareas_a_revisar                   tasks[]                  @relation("tasks_reviewer_idTousers")
+  clientes_a_cargo                   clients[]                @relation("clients_account_lead_idTousers")
   temp_artifacts                                    temp_artifacts[]
   unit_leads                                        unit_leads[]
   manager                                             users?                   @relation("usersTousers", fields: [manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_manager_id")
