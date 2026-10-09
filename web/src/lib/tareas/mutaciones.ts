@@ -180,10 +180,12 @@ export async function borrarTarea(u: UsuarioActual, id: number, serie: boolean) 
   const t = await tareaEditable(u, id);
   const ahora = new Date();
   let cuantas = 1;
+  // Solo las hijas que puede editar: una reasignada a otra unidad ya no es suya.
+  const editables = await filtroTareasVisibles(u);
   await db.$transaction(async (tx) => {
     // Solo desde la tarea madre se borra la serie, como en Flask.
     if (serie && t.parent_task_id == null) {
-      const r = await tx.tasks.updateMany({ where: { parent_task_id: t.id, deleted_at: null }, data: { deleted_at: ahora, deleted_by_id: u.id } });
+      const r = await tx.tasks.updateMany({ where: { AND: [editables, { parent_task_id: t.id, deleted_at: null }] }, data: { deleted_at: ahora, deleted_by_id: u.id } });
       cuantas += r.count;
     }
     await tx.tasks.update({ where: { id: t.id }, data: { deleted_at: ahora, deleted_by_id: u.id } });
