@@ -66,7 +66,8 @@ jobs:
     # separan, el paso de deriva falla antes de llegar a las pruebas.
     services:
       postgres:
-        image: postgres:16
+        # Espejo oficial en AWS ECR Public: Docker Hub limita las descargas anonimas y a veces no responde.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_USER: newlink
           POSTGRES_PASSWORD: newlink_dev
