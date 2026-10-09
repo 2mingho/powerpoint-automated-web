@@ -45,6 +45,25 @@ test("el registro de actividad guarda la IP que añade el proxy, no la que inven
   await ctx.close();
 });
 
+/*
+ * La cookie caduca en el navegador a las 12 h, pero el sello de iron-session
+ * llevaba la caducidad por defecto (14 dias): una cookie copiada seguia
+ * valiendo dos semanas si nadie volvia a entrar con esa cuenta.
+ */
+test("el sello de la sesion caduca a las 12 horas, como la cookie", async ({ browser }) => {
+  const { email } = await cuentaNueva("ttl");
+  const { ctx, page } = await contextoAnonimo(browser);
+  await page.goto("/login");
+  await rellenarLogin(page, email);
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 60_000 });
+  const cookie = (await ctx.cookies()).find((c) => c.name === "nl_sesion")!;
+  const caducaSello = Number(cookie.value.split("*")[5]);
+  const doceHoras = 12 * 3600_000;
+  expect(caducaSello - Date.now()).toBeLessThanOrEqual(doceHoras + 60_000);
+  expect(caducaSello - Date.now()).toBeGreaterThan(doceHoras - 10 * 60_000);
+  await ctx.close();
+});
+
 test("un destino propio se respeta", async ({ browser }) => {
   const { ctx, page } = await contextoAnonimo(browser);
   const { email } = await cuentaNueva("destino");
