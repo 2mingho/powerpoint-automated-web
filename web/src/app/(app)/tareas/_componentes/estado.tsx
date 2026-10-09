@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useSearchParams } from "next/navigation";
 import { useAvisos } from "@/components/ui/avisos";
 import type { Contadores, EstadoCatalogo, EtiquetaDTO, Filtros, PersonaDTO, PrioridadCatalogo, TareaDTO } from "@/lib/tareas/tipos";
+import { puedeCerrar } from "@/lib/seguimiento/estado";
 import { consultaDeFiltros, ErrorPeticion, pedir } from "./cliente";
 
 /*
@@ -14,7 +15,8 @@ import { consultaDeFiltros, ErrorPeticion, pedir } from "./cliente";
 export type Vista = "panel" | "tablero" | "calendario";
 
 export type Inicial = {
-  usuario: { id: number; nombre: string; esAdmin: boolean; unidadId: number | null };
+  /* lidera: admin o quien tiene unidades a cargo; aprueba tareas con revisor y cambia revisores ajenos. */
+  usuario: { id: number; nombre: string; esAdmin: boolean; unidadId: number | null; lidera: boolean };
   hoy: string;
   estados: EstadoCatalogo[];
   prioridades: PrioridadCatalogo[];
@@ -70,6 +72,8 @@ type Ctx = Inicial & {
   quitar: (ids: number[]) => void;
   completadasSesion: Set<number>;
   esFinal: (estado: string) => boolean;
+  /* Falso si la tarea tiene revisor y yo no soy ni el revisor ni quien lidera: debe pasar a revision. */
+  puedeCompletar: (t: Pick<TareaDTO, "estado" | "revisorId">) => boolean;
   estadoFinal: string;
   estadoInicial: string;
 };
@@ -243,13 +247,18 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
 
   useEffect(() => { guardarRef.current = guardar; }, [guardar]);
 
+  const puedeCompletar = useCallback<Ctx["puedeCompletar"]>(
+    (t) => finales.has(t.estado) || puedeCerrar(t.revisorId, inicial.usuario.id, inicial.usuario.lidera),
+    [finales, inicial.usuario.id, inicial.usuario.lidera],
+  );
+
   const completar = useCallback((id: number) => {
     const t = mapaRef.current.get(id);
-    if (!t) return;
+    if (!t || !puedeCompletar(t)) return;
     const hecha = finales.has(t.estado);
     const corto = t.titulo.length > 40 ? `${t.titulo.slice(0, 40)}…` : t.titulo;
     void guardar(id, { status: hecha ? estadoInicial : estadoFinal }, { mensaje: hecha ? `Reabierta: «${corto}»` : `Completada: «${corto}»` });
-  }, [estadoFinal, estadoInicial, finales, guardar]);
+  }, [estadoFinal, estadoInicial, finales, guardar, puedeCompletar]);
 
   const seleccionar = useCallback((id: number | null) => setSeleccionada(id), []);
   const setVista = useCallback((v: Vista) => setVistaEstado(v), []);
@@ -258,7 +267,7 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
 
   const valor: Ctx = {
     ...inicial, tareas, contadores, truncada, cargando, error, etiquetas, setEtiquetas, filtros, setFiltros, vista, setVista,
-    seleccionada, seleccionar, recargar, version, guardar, completar, fusionar, quitar, completadasSesion, esFinal, estadoFinal, estadoInicial,
+    seleccionada, seleccionar, recargar, version, guardar, completar, fusionar, quitar, completadasSesion, esFinal, puedeCompletar, estadoFinal, estadoInicial,
   };
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

@@ -32,6 +32,11 @@ export type TareaDTO = {
   creador: string;
   asignadoId: number;
   asignado: string;
+  horas: number | null; // estimated_hours
+  revisorId: number | null;
+  revisor: string;
+  motivoBloqueo: string; // block_reason
+  cerradaEl: string; // ISO UTC de done_at, "" si no esta cerrada o se cerro antes de existir la columna
   actualizada: string; // ISO UTC de updated_at: es la version para expected_updated_at
   posicion: number | null;
   vencida: boolean;

@@ -2,7 +2,7 @@ import { conUsuario, cuerpo, ErrorApi, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 import { registrarActividad } from "@/lib/actividad";
 import { notificar } from "@/lib/notificaciones";
-import { estadosValidos, prioridadesValidas } from "@/lib/catalogo";
+import { estadosFinales, estadosValidos, prioridadesValidas } from "@/lib/catalogo";
 import { fechaDeIso } from "@/lib/reloj";
 import { enteroONulo, idsDeLote, MAX_LOTE, SOLO_ADMIN } from "@/lib/admin/api";
 
@@ -39,13 +39,21 @@ export const POST = conUsuario(async (req, u) => {
   }
   if (!Object.keys(datos).length) throw new ErrorApi(400, "No hay cambios para aplicar.");
 
-  const tareas = await db.tasks.findMany({ where: { id: { in: ids }, deleted_at: null }, select: { id: true, assignee_id: true } });
+  const tareas = await db.tasks.findMany({ where: { id: { in: ids }, deleted_at: null }, select: { id: true, assignee_id: true, status: true } });
   if (!tareas.length) throw new ErrorApi(404, "No se encontraron tareas para editar.");
   const encontradas = tareas.map((t) => t.id);
+  const finales = await estadosFinales();
   const reasignadas = asignado ? tareas.filter((t) => t.assignee_id !== asignado.id).length : 0;
 
   await db.$transaction(async (tx) => {
-    await tx.tasks.updateMany({ where: { id: { in: encontradas } }, data: { ...datos, updated_at: new Date() } });
+    const ahora = new Date();
+    await tx.tasks.updateMany({ where: { id: { in: encontradas } }, data: { ...datos, updated_at: ahora } });
+    // done_at solo cambia en las que cruzan la frontera abierta/cerrada (el admin aprueba cualquier tarea).
+    if (datos.status) {
+      const nuevoFinal = finales.includes(datos.status);
+      const cruzan = tareas.filter((t) => finales.includes(t.status) !== nuevoFinal).map((t) => t.id);
+      if (cruzan.length) await tx.tasks.updateMany({ where: { id: { in: cruzan } }, data: nuevoFinal ? { done_at: ahora, block_reason: null } : { done_at: null } });
+    }
     if (asignado && reasignadas) {
       await notificar(asignado.id, {
         tipo: "task_reassigned", titulo: `Se te asignaron ${reasignadas} tareas`, cuerpo: "Revisa tus tareas actualizadas.",

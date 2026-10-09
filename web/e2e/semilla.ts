@@ -446,8 +446,23 @@ async function contexto(c: PoolClient): Promise<Ctx> {
   return { c, area, id };
 }
 
+/*
+ * La semilla vacia la base. Solo corre contra una descartable (newlink_<algo>):
+ * web/.env apunta a la de desarrollo, y Playwright lo carga, asi que olvidar
+ * DATABASE_URL en la linea de comandos la borraria. SEMILLA_EN_CUALQUIER_BASE=1
+ * levanta la guarda a proposito.
+ */
+export function exigirBaseDescartable(url = process.env.DATABASE_URL ?? "") {
+  if (process.env.SEMILLA_EN_CUALQUIER_BASE === "1") return;
+  const nombre = decodeURIComponent(new URL(url || "postgresql://x@h/").pathname.slice(1));
+  if (!/^newlink_\w+$/.test(nombre)) {
+    throw new Error(`La semilla vacia la base «${nombre || "(sin nombre)"}» y solo corre contra una descartable (newlink_<algo>). Pasa DATABASE_URL por la linea de comandos.`);
+  }
+}
+
 /* La base entera, desde cero. */
 export async function sembrarTodo() {
+  exigirBaseDescartable();
   return conCliente(async (c) => {
     const ctx = await organizacion(c);
     await tareasDeLaUnidad(ctx);
@@ -462,6 +477,7 @@ export async function sembrarTodo() {
 
 /* Solo el escenario de solicitudes (las pruebas lo consumen: aceptan, rechazan, cancelan). */
 export async function sembrarSolicitudes() {
+  exigirBaseDescartable();
   await conCliente(async (c) => solicitudes(await contexto(c)));
 }
 

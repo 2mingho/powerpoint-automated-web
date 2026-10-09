@@ -21,6 +21,7 @@ export const COLORES_ETIQUETA: Tono[] = ["neutro", "info", "aviso", "alerta", "b
 export const INCLUIR_TAREA = {
   asignado: { select: { username: true } },
   creador: { select: { username: true } },
+  revisor: { select: { username: true } },
 } satisfies Prisma.tasksInclude;
 
 export type TareaFila = Prisma.tasksGetPayload<{ include: typeof INCLUIR_TAREA }>;
@@ -76,6 +77,11 @@ export function aDTO(t: TareaFila, finales: string[], hoy: string, extras?: Part
     creador: t.creador?.username ?? "",
     asignadoId: t.assignee_id,
     asignado: t.asignado?.username ?? "",
+    horas: t.estimated_hours,
+    revisorId: t.reviewer_id,
+    revisor: t.revisor?.username ?? "",
+    motivoBloqueo: t.block_reason ?? "",
+    cerradaEl: t.done_at?.toISOString() ?? "",
     actualizada: t.updated_at?.toISOString() ?? "",
     posicion: t.board_position,
     // Flask comparaba con el literal 'Completado'; aqui manda el catalogo.

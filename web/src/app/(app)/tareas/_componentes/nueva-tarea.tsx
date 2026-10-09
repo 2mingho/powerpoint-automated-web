@@ -26,7 +26,7 @@ export function NuevaTarea() {
   const [errores, setErrores] = useState<Record<string, string>>({});
   const vacio = () => ({
     title: "", assignee_id: String(ctx.usuario.id), due_date: ctx.hoy, priority: ctx.prioridades.find((p) => p.esDefecto)?.nombre ?? "Media",
-    status: ctx.estadoInicial, description: "", client: "", directorate: "", requested_by: "", budget_type: "", start_date: "", end_date: "",
+    status: ctx.estadoInicial, description: "", client: "", directorate: "", requested_by: "", budget_type: "", start_date: "", end_date: "", estimated_hours: "", reviewer_id: "",
     is_recurrent: false, recurrence_type: "Semanal", recurrence_end: "",
   });
   const [f, setF] = useState(vacio);
@@ -57,6 +57,8 @@ export function NuevaTarea() {
     if (!f.title.trim()) e.title = "Escribe qué hay que hacer.";
     if (!f.due_date) e.due_date = "La fecha de entrega es obligatoria.";
     if (f.start_date && f.end_date && f.end_date < f.start_date) e.end_date = "No puede ser anterior al inicio.";
+    if (f.estimated_hours.trim() && !(Number(f.estimated_hours.replace(",", ".")) > 0 && Number(f.estimated_hours.replace(",", ".")) <= 1000)) e.estimated_hours = "Un número mayor que 0 y de hasta 1000.";
+    if (f.reviewer_id && f.reviewer_id === f.assignee_id) e.reviewer_id = "No puede revisar quien hace la tarea.";
     if (f.is_recurrent) {
       if (esFinDeSemana(f.due_date)) e.due_date = "Una serie no puede empezar en sábado o domingo.";
       if (!f.recurrence_end) e.recurrence_end = "Indica hasta cuándo se repite.";
@@ -124,8 +126,19 @@ export function NuevaTarea() {
             {(a) => <AreaTexto {...a} value={f.description} onChange={(e) => set("description", e.target.value)} className="min-h-16" />}
           </Campo>
           <details className="rounded-sm border border-hilo px-3 py-2">
-            <summary className="cursor-pointer rotulo">Más datos: cliente, dirección, presupuesto, fechas</summary>
+            <summary className="cursor-pointer rotulo">Más datos: horas, revisor, cliente, fechas</summary>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Campo etiqueta="Horas estimadas" error={errores.estimated_hours}>
+                {(a) => <Entrada {...a} type="number" inputMode="decimal" min="0.25" max="1000" step="0.25" value={f.estimated_hours} onChange={(e) => set("estimated_hours", e.target.value)} />}
+              </Campo>
+              <Campo etiqueta="Revisor" error={errores.reviewer_id}>
+                {(a) => (
+                  <Selector {...a} value={f.reviewer_id} onChange={(e) => set("reviewer_id", e.target.value)}>
+                    <option value="">Sin revisor</option>
+                    {ctx.personas.filter((p) => String(p.id) !== f.assignee_id).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </Selector>
+                )}
+              </Campo>
               <Campo etiqueta="Cliente">{(a) => <Entrada {...a} list="clientes-nueva" value={f.client} maxLength={100} onChange={(e) => set("client", e.target.value)} />}</Campo>
               <datalist id="clientes-nueva">{ctx.clientes.map((c) => <option key={c} value={c} />)}</datalist>
               <Campo etiqueta="Dirección o gerencia">{(a) => <Entrada {...a} value={f.directorate} onChange={(e) => set("directorate", e.target.value)} />}</Campo>

@@ -11,6 +11,7 @@ import { aDTOs, areaDe, descripcion, diaDb, enlaceTarea, filtroVisiblesYObservad
 import { avisarAsignacion, avisarCambioDeEstado } from "./avisos";
 import { esFinDeSemana, generarFechasRecurrencia, parsearFechaEntrada, TIPOS_RECURRENCIA } from "./fechas";
 import { colocar, compararColumna } from "./posiciones";
+import { camposDeSeguimiento, efectosDeCambio, exigirPuedeCerrar } from "./seguimiento";
 
 /*
  * Altas, cambios, borrados, operaciones masivas y movimientos del tablero.
@@ -55,6 +56,11 @@ export async function crearTarea(u: UsuarioActual, d: Record<string, unknown>) {
 
   const asignado = await asignadoValido(u, d.assignee_id);
   const { area, area_id } = areaDe(asignado);
+  const seguimiento = await camposDeSeguimiento(u, d, null, asignado.id);
+  const finales = await estadosFinales();
+  const nace = finales.includes(estado);
+  // Una tarea que nace cerrada (rara) tampoco se salta al revisor.
+  if (nace) await exigirPuedeCerrar(u, [{ reviewer_id: seguimiento.reviewer_id ?? null }]);
   const recurrente = !!d.is_recurrent;
   const tipo = texto(d.recurrence_type);
   const finSerieCrudo = texto(d.recurrence_end) || texto(d.end_date);
@@ -92,6 +98,8 @@ export async function crearTarea(u: UsuarioActual, d: Record<string, unknown>) {
     assignee_id: asignado.id,
     created_at: ahora,
     updated_at: ahora,
+    ...seguimiento,
+    ...(nace ? { done_at: ahora, block_reason: null } : {}),
   };
 
   const primera = await db.$transaction(async (tx) => {
@@ -147,6 +155,20 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
     datos.assignee_id = asignado.id;
     Object.assign(datos, areaDe(asignado));
     if (asignado.id !== previa.assignee_id) reasignada = asignado.id;
+  }
+
+  const seguimiento = await camposDeSeguimiento(u, d, previa, (datos.assignee_id as number | undefined) ?? previa.assignee_id);
+  Object.assign(datos, seguimiento);
+  if (cambiaEstado) {
+    const finales = await estadosFinales();
+    const previoFinal = finales.includes(previa.status);
+    const nuevoFinal = finales.includes(String(datos.status));
+    if (!previoFinal && nuevoFinal) {
+      const revisorFinal = "reviewer_id" in seguimiento ? seguimiento.reviewer_id ?? null : previa.reviewer_id;
+      await exigirPuedeCerrar(u, [{ reviewer_id: revisorFinal }], revisorFinal === previa.reviewer_id ? previa.revisor?.username : undefined);
+    }
+    // Despues de seguimiento: cerrar borra el motivo de bloqueo aunque venga en el mismo cuerpo.
+    Object.assign(datos, efectosDeCambio(previoFinal, nuevoFinal));
   }
 
   const esperado = texto(d.expected_updated_at);
@@ -223,7 +245,7 @@ export async function operacionMasiva(u: UsuarioActual, d: Record<string, unknow
 
   const visibles = await db.tasks.findMany({
     where: { AND: [await filtroTareasVisibles(u), { id: { in: ids } }] },
-    select: { id: true, title: true, status: true },
+    select: { id: true, title: true, status: true, reviewer_id: true },
   });
   if (!visibles.length) throw new ErrorApi(404, "No se encontraron tareas para editar.");
   const encontradas = visibles.map((t) => t.id);
@@ -249,10 +271,18 @@ export async function operacionMasiva(u: UsuarioActual, d: Record<string, unknow
   }
   if (!estado && !prioridad && !fechas.size) throw new ErrorApi(400, "No hay cambios para aplicar.");
 
+  const finales = await estadosFinales();
+  const cierran = estado && finales.includes(estado) ? visibles.filter((t) => !finales.includes(t.status)) : [];
+  const reabren = estado && !finales.includes(estado) ? visibles.filter((t) => finales.includes(t.status)) : [];
+  if (cierran.length) await exigirPuedeCerrar(u, cierran);
+
   await db.$transaction(async (tx) => {
     if (estado || prioridad) {
       await tx.tasks.updateMany({ where: { id: { in: encontradas } }, data: { ...(estado ? { status: estado } : {}), ...(prioridad ? { priority: prioridad } : {}), updated_at: ahora } });
     }
+    // done_at solo cambia en las que cruzan la frontera abierta/cerrada.
+    if (cierran.length) await tx.tasks.updateMany({ where: { id: { in: cierran.map((t) => t.id) } }, data: { done_at: ahora, block_reason: null } });
+    if (reabren.length) await tx.tasks.updateMany({ where: { id: { in: reabren.map((t) => t.id) } }, data: { done_at: null } });
     // Una escritura por fecha distinta, no por tarea.
     const porFecha = new Map<string, number[]>();
     for (const [id, f] of fechas) if (encontradas.includes(id)) porFecha.set(f, [...(porFecha.get(f) ?? []), id]);
@@ -281,6 +311,10 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
   const estado = texto(d.status) || t.status;
   if (!(await estadosValidos()).includes(estado)) throw new ErrorApi(400, "Estado inválido.");
   const cambiaEstado = estado !== t.status;
+  const finalesDestino = await estadosFinales();
+  const previoFinal = finalesDestino.includes(t.status);
+  const nuevoFinal = finalesDestino.includes(estado);
+  if (cambiaEstado && !previoFinal && nuevoFinal) await exigirPuedeCerrar(u, [{ reviewer_id: t.reviewer_id }], t.revisor?.username);
   const esperado = texto(d.expected_updated_at);
   const aId = (v: unknown) => { const n = Number(v); return v != null && v !== "" && Number.isInteger(n) ? n : null; };
 
@@ -300,7 +334,7 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
       const filas = await tx.$queryRaw<Array<{ updated_at: Date | null }>>`SELECT updated_at FROM tasks WHERE id = ${t.id} FOR UPDATE`;
       const actual = filas[0]?.updated_at?.toISOString() ?? "";
       if (esperado && esperado !== actual) throw new ConflictoTarea(await tx.tasks.findUniqueOrThrow({ where: { id: t.id }, include: INCLUIR_TAREA }));
-      await tx.tasks.update({ where: { id: t.id }, data: { status: estado, board_position: posicion } });
+      await tx.tasks.update({ where: { id: t.id }, data: { status: estado, board_position: posicion, ...efectosDeCambio(previoFinal, nuevoFinal) } });
       if (finales.includes(estado)) {
         const abiertas: Prisma.tasksWhereInput = { deleted_at: null, status: { notIn: finales }, bloquea_a: { some: { blocked_task_id: t.id } } };
         // Las bloqueadoras de otra unidad se cuentan, pero su titulo no sale: no se pueden ver.

@@ -112,8 +112,9 @@ function Fila({ t, transicion, seleccionando, marcada, alMarcar }: {
   marcada: boolean;
   alMarcar: (id: number) => void;
 }) {
-  const { hoy, estados, esFinal, completar, seleccionar, seleccionada } = useTareas();
+  const { hoy, estados, esFinal, completar, seleccionar, seleccionada, puedeCompletar: puede } = useTareas();
   const hecha = esFinal(t.estado);
+  const puedeCompletar = puede(t);
   const vencida = !hecha && t.entrega < hoy;
   const activa = seleccionada === t.id;
 
@@ -133,9 +134,10 @@ function Fila({ t, transicion, seleccionando, marcada, alMarcar }: {
             {marcada ? <SquareCheck aria-hidden className="size-[18px] text-texto" /> : <Square aria-hidden className="size-[18px]" />}
           </button>
         ) : (
-          <button type="button" aria-label={hecha ? `Reabrir «${t.titulo}»` : `Completar «${t.titulo}»`}
+          <button type="button" aria-label={hecha ? `Reabrir «${t.titulo}»` : `Completar «${t.titulo}»`} disabled={!puedeCompletar}
+            title={puedeCompletar ? undefined : `La cierra ${t.revisor}. Pásala a revisión.`}
             onClick={(e) => { e.stopPropagation(); completar(t.id); }}
-            className={cx("grid size-10 place-items-center rounded-sm transition-colors", hecha ? "text-bien" : "text-texto-3 hover:text-bien")}>
+            className={cx("grid size-10 place-items-center rounded-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40", hecha ? "text-bien" : "text-texto-3 hover:text-bien")}>
             {hecha ? <CircleCheck aria-hidden className="size-[18px]" /> : <Circle aria-hidden className="size-[18px]" />}
           </button>
         )}

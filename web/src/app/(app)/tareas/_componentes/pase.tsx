@@ -8,6 +8,7 @@ import { Dialogo } from "@/components/ui/dialogo";
 import { CeldaEstado, PuntoTono } from "@/components/ui/estado";
 import { Esqueleto } from "@/components/ui/panel";
 import { cx } from "@/components/ui/cx";
+import { esEstadoDeBloqueo, puedeCambiarRevisor, puedeCerrar } from "@/lib/seguimiento/estado";
 import type { ActividadDTO, ComentarioDTO, DependenciasDTO, DetalleDTO, ItemChecklistDTO, TareaDTO } from "@/lib/tareas/tipos";
 import { ErrorPeticion, fechaCorta, haceCuanto, momento, pedir, relativo, tonoEstado } from "./cliente";
 import { useTareas, type Cambios } from "./estado";
@@ -120,6 +121,27 @@ export function Pase({ id, alCerrar }: { id: number; alCerrar: () => void }) {
               </select>
             ) : <span className="truncate text-sm font-medium">{t.asignado}</span>}
           </Celda>
+          <Celda rotulo="Horas">
+            {editable ? (
+              <input key={`h-${t.horas}`} type="number" inputMode="decimal" min="0.25" max="1000" step="0.25" aria-label="Horas estimadas"
+                placeholder="Sin estimar" defaultValue={t.horas ?? ""}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v !== (t.horas == null ? "" : String(t.horas))) void guardar({ estimated_hours: v }, v ? `Estimación: ${v} h` : "Estimación quitada");
+                }}
+                className="w-full bg-transparent font-mono text-sm cifras outline-none placeholder:text-texto-3" />
+            ) : <span className="font-mono text-sm cifras">{t.horas != null ? `${t.horas} h` : "Sin estimar"}</span>}
+          </Celda>
+          <Celda rotulo="Revisor">
+            {editable && puedeCambiarRevisor(t.revisorId, ctx.usuario.id, ctx.usuario.lidera) ? (
+              <select aria-label="Revisor" value={t.revisorId ?? ""} onChange={(e) => void guardar({ reviewer_id: e.target.value }, e.target.value ? "Revisor asignado" : "Revisor quitado")}
+                className="w-full truncate bg-transparent text-sm font-medium outline-none">
+                <option value="">Sin revisor</option>
+                {t.revisorId != null && !ctx.personas.some((p) => p.id === t.revisorId) && <option value={t.revisorId}>{t.revisor}</option>}
+                {ctx.personas.filter((p) => p.id !== t.asignadoId).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            ) : <span className="truncate text-sm font-medium">{t.revisor || "Sin revisor"}</span>}
+          </Celda>
         </dl>
 
         {/* Estado */}
@@ -130,16 +152,33 @@ export function Pase({ id, alCerrar }: { id: number; alCerrar: () => void }) {
           </div>
           {editable ? (
             <div role="radiogroup" aria-label="Cambiar estado" className="flex flex-wrap gap-1">
-              {ctx.estados.map((e) => (
-                <button key={e.nombre} type="button" role="radio" aria-checked={t.estado === e.nombre}
-                  onClick={() => t.estado !== e.nombre && void guardar({ status: e.nombre }, `Estado: ${e.nombre}`)}
-                  className={cx("inline-flex h-9 items-center gap-1.5 rounded-sm border px-2.5 text-sm transition-colors duration-[var(--dur)]",
-                    t.estado === e.nombre ? "border-texto bg-texto font-semibold text-superficie" : "border-hilo text-texto-2 hover:border-hilo-fuerte hover:text-texto")}>
-                  <PuntoTono tono={e.color} />{e.nombre}
-                </button>
-              ))}
+              {ctx.estados.map((e) => {
+                // Con revisor, cerrar le toca a el o a quien lidera; el resto la pasa a revision.
+                const sinPermiso = e.esFinal && !ctx.esFinal(t.estado) && !puedeCerrar(t.revisorId, ctx.usuario.id, ctx.usuario.lidera);
+                return (
+                  <button key={e.nombre} type="button" role="radio" aria-checked={t.estado === e.nombre} disabled={sinPermiso}
+                    title={sinPermiso ? `La cierra ${t.revisor || "su revisor"}. Pásala a revisión.` : undefined}
+                    onClick={() => t.estado !== e.nombre && void guardar({ status: e.nombre }, `Estado: ${e.nombre}`)}
+                    className={cx("inline-flex h-9 items-center gap-1.5 rounded-sm border px-2.5 text-sm transition-colors duration-[var(--dur)] disabled:cursor-not-allowed disabled:opacity-50",
+                      t.estado === e.nombre ? "border-texto bg-texto font-semibold text-superficie" : "border-hilo text-texto-2 hover:border-hilo-fuerte hover:text-texto")}>
+                    <PuntoTono tono={e.color} />{e.nombre}
+                  </button>
+                );
+              })}
             </div>
           ) : <p className="text-sm text-texto-3">Observas esta tarea: puedes verla y seguirla, pero no cambiarla.</p>}
+          {editable && t.revisorId != null && !ctx.esFinal(t.estado) && !puedeCerrar(t.revisorId, ctx.usuario.id, ctx.usuario.lidera) && (
+            <p className="text-xs text-texto-3">La cierra {t.revisor}. Cuando esté lista, pásala a revisión.</p>
+          )}
+          {!ctx.esFinal(t.estado) && (esEstadoDeBloqueo(t.estado) || t.motivoBloqueo) && (
+            editable ? (
+              <label className="flex flex-col gap-1">
+                <span className="rotulo">Motivo del bloqueo</span>
+                <Entrada key={`b-${t.motivoBloqueo}`} defaultValue={t.motivoBloqueo} maxLength={255} placeholder="Qué lo detiene y quién puede destrabarlo" className="h-9"
+                  onBlur={(e) => e.target.value.trim() !== t.motivoBloqueo && void guardar({ block_reason: e.target.value.trim() }, "Motivo guardado")} />
+              </label>
+            ) : <p className="text-sm text-texto-2"><span className="rotulo">Motivo del bloqueo</span> {t.motivoBloqueo}</p>
+          )}
           {t.bloqueadaPorAbiertas > 0 && (
             <p className="flex items-center gap-1.5 text-sm text-alerta"><Lock aria-hidden className="size-3.5" />Espera a {t.bloqueadaPorAbiertas === 1 ? "una tarea abierta" : `${t.bloqueadaPorAbiertas} tareas abiertas`}.</p>
           )}
@@ -249,7 +288,8 @@ function Acciones({ t, editable, alCambiarObservar, alBorrar }: { t: DetalleDTO;
   return (
     <div className="flex flex-wrap gap-2">
       {editable && (
-        <Boton variante={hecha ? "secundario" : "primario"} tamano="sm" icono={<Check aria-hidden className="size-3.5" />} onClick={() => ctx.completar(t.id)}>
+        <Boton variante={hecha ? "secundario" : "primario"} tamano="sm" icono={<Check aria-hidden className="size-3.5" />} disabled={!ctx.puedeCompletar(t)}
+          title={ctx.puedeCompletar(t) ? undefined : `La cierra ${t.revisor}. Pásala a revisión.`} onClick={() => ctx.completar(t.id)}>
           {hecha ? "Reabrir" : "Completar"}
         </Boton>
       )}

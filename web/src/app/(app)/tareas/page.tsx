@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { puedeVerEquipo } from "@/lib/alcance";
 import { exigirUsuario, tieneHerramienta } from "@/lib/auth/session";
 import { hoyNegocio } from "@/lib/reloj";
 import { Esqueleto, Panel, Vacio } from "@/components/ui/panel";
@@ -31,14 +32,14 @@ async function Datos({ searchParams }: { searchParams: PageProps<"/tareas">["sea
   // Avisos de vencimiento del dia, como al abrir /tasks en Flask. Nunca rompe la pagina.
   await asegurarAvisosDeVencimiento(u.id).catch((e) => console.error("[tareas] avisos de vencimiento", e));
 
-  const [cat, personas, clientes, etiquetas, unidades, importar, lista, contadores] = await Promise.all([
+  const [cat, personas, clientes, etiquetas, unidades, importar, lista, contadores, lidera] = await Promise.all([
     catalogo(), personasDelAmbito(u), clientesVisibles(u), etiquetasVisibles(u), unidadesParaFiltro(u), puedeImportar(u),
-    listarTareas(u, filtros), contarSalidas(u, filtros.alcance),
+    listarTareas(u, filtros), contarSalidas(u, filtros.alcance), puedeVerEquipo(u),
   ]);
 
   return (
     <MisTareas inicial={{
-      usuario: { id: u.id, nombre: u.username, esAdmin: u.isAdmin, unidadId: u.areaId },
+      usuario: { id: u.id, nombre: u.username, esAdmin: u.isAdmin, unidadId: u.areaId, lidera },
       hoy: hoyNegocio(),
       estados: cat.estados,
       prioridades: cat.prioridades,
