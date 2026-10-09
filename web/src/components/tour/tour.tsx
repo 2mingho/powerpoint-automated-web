@@ -33,7 +33,9 @@ function visible(el: Element) {
 function primeroVisible(selector: string) {
   return [...document.querySelectorAll(selector)].find(visible) ?? null;
 }
-const enlace = (href: string) => () => primeroVisible(`nav[aria-label="Principal"] a[href="${href}"]`);
+/* En movil la barra inferior solo lleva lo diario: lo demas vive en «Más», y es lo que se ilumina. */
+const enlace = (href: string) => () =>
+  primeroVisible(`nav[aria-label="Principal"] a[href="${href}"]`) ?? primeroVisible('[data-tour="mas"]');
 
 function guion(items: ItemNav[]): Paso[] {
   const hay = (href: string) => items.some((i) => i.href === href);

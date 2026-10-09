@@ -116,7 +116,7 @@ export function NavMovil({ items, usuario }: { items: ItemNav[]; usuario: Usuari
             </Link>
           );
         })}
-        <button type="button" onClick={() => setAbierto(true)} aria-expanded={abierto}
+        <button type="button" onClick={() => setAbierto(true)} aria-expanded={abierto} data-tour="mas"
           className="flex flex-1 flex-col items-center justify-center gap-1 font-rotulo text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-rail-texto">
           <Iconos.Menu className="size-5" aria-hidden />Más
         </button>
