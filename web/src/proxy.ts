@@ -50,7 +50,7 @@ export async function proxy(req: NextRequest) {
 
 /*
  * /api/datos queda fuera: con proxy, Next copia el cuerpo de cada peticion en
- * memoria y lo corta en silencio a 10 MB (proxyClientMaxBodySize). Una subida
+ * memoria y lo corta en silencio a 16 MB (proxyClientMaxBodySize). Una subida
  * de 150 MB llegaria truncada al servicio de analisis. Esas rutas validan la
  * sesion igual, con conUsuario, y responden 401 en JSON.
  */
