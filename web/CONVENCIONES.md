@@ -66,6 +66,6 @@ src/**/*.test.ts                           pruebas unitarias Vitest de la lógic
 
 ## Batería integrada
 
-Usa una base PostgreSQL **descartable y explícita** con `DATABASE_URL`; las semillas truncan tablas. No ejecutes todos los specs de Playwright en un único comando contra una misma base: `e2e/solicitudes/sembrar.ts` vacía tareas y deja sin datos las pruebas de Equipo. Con el servidor Next.js y el servicio Python apuntando a esa base, siembra para Admin, corre `e2e/admin`; corre `e2e/datos`; después `e2e/solicitudes` (se siembra al iniciar) y `e2e/tareas` (cada caso crea su escenario). Usa `--workers=1` porque los casos comparten base y sesiones.
+Usa una base PostgreSQL **descartable y explícita** con `DATABASE_URL` en la línea de comandos: la semilla vacía y vuelve a sembrar esa base, y `web/.env` apunta a la de desarrollo. Todas las baterías corren juntas contra un solo servidor (`BASE_URL`, por defecto 3301) y una sola base, sembrada una vez por `e2e/preparar.ts` (`globalSetup`) con `e2e/semilla.ts`: `npx playwright test`. El proyecto fija `workers: 1` porque los casos comparten base y sesiones. Para repetir sin resembrar, `SIN_SEMILLA=1`. El servicio Python de análisis debe apuntar a la misma base para `e2e/datos`.
 
 `ANALYTICS_URL` es la **raíz** de Flask (por ejemplo `http://127.0.0.1:5101`); el cliente añade `/api/interno` por sí mismo. Poner ese prefijo en la variable devuelve 404 en subidas y previsualizaciones.
