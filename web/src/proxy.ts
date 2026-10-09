@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { unsealData } from "iron-session";
 import { db } from "@/lib/db";
+import { CABECERAS_SEGURIDAD } from "@/lib/cabeceras";
 
 const sinPermiso = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sin permisos · Newlink</title><style>
 :root{color-scheme:light dark;font-family:system-ui,sans-serif;background:#eceef1;color:#0b0d10}
@@ -39,7 +40,9 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
     if (usuario.role !== "admin") {
-      return new Response(sinPermiso, { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": "noindex" } });
+      const cabeceras = new Headers({ "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": "noindex", "Cache-Control": "no-store" });
+      for (const { key, value } of CABECERAS_SEGURIDAD) cabeceras.set(key, value);
+      return new Response(sinPermiso, { status: 403, headers: cabeceras });
     }
   }
   return NextResponse.next();

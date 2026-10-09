@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
+import { CABECERAS_SEGURIDAD } from "./src/lib/cabeceras";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async headers() {
+    return [{ source: "/:path*", headers: CABECERAS_SEGURIDAD }];
+  },
+  poweredByHeader: false,
   cacheComponents: true,
   partialPrefetching: true,
   experimental: { authInterrupts: true },
