@@ -12,6 +12,7 @@ import { useAvisos } from "@/components/ui/avisos";
 import { mensajeDe, pedir } from "@/lib/admin/cliente";
 import { fDia } from "@/lib/admin/formato";
 import type { FilaTareaEquipo, PanelEquipo } from "@/lib/equipo/datos";
+import { NombreCliente } from "@/components/clientes/ficha";
 import { CargaPorPersona, Leyenda, Tendencia, VencidasPorUnidad } from "./graficos";
 import { MapaDeCalor } from "./mapa-calor";
 
@@ -218,7 +219,7 @@ function TablaTareas({ tareas, filtros, estados, tonoDe, hoy, finales, cargando,
                     <td className={cx("font-mono text-xs md:h-11 md:px-4", vencida ? "text-alerta" : "text-texto-2", !esAdmin && "col-span-1")}><time dateTime={t.vence}>{fDia(t.vence)}</time></td>
                     <td className="min-w-0 md:h-11 md:max-w-0 md:px-4 md:w-[40%]">
                       <span className="block truncate font-medium">{t.titulo}</span>
-                      {t.cliente && <span className="block truncate text-xs text-texto-3">{t.cliente}</span>}
+                      {t.cliente && <NombreCliente id={t.clienteId} nombre={t.cliente} className="block text-xs text-texto-3" />}
                     </td>
                     <td className="hidden text-texto-2 lg:table-cell lg:h-11 lg:px-4">{t.unidad ?? "—"}</td>
                     <td className="col-start-2 text-texto-2 md:h-11 md:px-4">{t.asignado}</td>

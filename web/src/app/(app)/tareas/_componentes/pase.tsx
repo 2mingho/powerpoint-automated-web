@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Eye, EyeOff, Lock, Plus, Trash2, X } from "lucide-react";
 import { useAvisos } from "@/components/ui/avisos";
+import { NombreCliente } from "@/components/clientes/ficha";
 import { Boton } from "@/components/ui/boton";
 import { AreaTexto, Entrada, Selector } from "@/components/ui/campo";
 import { Dialogo } from "@/components/ui/dialogo";
@@ -92,6 +93,11 @@ export function Pase({ id, alCerrar }: { id: number; alCerrar: () => void }) {
       <CabeceraPase titulo={`#${t.id}`} alCerrar={alCerrar} />
       <div className="flex flex-col gap-5 overflow-y-auto px-5 pb-6 [&>*]:shrink-0">
         <Titulo key={`t-${t.titulo}`} t={t} editable={editable} alGuardar={(v) => void guardar({ title: v })} />
+        {t.cliente && (
+          <p className="-mt-3 flex items-baseline gap-1.5 text-sm text-texto-2">
+            <span className="rotulo">Cliente</span><NombreCliente id={t.clienteId} nombre={t.cliente} className="font-medium text-texto" />
+          </p>
+        )}
 
         {/* Pase segmentado */}
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-hilo bg-hilo">

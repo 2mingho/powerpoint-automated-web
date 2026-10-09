@@ -1,4 +1,5 @@
 "use client";
+import { NombreCliente } from "@/components/clientes/ficha";
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { ChevronDown, Circle, CircleCheck, Link2, ListChecks, Lock, MessageSquare, Repeat, Square, SquareCheck } from "lucide-react";
@@ -169,7 +170,7 @@ function Meta({ t, vencida }: { t: TareaDTO; vencida: boolean }) {
       {/* En movil la entrega y el responsable van aqui; en escritorio tienen columna. */}
       <span className={cx("font-mono cifras md:hidden", vencida && "text-alerta")}>{fechaCorta(t.entrega)} · {relativo(t.entrega, hoy)}</span>
       <span className="truncate md:hidden">{t.asignado}</span>
-      {t.cliente && <span className="hidden truncate md:inline">{t.cliente}</span>}
+      {t.cliente && <NombreCliente id={t.clienteId} nombre={t.cliente} className="hidden md:inline" />}
       {t.bloqueadaPorAbiertas > 0 && (
         <span className="inline-flex items-center gap-1 text-alerta" title="Espera a otras tareas abiertas">
           <Lock aria-hidden className="size-3" />Bloqueada

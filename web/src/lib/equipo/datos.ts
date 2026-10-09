@@ -146,7 +146,7 @@ export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<P
 }
 
 export type FilaTareaEquipo = {
-  id: number; titulo: string; cliente: string | null; estado: string; prioridad: string; vence: string;
+  id: number; titulo: string; cliente: string | null; clienteId: number | null; estado: string; prioridad: string; vence: string;
   asignado: string; asignadoId: number; unidad: string | null; actualizada: string | null;
 };
 
@@ -158,7 +158,7 @@ export async function tareasEquipo(u: UsuarioActual, alcance: Alcance, f: Filtro
   const where = await whereFiltrado(u, alcance.elegidas, f);
   const finales = await estadosFinales();
   const select = {
-    id: true, title: true, client: true, status: true, priority: true, due_date: true, assignee_id: true, updated_at: true,
+    id: true, title: true, client: true, client_id: true, status: true, priority: true, due_date: true, assignee_id: true, updated_at: true,
     asignado: { select: { username: true } }, areas: { select: { name: true } },
   } as const;
   const [total, abiertas] = await Promise.all([
@@ -169,7 +169,7 @@ export async function tareasEquipo(u: UsuarioActual, alcance: Alcance, f: Filtro
     ? await db.tasks.findMany({ where: { AND: [where, { status: { in: finales } }] }, orderBy: [{ due_date: "desc" }, { id: "desc" }], take: MAX_FILAS - abiertas.length, select })
     : [];
   const tareas: FilaTareaEquipo[] = [...abiertas, ...cerradas].map((t) => ({
-    id: t.id, titulo: t.title, cliente: t.client, estado: t.status, prioridad: t.priority, vence: isoDeFecha(t.due_date),
+    id: t.id, titulo: t.title, cliente: t.client, clienteId: t.client_id, estado: t.status, prioridad: t.priority, vence: isoDeFecha(t.due_date),
     asignado: t.asignado.username, asignadoId: t.assignee_id, unidad: t.areas?.name ?? null,
     actualizada: t.updated_at?.toISOString() ?? null,
   }));

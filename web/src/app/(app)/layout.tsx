@@ -3,6 +3,7 @@ import { exigirUsuario, tieneHerramienta } from "@/lib/auth/session";
 import { papel, puedeVerEquipo } from "@/lib/alcance";
 import { Armazon, NavMovil, NavRail, NavRailEsqueleto } from "@/components/shell/armazon";
 import { NAVEGACION } from "@/components/shell/navegacion";
+import { FichaClienteHost } from "@/components/clientes/ficha";
 import { ProveedorAvisos } from "@/components/ui/avisos";
 import { AccionesCabecera, AccionesCabeceraEsqueleto } from "@/components/cabecera/acciones-cabecera";
 
@@ -33,6 +34,7 @@ export default function LayoutApp({ children }: LayoutProps<"/">) {
         campana={<Suspense fallback={<AccionesCabeceraEsqueleto />}><Cabecera /></Suspense>}
       >
         {children}
+        <Suspense fallback={null}><FichaClienteHost /></Suspense>
       </Armazon>
     </ProveedorAvisos>
   );
