@@ -117,7 +117,7 @@ export function FlujoClasificacion() {
       )}
 
       {paso === 1 && (
-        <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); clasificar(); }} noValidate>
+        <div className="flex flex-col gap-4">
           <Panel titulo="Qué columna se lee" cuerpoClassName="grid gap-4 p-4 md:grid-cols-2">
             <Campo etiqueta="Columna de texto" ayuda="Donde se buscan las palabras clave.">
               {(a) => (
@@ -194,14 +194,14 @@ export function FlujoClasificacion() {
             {errorReglas && <p role="alert" className="text-sm text-alerta">{errorReglas}</p>}
             <div className="flex items-center justify-between gap-3">
               <Boton variante="fantasma" onClick={() => setPaso(0)}>Volver</Boton>
-              <Boton type="submit" variante="primario">Clasificar</Boton>
+              <Boton variante="primario" onClick={clasificar}>Clasificar</Boton>
             </div>
           </Panel>
-        </form>
+        </div>
       )}
 
-      {paso === 2 && (
-        <Panel titulo={proceso.situacion === "hecho" ? "Clasificación lista" : "Clasificando"} cuerpoClassName="p-4">
+      {paso === 2 && proceso.situacion !== "hecho" && (
+        <Panel titulo="Clasificando" cuerpoClassName="p-4">
           <PanelProceso fases={FASES.clasificacion} situacion={proceso.situacion} proceso={proceso.proceso} enCola={proceso.enCola}
             alCancelar={proceso.cancelar} alReintentar={clasificar} alVolver={() => { proceso.reiniciar(); setPaso(1); }} />
         </Panel>

@@ -26,7 +26,7 @@ test("subir los widgets, ver el progreso y abrir el reporte", async ({ page }, i
 
   await page.locator('input[type="file"]').setInputFiles(widgets(["00", "01", "04", "05", "07"]));
   await expect(page.getByText("5 de 10 widgets reconocidos")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Sentimiento", exact: true })).toBeVisible();
+  await expect(page.getByText("Sentimiento", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continuar" }).click();
 
   await page.getByLabel("Nombre del reporte").fill(nombre);

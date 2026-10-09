@@ -178,7 +178,7 @@ export function Histograma({ bins, counts, columna }: { bins: (number | null)[];
   return (
     <div className="viz h-44 w-full" role="img" aria-label={`Distribución de ${columna}: ${counts.length} intervalos`}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={datos} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={1}>
+        <BarChart data={datos} margin={{ top: 4, right: 20, bottom: 0, left: 0 }} barCategoryGap={1}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="b" tickLine={false} axisLine={{ stroke: "var(--eje)" }} minTickGap={16} />
           <YAxis tickLine={false} axisLine={false} width={40} tickFormatter={compacto} allowDecimals={false} />

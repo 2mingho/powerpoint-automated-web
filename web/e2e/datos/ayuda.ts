@@ -20,6 +20,8 @@ export const USUARIOS = {
   sinReportes: "sin.reportes@local.test",
   // Cada spec corre en su worker y un login rota el session_token: usuario propio.
   herramientas: "herramientas.datos@local.test",
+  capturas: "capturas.datos@local.test",
+  capturasMovil: "capturas.movil@local.test",
 };
 
 export async function prepararUsuarios() {
@@ -32,6 +34,8 @@ export async function prepararUsuarios() {
       [USUARIOS.colega, "Colega Datos", JSON.stringify(["reports", "classification", "file_merge", "csv_analysis"])],
       [USUARIOS.sinReportes, "Sin Reportes", JSON.stringify(["tasks", "classification"])],
       [USUARIOS.herramientas, "Herramientas Datos", JSON.stringify(["classification", "file_merge", "csv_analysis"])],
+      [USUARIOS.capturas, "Laura Méndez", JSON.stringify(["reports", "classification", "file_merge", "csv_analysis", "tasks"])],
+      [USUARIOS.capturasMovil, "Laura Méndez", JSON.stringify(["reports", "classification", "file_merge", "csv_analysis", "tasks"])],
     ]) {
       await db.query(
         `insert into users (username, email, password, role, is_active, allowed_tools, area_id, created_at, force_logout, is_area_lead)

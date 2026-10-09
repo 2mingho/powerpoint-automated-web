@@ -70,7 +70,7 @@ export function ListaReportes({ reportes }: { reportes: ReporteResumen[] }) {
                     {fecha ? <time dateTime={r.creado!}>{formatoFecha.format(fecha)} <span className="text-texto-3">{formatoHora.format(fecha)}</span></time> : "—"}
                   </span>
                   <span className="order-1 min-w-0 md:order-none">
-                    <span className="block truncate font-medium">{r.periodo ? `Escucha social · ${r.periodo}` : r.titulo}</span>
+                    <span className="block truncate font-medium">{r.periodo ? <><span className="hidden md:inline">Escucha social · </span>{r.periodo}</> : r.titulo}</span>
                     {r.menciones != null && <span className="block font-mono text-xs text-texto-3 cifras">{r.menciones.toLocaleString("es-DO")} menciones</span>}
                   </span>
                   <span className="order-4 truncate text-sm text-texto-2 md:order-none md:text-base md:text-texto">{r.cliente || "—"}</span>

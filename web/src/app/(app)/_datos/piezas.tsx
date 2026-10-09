@@ -26,7 +26,7 @@ export function Pasos({ pasos, actual, alElegir }: { pasos: string[]; actual: nu
             )}>
               {hecho ? <Check className="size-3.5" aria-hidden /> : i + 1}
             </span>
-            <span className={cx("truncate font-rotulo text-sm font-semibold uppercase tracking-[0.1em]", activo ? "text-texto" : "text-texto-3")}>{p}</span>
+            <span className={cx("truncate font-rotulo text-sm font-semibold uppercase tracking-[0.1em]", activo ? "text-texto" : "hidden text-texto-3 md:inline")}>{p}</span>
           </>
         );
         return (
@@ -48,8 +48,10 @@ export function Pasos({ pasos, actual, alElegir }: { pasos: string[]; actual: nu
 /* ── Zona de archivos: arrastrar y soltar, con validacion inmediata ───── */
 
 export function ZonaArchivos({
-  herramienta, multiple, archivos, alCambiar, titulo, ayuda, compacta,
+  herramienta, multiple, archivos, alCambiar, titulo, ayuda, compacta, detalleDe,
 }: {
+  /* Estado de cada archivo (p. ej. el widget reconocido), en su propia fila. */
+  detalleDe?: (f: File) => { texto?: ReactNode; estado?: ReactNode } | undefined;
   herramienta: HerramientaDatos;
   multiple?: boolean;
   archivos: File[];
@@ -113,17 +115,24 @@ export function ZonaArchivos({
       )}
       {archivos.length > 0 && (
         <ul className="divide-y divide-hilo rounded-md border border-hilo bg-superficie">
-          {archivos.map((a) => (
-            <li key={a.name} className="flex min-h-11 items-center gap-3 px-3">
+          {archivos.map((a) => {
+            const d = detalleDe?.(a);
+            return (
+            <li key={a.name} className="flex min-h-11 items-center gap-3 px-3 py-1.5">
               <FileSpreadsheet className="size-4 shrink-0 text-texto-3" aria-hidden />
-              <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
-              <span className="font-mono text-xs text-texto-3 cifras">{tamano(a.size)}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">{a.name}</span>
+                {d?.texto && <span className="block text-xs text-texto-3">{d.texto}</span>}
+              </span>
+              {d?.estado}
+              <span className="hidden font-mono text-xs text-texto-3 cifras md:inline">{tamano(a.size)}</span>
               <button type="button" onClick={() => alCambiar(archivos.filter((x) => x !== a))}
                 aria-label={`Quitar ${a.name}`} className="grid size-10 place-items-center rounded-sm text-texto-3 hover:bg-superficie-2 hover:text-texto">
                 <X className="size-4" aria-hidden />
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>

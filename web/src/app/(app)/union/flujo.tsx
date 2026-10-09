@@ -221,8 +221,8 @@ export function FlujoUnion() {
         </Panel>
       )}
 
-      {paso === 2 && (
-        <Panel titulo={proceso.situacion === "hecho" ? "Unión lista" : "Uniendo"} cuerpoClassName="p-4">
+      {paso === 2 && proceso.situacion !== "hecho" && (
+        <Panel titulo="Uniendo" cuerpoClassName="p-4">
           <PanelProceso fases={FASES.union} situacion={proceso.situacion} proceso={proceso.proceso} enCola={proceso.enCola}
             alCancelar={proceso.cancelar} alReintentar={unir} alVolver={() => { proceso.reiniciar(); setPaso(1); }} />
         </Panel>

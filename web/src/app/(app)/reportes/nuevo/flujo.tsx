@@ -80,6 +80,16 @@ export function FlujoReporte() {
       {paso === 0 && (
         <Panel titulo="Archivos de Meltwater" cuerpoClassName="flex flex-col gap-4 p-4">
           <ZonaArchivos herramienta="reports" multiple archivos={archivos} alCambiar={cambiarArchivos}
+            detalleDe={(f) => {
+              const a = vista?.archivos.find((x) => x.nombre === f.name);
+              if (!a || leyendo) return undefined;
+              return {
+                texto: a.error ? <span className="text-alerta">{a.error}</span> : a.etiqueta,
+                estado: a.error
+                  ? <span className="inline-flex shrink-0 items-center gap-1 font-rotulo text-xs font-semibold uppercase tracking-[0.1em] text-alerta"><AlertTriangle className="size-3.5" aria-hidden />No se usará</span>
+                  : <span className="inline-flex shrink-0 items-center gap-1 font-rotulo text-xs font-semibold uppercase tracking-[0.1em] text-bien"><CheckCircle2 className="size-3.5" aria-hidden />Listo</span>,
+              };
+            }}
             titulo="Suelta aquí los widgets" ayuda="o haz clic para elegirlos · varios .xlsx a la vez, hasta 60 MB en total" />
 
           {leyendo && <p className="flex items-center gap-2 text-sm text-texto-2"><Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />Reconociendo los widgets…</p>}
@@ -87,33 +97,6 @@ export function FlujoReporte() {
 
           {vista && !leyendo && (
             <div className="flex flex-col gap-3">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Widgets reconocidos</caption>
-                <thead>
-                  <tr className="border-b border-hilo">
-                    <th scope="col" className="h-9 text-left rotulo">Archivo</th>
-                    <th scope="col" className="hidden text-left rotulo md:table-cell">Widget</th>
-                    <th scope="col" className="text-right rotulo">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vista.archivos.map((a) => (
-                    <tr key={a.nombre} className="border-b border-hilo last:border-0">
-                      <td className="py-2.5 pr-3 align-top">
-                        <span className="block truncate">{a.nombre}</span>
-                        <span className="block text-xs text-texto-3 md:hidden">{a.etiqueta ?? "Sin reconocer"}</span>
-                        {a.error && <span className="mt-0.5 block text-xs text-alerta">{a.error}</span>}
-                      </td>
-                      <td className="hidden py-2.5 pr-3 align-top text-texto-2 md:table-cell">{a.etiqueta ?? "—"}</td>
-                      <td className="py-2.5 text-right align-top">
-                        {a.error
-                          ? <span className="inline-flex items-center gap-1 font-rotulo text-xs font-semibold uppercase tracking-[0.1em] text-alerta"><AlertTriangle className="size-3.5" aria-hidden />No se usará</span>
-                          : <span className="inline-flex items-center gap-1 font-rotulo text-xs font-semibold uppercase tracking-[0.1em] text-bien"><CheckCircle2 className="size-3.5" aria-hidden />Listo</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
               {vista.faltan.length > 0 && (
                 <details className="rounded-md border border-hilo bg-superficie-2 px-4 py-3 text-sm">
                   <summary className="cursor-pointer text-texto-2">
