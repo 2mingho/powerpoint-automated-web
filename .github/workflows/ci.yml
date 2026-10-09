@@ -55,3 +55,126 @@ jobs:
             grep -i "detected" migrate.log || true
             exit 1
           fi
+
+  web:
+    name: Web (Next.js)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Alembic (Flask) es el dueño del esquema: la base se construye con sus
+    # migraciones y Prisma solo la lee. Si schema.prisma y las migraciones se
+    # separan, el paso de deriva falla antes de llegar a las pruebas.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: newlink
+          POSTGRES_PASSWORD: newlink_dev
+          POSTGRES_DB: newlink_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U newlink -d newlink_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://newlink:newlink_dev@127.0.0.1:5432/newlink_ci
+      # Mismo valor en el servidor y en Playwright: las pruebas sellan sus propias sesiones.
+      SESSION_SECRET: ci-session-secret-solo-para-pruebas-0123456789
+      # ANALYTICS_URL es la raiz de Flask, sin /api/interno.
+      ANALYTICS_URL: http://127.0.0.1:5101
+      ANALYTICS_TOKEN: ci-analytics-token-no-es-de-produccion
+      BASE_URL: http://127.0.0.1:3301
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Esquema desde cero con las migraciones de Alembic
+        env:
+          SECRET_KEY: ci-secret-key-not-used-in-production
+          FLASK_APP: app.py
+          FLASK_ENV: development
+          SKIP_STARTUP_TASKS: '1'
+          APP_TZ: America/Santo_Domingo
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          flask db upgrade
+
+      - name: Dependencias y cliente de Prisma
+        working-directory: web
+        run: |
+          npm ci
+          npm run db:generate
+
+      - name: schema.prisma coincide con la base migrada
+        working-directory: web
+        run: npx prisma migrate diff --config prisma7.config.ts --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      - name: Typecheck
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+
+      - name: Pruebas unitarias
+        working-directory: web
+        run: npm test
+
+      - name: Build
+        working-directory: web
+        run: npm run build
+
+      - name: Servicio de analisis (Flask) y servidor Next.js
+        env:
+          SECRET_KEY: ci-secret-key-not-used-in-production
+          FLASK_ENV: development
+          SKIP_STARTUP_TASKS: '1'
+          APP_TZ: America/Santo_Domingo
+        run: |
+          flask --app app run -p 5101 > flask.log 2>&1 &
+          (cd web && npx next start -p 3301 > ../next.log 2>&1) &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5101/healthz >/dev/null && curl -fsS http://127.0.0.1:3301/login >/dev/null; then
+              echo "servidores listos"; exit 0
+            fi
+            sleep 1
+          done
+          echo "los servidores no arrancaron"; tail -n 40 flask.log next.log; exit 1
+
+      - name: Navegador de Playwright
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      # globalSetup siembra la base una vez (e2e/semilla.ts) y vacia lo que
+      # hubiera: es una base efimera del job, nunca la de desarrollo.
+      - name: E2E (todas las baterias, un solo worker)
+        working-directory: web
+        run: npx playwright test
+
+      - name: Trazas y registros si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-web
+          path: |
+            web/test-results
+            flask.log
+            next.log
+          if-no-files-found: ignore
+          retention-days: 7
