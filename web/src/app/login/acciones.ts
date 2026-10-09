@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { obtenerSesion } from "@/lib/auth/session";
-import { verificarContrasena } from "@/lib/auth/password";
+import { verificarCuenta } from "@/lib/auth/password";
 import { registrarActividad } from "@/lib/actividad";
 import { permitir } from "@/lib/limite";
 import { rutaInterna } from "@/lib/rutas";
@@ -30,7 +30,9 @@ export async function iniciarSesion(_: EstadoLogin, form: FormData): Promise<Est
 
   const u = await db.users.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
   // Mismo mensaje exista o no la cuenta: no se confirma que un correo esta registrado.
-  if (!u || !verificarContrasena(u.password, contrasena)) {
+  // verificarCuenta hace el mismo trabajo exista o no la cuenta: el tiempo no la delata.
+  const valida = verificarCuenta(u?.password, contrasena);
+  if (!u || !valida) {
     return { error: "Correo o contraseña incorrectos.", email };
   }
   if (!u.is_active) return { error: "Tu cuenta está desactivada. Habla con un administrador.", email };
