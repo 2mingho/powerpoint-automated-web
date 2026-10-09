@@ -103,7 +103,9 @@ def _autenticar():
         return _error(401, 'Token de servicio no válido.')
 
     crudo = (request.headers.get('X-Usuario-Id') or '').strip()
-    if not crudo.isdigit():
+    # Solo digitos ASCII y dentro de un INTEGER de PostgreSQL: str.isdigit()
+    # acepta '²' (int() falla: 500) y un numero enorme desborda la consulta.
+    if not (crudo.isascii() and crudo.isdigit()) or len(crudo) > 10 or int(crudo) > 2**31 - 1:
         return _error(401, 'Falta el usuario de la sesión.')
     usuario = db.session.get(User, int(crudo))
     if usuario is None or not usuario.is_active:
