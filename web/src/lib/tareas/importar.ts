@@ -11,7 +11,7 @@ import { filtroTareasVisibles, idsUsuariosDelAmbito } from "@/lib/tareas/alcance
 import { areaDe, diaDb } from "./base";
 import { condicionesFiltro } from "./consultas";
 import {
-  CAMPOS_CSV, COLUMNAS_CSV, camposVacios, decodificarCsv, erroresPlanos, escribirCsv, extraerFilasCsv,
+  CAMPOS_CSV, COLUMNAS_CSV, camposVacios, decodificarCsv, erroresPlanos, escribirCsv, extraerFilasCsv, neutralizarFormula,
   validarFilaCsv, vistaPreviaCsv, type ContextoCsv, type ErrorPlano, type FilaCsv, type FilaVistaPrevia, type PersonaCsv,
 } from "./csv";
 import { formatoMdy } from "./fechas";
@@ -138,6 +138,6 @@ export async function exportar(u: UsuarioActual, f: Filtros) {
       iso(t.start_date), iso(t.end_date), iso(t.due_date), t.directorate ?? "", t.client ?? "", t.title ?? "",
       t.requested_by ?? "", t.asignado.username, t.description ?? "", t.budget_type ?? "", t.priority || defecto,
       t.is_recurrent && t.recurrence_type ? t.recurrence_type : "No",
-    ]),
+    ].map(neutralizarFormula)),
   ]);
 }

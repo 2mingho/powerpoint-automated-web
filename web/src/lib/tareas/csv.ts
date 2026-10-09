@@ -282,6 +282,15 @@ export function vistaPreviaCsv(filas: FilaCsv[], personas: PersonaCsv[], ctx: Co
   return { rows, total_rows: rows.length, ok_rows: ok, warning_rows: avisos, error_rows: fallos, errors };
 }
 
+/*
+ * Un campo que empieza por = + - @ (o por tabulador o retorno) es una formula
+ * al abrir el CSV en una hoja de calculo: HYPERLINK que filtra datos, DDE. Se
+ * antepone un apostrofo, como la exportacion de Equipo. Solo para datos.
+ */
+export function neutralizarFormula(valor: string): string {
+  return /^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor;
+}
+
 /* Escritura como csv.writer de Python: comillas solo cuando hacen falta, fin de linea CRLF. */
 export function celdaCsv(valor: string): string {
   return /[",\r\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor;
