@@ -8,7 +8,7 @@ import { estadoInicial, estadosFinales, prioridadesValidas, prioridadPorDefecto 
 import { hoyNegocio } from "@/lib/reloj";
 import type { UsuarioActual } from "@/lib/auth/session";
 import { filtroTareasVisibles, idsUsuariosDelAmbito } from "@/lib/tareas/alcance";
-import { areaDe, diaDb } from "./base";
+import { areaDe, diaDb, MAX_DESCRIPCION } from "./base";
 import { condicionesFiltro } from "./consultas";
 import {
   CAMPOS_CSV, COLUMNAS_CSV, camposVacios, decodificarCsv, erroresPlanos, escribirCsv, extraerFilasCsv, neutralizarFormula,
@@ -88,7 +88,7 @@ export async function importar(u: UsuarioActual, d: Record<string, unknown>) {
     const p = v.parsed;
     const a = p.asignado!;
     validas.push({ fila: f, v, datos: {
-      title: v.limpio.title.slice(0, 255), description: v.limpio.description, client: v.limpio.client.slice(0, 100),
+      title: v.limpio.title.slice(0, 255), description: v.limpio.description.slice(0, MAX_DESCRIPCION), client: v.limpio.client.slice(0, 100),
       start_date: p.inicio ? diaDb(p.inicio) : null, end_date: p.fin ? diaDb(p.fin) : null,
       directorate: v.limpio.directorate.slice(0, 255), requested_by: v.limpio.requested_by.slice(0, 255),
       budget_type: v.limpio.budget_type.slice(0, 255), due_date: diaDb(p.entrega!), status: estado, priority: p.prioridad,

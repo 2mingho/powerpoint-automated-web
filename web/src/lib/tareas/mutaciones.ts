@@ -7,7 +7,7 @@ import { estadoInicial, estadosFinales, estadosValidos, prioridadesValidas, prio
 import type { UsuarioActual } from "@/lib/auth/session";
 import { filtroTareasVisibles, puedeAsignarA } from "@/lib/tareas/alcance";
 import { notificarVarios } from "@/lib/notificaciones";
-import { aDTOs, areaDe, diaDb, enlaceTarea, filtroVisiblesYObservadas, INCLUIR_TAREA, MAX_FILAS, tareaEditable, texto, type TareaFila } from "./base";
+import { aDTOs, areaDe, descripcion, diaDb, enlaceTarea, filtroVisiblesYObservadas, INCLUIR_TAREA, MAX_FILAS, tareaEditable, texto, type TareaFila } from "./base";
 import { avisarAsignacion, avisarCambioDeEstado } from "./avisos";
 import { esFinDeSemana, generarFechasRecurrencia, parsearFechaEntrada, TIPOS_RECURRENCIA } from "./fechas";
 import { colocar, compararColumna } from "./posiciones";
@@ -76,7 +76,7 @@ export async function crearTarea(u: UsuarioActual, d: Record<string, unknown>) {
   const ahora = new Date();
   const comun = {
     title: titulo,
-    description: texto(d.description),
+    description: descripcion(d.description),
     client: texto(d.client).slice(0, 100),
     start_date: inicio ? diaDb(inicio) : null,
     end_date: fin ? diaDb(fin) : null,
@@ -114,7 +114,7 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
   const datos: Prisma.tasksUncheckedUpdateInput = {};
 
   if ("title" in d) datos.title = texto(d.title).slice(0, 255) || previa.title;
-  if ("description" in d) datos.description = texto(d.description);
+  if ("description" in d) datos.description = descripcion(d.description);
   if ("client" in d) datos.client = texto(d.client).slice(0, 100);
   if ("directorate" in d) datos.directorate = texto(d.directorate).slice(0, 255);
   if ("requested_by" in d) datos.requested_by = texto(d.requested_by).slice(0, 255);

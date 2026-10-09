@@ -169,6 +169,15 @@ export function texto(valor: unknown): string {
   return typeof valor === "string" ? valor.trim() : valor == null ? "" : String(valor).trim();
 }
 
+/* Tope de las descripciones (tareas, plantillas, solicitudes): la columna es TEXT, sin limite propio. */
+export const MAX_DESCRIPCION = 10_000;
+
+export function descripcion(valor: unknown): string {
+  const d = texto(valor);
+  if (d.length > MAX_DESCRIPCION) throw new ErrorApi(400, `La descripción no puede pasar de ${MAX_DESCRIPCION.toLocaleString("es")} caracteres.`);
+  return d;
+}
+
 export function diaDb(iso: string) {
   return fechaDeIso(iso) as Date;
 }

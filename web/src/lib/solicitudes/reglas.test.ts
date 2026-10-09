@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { enlaceNuevo, esFechaIso, leerMotivo, leerNuevaSolicitud, ordenarBandeja, salioDeLaBandeja } from "./reglas";
 
+describe("topes de longitud", () => {
+  it("rechaza descripciones y motivos desmesurados", () => {
+    expect(leerNuevaSolicitud({ titulo: "T", unidadDestinoId: 2, descripcion: "x".repeat(10_001) }).ok).toBe(false);
+    expect(leerNuevaSolicitud({ titulo: "T", unidadDestinoId: 2, descripcion: "x".repeat(10_000) }).ok).toBe(true);
+    expect(leerMotivo({ motivo: "x".repeat(2_001) }).ok).toBe(false);
+  });
+});
+
 describe("leerNuevaSolicitud", () => {
   it("exige titulo y unidad", () => {
     expect(leerNuevaSolicitud({ titulo: " ", unidadDestinoId: 2 }).ok).toBe(false);

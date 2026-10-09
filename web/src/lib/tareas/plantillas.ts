@@ -7,7 +7,7 @@ import { estadoInicial, prioridadesValidas, prioridadPorDefecto } from "@/lib/ca
 import { hoyNegocio } from "@/lib/reloj";
 import type { UsuarioActual } from "@/lib/auth/session";
 import { puedeAsignarA } from "@/lib/tareas/alcance";
-import { aDTOs, areaDe, diaDb, INCLUIR_TAREA, texto } from "./base";
+import { aDTOs, areaDe, descripcion, diaDb, INCLUIR_TAREA, texto } from "./base";
 import { avisarAsignacion } from "./avisos";
 import { desplazarDiasHabiles, parsearFechaEntrada } from "./fechas";
 import type { PlantillaDTO } from "./tipos";
@@ -47,7 +47,7 @@ async function validarDatos(crudo: unknown): Promise<Datos> {
   if (checklist.length > 30) throw new ErrorApi(400, "Máximo 30 ítems en el checklist.");
   checklist.forEach((it, i) => { if (typeof it !== "string" || !it.trim()) throw new ErrorApi(400, `Checklist ítem #${i + 1} inválido.`); });
   return {
-    title, description: texto(p.description), client: texto(p.client), priority, budget_type: texto(p.budget_type),
+    title, description: descripcion(p.description), client: texto(p.client), priority, budget_type: texto(p.budget_type),
     due_offset_days: off, checklist: (checklist as string[]).map((s) => s.trim()),
   };
 }
