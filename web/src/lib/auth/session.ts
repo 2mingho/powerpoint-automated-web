@@ -11,6 +11,9 @@ export type DatosSesion = { userId?: number; token?: string };
 export const opcionesSesion: SessionOptions = {
   password: process.env.SESSION_SECRET as string,
   cookieName: "nl_sesion",
+  // El sello caduca con la cookie: sin ttl, iron-session sella para 14 dias y
+  // una cookie copiada seguiria valiendo mucho despues de que el navegador la tire.
+  ttl: 60 * 60 * 12,
   cookieOptions: {
     httpOnly: true,
     sameSite: "lax",

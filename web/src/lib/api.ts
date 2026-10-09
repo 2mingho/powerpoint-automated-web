@@ -12,11 +12,38 @@ export class ErrorApi extends Error {
 
 export function ok<T>(datos: T, status = 200) { return NextResponse.json(datos, { status }); }
 
+/*
+ * Defensa CSRF de las mutaciones. SameSite=lax corta lo que llega de otro
+ * sitio, pero no de un subdominio hermano (same-site), y cuerpo() lee JSON
+ * aunque venga como text/plain, que un <form> envia sin preflight. Un
+ * navegador siempre manda Sec-Fetch-Site u Origin en un POST: si dicen que
+ * viene de fuera, se rechaza. Sin ninguna de las dos (curl, pruebas) pasa: no
+ * hay cookie ajena que aprovechar.
+ */
+export function origenAjeno(req: Request): boolean {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return false;
+  // Sec-Fetch-Site lo pone el navegador y no depende de como reescriba Host el
+  // proxy de delante; Origin contra Host queda para navegadores sin el.
+  const sitio = req.headers.get("sec-fetch-site");
+  if (sitio) return sitio !== "same-origin" && sitio !== "none";
+  const origen = req.headers.get("origin");
+  if (!origen) return false;
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  try {
+    return !host || new URL(origen).host !== host;
+  } catch {
+    return true;
+  }
+}
+
+const ORIGEN_AJENO = "Petición rechazada: no viene de esta aplicación.";
+
 export function conUsuario<C>(
   manejador: (req: Request, u: UsuarioActual, ctx: C) => Promise<Response>,
   opts: { herramienta?: Herramienta; soloAdmin?: boolean } = {},
 ) {
   return async (req: Request, ctx: C): Promise<Response> => {
+    if (origenAjeno(req)) return NextResponse.json({ error: ORIGEN_AJENO }, { status: 403 });
     const u = await usuarioActual();
     if (!u) return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
     if (opts.soloAdmin && !u.isAdmin) return NextResponse.json({ error: "Sin permisos." }, { status: 403 });

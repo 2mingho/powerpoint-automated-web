@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { conUsuario, cuerpo, ErrorApi, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 import { generarHash } from "@/lib/auth/password";
@@ -59,6 +60,8 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/usuarios/[id]">>(async 
   if ("contrasena" in d && typeof d.contrasena === "string" && d.contrasena) {
     if (d.contrasena.length < 8) throw new ErrorApi(400, "La contraseña debe tener al menos 8 caracteres.");
     datos.password = generarHash(d.contrasena);
+    // Cambiar la contrasena (p. ej. tras un robo de cuenta) cierra las sesiones abiertas de esa persona.
+    datos.session_token = randomBytes(24).toString("hex");
     cambios.push("contraseña actualizada");
   }
 

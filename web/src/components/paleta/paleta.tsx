@@ -26,6 +26,15 @@ const SIN_TAREAS: TareaEncontrada[] = [];
 
 const normalizar = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
+/* Cerrar sesion es un POST (ver api/sesion/salir): un formulario efimero, sin JS de por medio en el servidor. */
+function salir() {
+  const f = document.createElement("form");
+  f.method = "post";
+  f.action = "/api/sesion/salir";
+  document.body.appendChild(f);
+  f.submit();
+}
+
 function alternarTema() {
   const raiz = document.documentElement;
   const nuevo = raiz.dataset.theme === "dark" ? "light" : "dark";
@@ -116,7 +125,7 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
       { id: "tema", grupo: "Acciones", titulo: oscuro ? "Cambiar a tema claro" : "Cambiar a tema oscuro", claves: "tema oscuro claro modo", icono: oscuro ? "Sun" : "Moon", ejecutar: () => { cerrar(); alternarTema(); } },
       { id: "tour", grupo: "Acciones", titulo: "Ver el tour de bienvenida", claves: "ayuda recorrido guia", icono: "Compass", ejecutar: () => { cerrar(); iniciarTour(); } },
       // Al final: un Enter mal dado no deberia echarte.
-      { id: "salir", grupo: "Acciones", titulo: "Cerrar sesión", claves: "salir logout", icono: "LogOut", ejecutar: () => { cerrar(); window.location.assign(new URL("/api/sesion/salir", window.location.origin).href); } },
+      { id: "salir", grupo: "Acciones", titulo: "Cerrar sesión", claves: "salir logout", icono: "LogOut", ejecutar: () => { cerrar(); salir(); } },
     );
     const navegacion: Comando[] = items.map((i) => ({
       id: `nav:${i.href}`, grupo: "Ir a", titulo: i.rotulo, icono: i.icono, ejecutar: () => ir(i.href),

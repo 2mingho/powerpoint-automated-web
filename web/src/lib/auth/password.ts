@@ -41,6 +41,19 @@ export function verificarContrasena(hash: string, contrasena: string): boolean {
   return false;
 }
 
+/*
+ * Hash de relleno con el mismo coste que los reales. Si el correo no existe se
+ * verifica contra el igualmente: sin el, "no existe" respondia en milisegundos
+ * y "contrasena equivocada" tras un scrypt, y el reloj delataba que cuentas hay.
+ */
+let relleno: string | null = null;
+export function verificarCuenta(hash: string | null | undefined, contrasena: string): boolean {
+  if (hash) return verificarContrasena(hash, contrasena);
+  relleno ??= generarHash("relleno-sin-cuenta");
+  verificarContrasena(relleno, contrasena);
+  return false;
+}
+
 /* Mismo formato que werkzeug, para que la app Flask siga aceptandolos mientras conviven. */
 export function generarHash(contrasena: string): string {
   const N = 32768, r = 8, p = 1;

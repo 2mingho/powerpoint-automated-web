@@ -1,6 +1,7 @@
 import "server-only";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
+import { ipCliente } from "@/lib/ip";
 
 /* Registro en activity_logs, como log_activity() de Flask. Nunca rompe la peticion que lo llama. */
 export async function registrarActividad(
@@ -11,7 +12,7 @@ export async function registrarActividad(
 ) {
   try {
     const h = await headers();
-    const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "").trim().slice(0, 45) || null;
+    const ip = ipCliente(h);
     await db.activity_logs.create({
       data: {
         user_id: userId,

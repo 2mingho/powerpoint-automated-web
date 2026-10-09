@@ -3,6 +3,7 @@
  * Sin base ni sesion: lo que se puede probar con Vitest sin montar nada.
  */
 import type { Tono } from "@/lib/catalogo";
+import { rutaInterna } from "@/lib/rutas";
 
 export const ESTADOS_SOLICITUD = ["Pendiente", "Aceptada", "Rechazada", "Cancelada"] as const;
 export type EstadoSolicitud = (typeof ESTADOS_SOLICITUD)[number];
@@ -32,6 +33,8 @@ export function salioDeLaBandeja(resuelta: string | null, ahora = Date.now()) {
 export const MIN_MOTIVO = 5;
 export const MAX_TITULO = 255;
 export const MAX_CLIENTE = 100;
+export const MAX_DESCRIPCION = 10_000;
+export const MAX_MOTIVO = 2_000;
 
 export type DatosNuevaSolicitud = {
   titulo: string;
@@ -57,6 +60,9 @@ export function leerNuevaSolicitud(c: Record<string, unknown>): { ok: true; dato
   const cliente = typeof c.cliente === "string" ? c.cliente.trim() : "";
   if (cliente.length > MAX_CLIENTE) return { ok: false, error: `El cliente no puede pasar de ${MAX_CLIENTE} caracteres.` };
 
+  const descripcion = typeof c.descripcion === "string" ? c.descripcion.trim() : "";
+  if (descripcion.length > MAX_DESCRIPCION) return { ok: false, error: `La descripción no puede pasar de ${MAX_DESCRIPCION.toLocaleString("es")} caracteres.` };
+
   return {
     ok: true,
     datos: {
@@ -64,7 +70,7 @@ export function leerNuevaSolicitud(c: Record<string, unknown>): { ok: true; dato
       unidadDestinoId: unidad,
       prioridad: typeof c.prioridad === "string" && c.prioridad.trim() ? c.prioridad.trim() : null,
       entrega,
-      descripcion: typeof c.descripcion === "string" ? c.descripcion.trim() : "",
+      descripcion,
       cliente,
     },
   };
@@ -79,6 +85,7 @@ export function esFechaIso(v: string) {
 export function leerMotivo(c: Record<string, unknown>): { ok: true; motivo: string } | { ok: false; error: string } {
   const motivo = typeof c.motivo === "string" ? c.motivo.trim() : "";
   if (motivo.length < MIN_MOTIVO) return { ok: false, error: `Escribe el motivo (mínimo ${MIN_MOTIVO} caracteres).` };
+  if (motivo.length > MAX_MOTIVO) return { ok: false, error: `El motivo no puede pasar de ${MAX_MOTIVO.toLocaleString("es")} caracteres.` };
   return { ok: true, motivo };
 }
 
@@ -113,6 +120,5 @@ export function enlaceNuevo(enlace: string | null | undefined): string | null {
   if (tarea) return `/tareas?tarea=${tarea[1]}`;
   if (enlace === "/task-requests" || enlace.startsWith("/task-requests?")) return "/solicitudes";
   if (enlace === "/tasks" || enlace.startsWith("/tasks?")) return "/tareas";
-  if (!enlace.startsWith("/") || enlace.startsWith("//")) return null;
-  return enlace;
+  return rutaInterna(enlace);
 }

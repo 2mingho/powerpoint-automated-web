@@ -103,7 +103,9 @@ def _autenticar():
         return _error(401, 'Token de servicio no válido.')
 
     crudo = (request.headers.get('X-Usuario-Id') or '').strip()
-    if not crudo.isdigit():
+    # Solo digitos ASCII y dentro de un INTEGER de PostgreSQL: str.isdigit()
+    # acepta '²' (int() falla: 500) y un numero enorme desborda la consulta.
+    if not (crudo.isascii() and crudo.isdigit()) or len(crudo) > 10 or int(crudo) > 2**31 - 1:
         return _error(401, 'Falta el usuario de la sesión.')
     usuario = db.session.get(User, int(crudo))
     if usuario is None or not usuario.is_active:
@@ -136,7 +138,12 @@ def _http(e):
 
 
 def _comprobar_tamano(clave):
-    """413 antes de leer el cuerpo si el Content-Length ya lo delata."""
+    """413 antes de leer el cuerpo si el Content-Length ya lo delata.
+
+    Sin Content-Length (subida 'chunked', que Next reenvia en streaming) el
+    limite lo aplica Werkzeug al leer: max_content_length por peticion.
+    """
+    request.max_content_length = LIMITES[clave]
     largo = request.content_length
     if largo is not None and largo > LIMITES[clave]:
         limite = LIMITES[clave] // MB

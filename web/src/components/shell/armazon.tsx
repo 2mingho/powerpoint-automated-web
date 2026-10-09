@@ -79,9 +79,12 @@ export function NavRail({ items, usuario }: { items: ItemNav[]; usuario: Usuario
           <p className="truncate text-xs text-rail-texto">{usuario.papel}{usuario.unidad ? ` · ${usuario.unidad}` : ""}</p>
         </div>
         <SelectorTema />
-        <a href="/api/sesion/salir" aria-label="Cerrar sesión" className="grid size-9 place-items-center rounded-sm text-rail-texto hover:bg-rail-2 hover:text-rail-fuerte">
-          <Iconos.LogOut className="size-4" aria-hidden />
-        </a>
+        {/* POST: un GET con efectos lo dispararia cualquier pagina ajena. */}
+        <form method="post" action="/api/sesion/salir">
+          <button type="submit" aria-label="Cerrar sesión" className="grid size-9 place-items-center rounded-sm text-rail-texto hover:bg-rail-2 hover:text-rail-fuerte">
+            <Iconos.LogOut className="size-4" aria-hidden />
+          </button>
+        </form>
       </div>
     </>
   );
