@@ -18,7 +18,7 @@ async function abrirSolicitud(page: Page, titulo: string) {
 }
 
 test("aceptar desde el pase crea la tarea, la fila cambia de estado y avisa a quien la pidio", async ({ page, context, browser }) => {
-  await entrar(context, "lider.di@local.test");
+  await entrar(context, "carlos@equipo.test");
   await page.goto("/solicitudes?bandeja=recibidas");
   const pase = await abrirSolicitud(page, "Informe de menciones de octubre");
   await pase.getByRole("button", { name: "Aceptar", exact: true }).click();
@@ -34,7 +34,7 @@ test("aceptar desde el pase crea la tarea, la fila cambia de estado y avisa a qu
 
   // La campana de quien la pidio la trae.
   const otro = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
-  await entrar(otro, "miembro.com@local.test");
+  await entrar(otro, "elena@equipo.test");
   const p2 = await otro.newPage();
   await p2.goto("/solicitudes");
   const campana = p2.getByRole("button", { name: /Notificaciones: \d+ sin leer/ });
@@ -48,7 +48,7 @@ test("aceptar desde el pase crea la tarea, la fila cambia de estado y avisa a qu
 });
 
 test("rechazar pide un motivo y queda en el recorrido", async ({ page, context }) => {
-  await entrar(context, "lider.di@local.test");
+  await entrar(context, "carlos@equipo.test");
   await page.goto("/solicitudes?bandeja=recibidas");
   const pase = await abrirSolicitud(page, "Análisis de sentimiento");
   await pase.getByRole("button", { name: "Rechazar", exact: true }).click();

@@ -3,8 +3,8 @@ import { api, consulta, idDe, idSolicitud, sembrar } from "./ayuda";
 
 /*
  * Contratos de servidor del modulo (tests/test_solicitudes_observacion.py,
- * test_security_permissions.py y test_tour.py de Flask), contra la base
- * newlink_solicitudes. Comparten base: ejecutar con --workers=1.
+ * test_security_permissions.py y test_tour.py de Flask), sobre la base
+ * comun (e2e/semilla.ts); cada bateria vuelve a sembrar solo las solicitudes.
  */
 test.describe.configure({ mode: "serial" });
 test.beforeEach(({}, info) => { test.skip(info.project.name !== "escritorio", "Pruebas de API: una vez basta"); });
@@ -14,7 +14,7 @@ type Sol = { id: number; titulo: string; estado: string; tareaId: number | null;
 
 test.describe("aislamiento", () => {
   test("Recibidas solo muestra lo dirigido al ambito; quien no lo tiene no ve ni el conteo", async () => {
-    const lider = await api("lider.di@local.test");
+    const lider = await api("carlos@equipo.test");
     const r = await (await lider.get("/api/solicitudes?bandeja=recibidas")).json();
     const titulos = r.solicitudes.map((s: Sol) => s.titulo);
     expect(titulos).toContain("Informe de menciones de octubre para Banco Popular");
@@ -53,7 +53,7 @@ test.describe("aislamiento", () => {
 
   test("la directora resuelve lo de la unidad de su manager", async () => {
     const id = await idSolicitud("Guion para video institucional");
-    const dir = await api("directora@local.test");
+    const dir = await api("laura@equipo.test");
     const r = await (await dir.get(`/api/solicitudes/${id}`)).json();
     expect(r.solicitud.puedeResolver).toBe(true);
   });
@@ -100,11 +100,11 @@ test.describe("crear", () => {
 test.describe("resolver", () => {
   test("aceptar crea la tarea compartida en la unidad destino, deja al solicitante observando y avisa", async () => {
     const id = await idSolicitud("Informe de menciones de octubre para Banco Popular");
-    const lider = await api("lider.di@local.test");
+    const lider = await api("carlos@equipo.test");
     const asign = await (await lider.get(`/api/solicitudes/${id}/asignables`)).json();
     const nombres = asign.usuarios.map((u: { nombre: string }) => u.nombre);
     expect(nombres).toContain("analista");
-    expect(nombres).not.toContain("Ana Rosario");
+    expect(nombres).not.toContain("Elena Castro");
     const analista = await idDe("analista@local.test");
 
     const r = await lider.post(`/api/solicitudes/${id}/aceptar`, { data: { responsableId: analista.id } });
@@ -115,7 +115,7 @@ test.describe("resolver", () => {
 
     const [t] = await consulta<{ visibility: string; area: string; assignee_id: number; status: string }>("SELECT visibility, area, assignee_id, status FROM tasks WHERE id = $1", [tareaId]);
     expect(t).toMatchObject({ visibility: "shared", area: "Data Intelligence", assignee_id: analista.id, status: "Pendiente" });
-    const solicitante = await idDe("miembro.com@local.test");
+    const solicitante = await idDe("elena@equipo.test");
     expect(await consulta("SELECT 1 FROM task_watchers WHERE task_id = $1 AND user_id = $2", [tareaId, solicitante.id])).toHaveLength(1);
     const avisos = await consulta<{ user_id: number; kind: string; link_url: string }>("SELECT user_id, kind, link_url FROM notifications WHERE entity_type = 'task' AND entity_id = $1 ORDER BY kind", [tareaId]);
     expect(avisos).toEqual([
@@ -126,14 +126,14 @@ test.describe("resolver", () => {
 
   test("el responsable tiene que ser de la unidad destino", async () => {
     const id = await idSolicitud("Monitoreo de marca para cliente nuevo");
-    const lider = await api("lider.di@local.test");
-    const r = await lider.post(`/api/solicitudes/${id}/aceptar`, { data: { responsableId: (await idDe("miembro.com@local.test")).id } });
+    const lider = await api("carlos@equipo.test");
+    const r = await lider.post(`/api/solicitudes/${id}/aceptar`, { data: { responsableId: (await idDe("elena@equipo.test")).id } });
     expect(r.status()).toBe(400);
   });
 
   test("dos aceptaciones simultaneas: una gana, la otra recibe 409 y solo hay una tarea", async () => {
     const id = await idSolicitud("Monitoreo de marca para cliente nuevo");
-    const lider = await api("lider.di@local.test");
+    const lider = await api("carlos@equipo.test");
     const admin = await api("demo@local.test");
     const responsable = (await idDe("analista@local.test")).id;
     const [a, b] = await Promise.all([
@@ -148,7 +148,7 @@ test.describe("resolver", () => {
 
   test("rechazar exige motivo y se lo hace llegar a quien la pidio", async () => {
     const id = await idSolicitud("Análisis de sentimiento del lanzamiento");
-    const lider = await api("lider.di@local.test");
+    const lider = await api("carlos@equipo.test");
     expect((await lider.post(`/api/solicitudes/${id}/rechazar`, { data: { motivo: "no" } })).status()).toBe(400);
     const r = await lider.post(`/api/solicitudes/${id}/rechazar`, { data: { motivo: "Ya lo cubre el informe mensual." } });
     expect(r.status()).toBe(200);
@@ -159,9 +159,9 @@ test.describe("resolver", () => {
 
   test("solo quien la pidio (o un admin) la cancela", async () => {
     const id = await idSolicitud("Nota de prensa de la campaña de verano"); // analista -> Comunicación
-    const lider = await api("lider.com@local.test");
+    const lider = await api("sofia@equipo.test");
     expect((await lider.post(`/api/solicitudes/${id}/cancelar`)).status()).toBe(403);
-    const colega = await api("lider.di@local.test"); // ve las enviadas de su unidad, pero no son suyas
+    const colega = await api("carlos@equipo.test"); // ve las enviadas de su unidad, pero no son suyas
     expect((await colega.post(`/api/solicitudes/${id}/cancelar`)).status()).toBe(403);
     const ajeno = await api("miembro.dis@local.test");
     expect((await ajeno.post(`/api/solicitudes/${id}/cancelar`)).status()).toBe(404);
@@ -173,23 +173,23 @@ test.describe("resolver", () => {
   });
 
   test("sin la herramienta de tareas no se resuelve", async () => {
-    await consulta("UPDATE users SET allowed_tools = '[\"reports\"]' WHERE email = 'lider.com@local.test'");
+    await consulta("UPDATE users SET allowed_tools = '[\"reports\"]' WHERE email = 'sofia@equipo.test'");
     try {
       const id = await idSolicitud("Guion para video institucional");
-      const lider = await api("lider.com@local.test");
+      const lider = await api("sofia@equipo.test");
       expect((await lider.post(`/api/solicitudes/${id}/rechazar`, { data: { motivo: "sin herramienta" } })).status()).toBe(403);
     } finally {
-      await consulta("UPDATE users SET allowed_tools = NULL WHERE email = 'lider.com@local.test'");
+      await consulta("UPDATE users SET allowed_tools = NULL WHERE email = 'sofia@equipo.test'");
     }
   });
 });
 
 test.describe("notificaciones", () => {
   test("cada uno ve, cuenta y marca solo las suyas", async () => {
-    const lider = await api("lider.di@local.test");
+    const lider = await api("carlos@equipo.test");
     const analista = await api("analista@local.test");
     const mias = await (await analista.get("/api/notificaciones")).json();
-    const idsLider = (await consulta<{ id: number }>("SELECT id FROM notifications WHERE user_id = $1", [(await idDe("lider.di@local.test")).id])).map((x) => x.id);
+    const idsLider = (await consulta<{ id: number }>("SELECT id FROM notifications WHERE user_id = $1", [(await idDe("carlos@equipo.test")).id])).map((x) => x.id);
     expect(mias.items.some((n: { id: number }) => idsLider.includes(n.id))).toBe(false);
 
     const ajena = idsLider[0];

@@ -1,9 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { entrar, prepararUsuarios, USUARIOS } from "./ayuda";
+import { entrar, USUARIOS } from "./ayuda";
 
 /* Clasificacion, union y analisis: archivo → opciones → proceso → resultado descargable. */
 test.describe.configure({ mode: "serial" });
-test.beforeAll(async () => { await prepararUsuarios(); });
 test.beforeEach(async ({}, info) => { test.skip(info.project.name !== "escritorio", "flujos en escritorio"); test.setTimeout(120_000); });
 
 const utf16 = (s: string) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, "utf16le")]);
