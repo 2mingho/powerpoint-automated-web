@@ -13,6 +13,7 @@ import { mensajeDe, pedir } from "@/lib/admin/cliente";
 import { fDia } from "@/lib/admin/formato";
 import type { FilaTareaEquipo, PanelEquipo } from "@/lib/equipo/datos";
 import { CargaPorPersona, Leyenda, Tendencia, VencidasPorUnidad } from "./graficos";
+import { MapaDeCalor } from "./mapa-calor";
 
 type Tareas = { total: number; tareas: FilaTareaEquipo[]; max: number; opciones: { personas: { id: number; nombre: string }[]; clientes: string[] } };
 type Datos = { panel: PanelEquipo; tareas: Tareas };
@@ -119,6 +120,11 @@ export function PanelDeEquipo({ inicial, filtrosIniciales, esAdmin, ajena = fals
           </div>
         ))}
       </section>
+
+      <Panel titulo="Carga por semana" acciones={<span className="text-xs text-texto-3">horas abiertas contra capacidad</span>}>
+        <MapaDeCalor calor={panel.calor} activa={filtros.asignado ? Number(filtros.asignado) : null}
+          onPersona={(id) => cambiar({ asignado: filtros.asignado === String(id) ? "" : String(id) })} />
+      </Panel>
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Panel titulo="Carga por persona" acciones={<span className="text-xs text-texto-3">abiertas por estado</span>}>

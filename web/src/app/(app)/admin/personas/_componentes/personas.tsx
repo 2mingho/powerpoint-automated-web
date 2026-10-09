@@ -224,6 +224,7 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
   const [rol, setRol] = useState(persona?.rol ?? opciones.roles[0]?.codigo ?? "DI");
   const [unidad, setUnidad] = useState(persona?.unidadId ? String(persona.unidadId) : "");
   const [superior, setSuperior] = useState(persona?.managerId ? String(persona.managerId) : "");
+  const [capacidad, setCapacidad] = useState(persona?.capacidad != null ? String(persona.capacidad) : "");
   const [herr, setHerr] = useState<string[]>(persona?.herramientas ?? HERRAMIENTAS.map((h) => h.clave));
   const [contrasena, setContrasena] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -234,6 +235,7 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
     const e: Record<string, string> = {};
     if (nombre.trim().length < 3) e.nombre = "Al menos 3 caracteres.";
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) e.email = "Escribe un correo válido.";
+    if (capacidad.trim() && !(Number.isInteger(Number(capacidad)) && Number(capacidad) >= 0 && Number(capacidad) <= 80)) e.capacidad = "Un número entero de horas, de 0 a 80.";
     if (!persona && contrasena.length < 8) e.contrasena = "Al menos 8 caracteres.";
     if (persona && contrasena && contrasena.length < 8) e.contrasena = "Al menos 8 caracteres, o déjala vacía para no cambiarla.";
     setErrores(e);
@@ -246,7 +248,7 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
     setGuardando(true);
     const cuerpo = {
       nombre, email, rol, unidadId: unidad ? Number(unidad) : null, herramientas: herr,
-      ...(persona ? { managerId: superior ? Number(superior) : null } : {}),
+      ...(persona ? { managerId: superior ? Number(superior) : null, capacidad } : {}),
       ...(contrasena ? { contrasena } : {}),
     };
     try {
@@ -297,6 +299,11 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
               {opciones.personas.filter((p) => p.id !== persona.id).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </Selector>
           )}
+        </Campo>
+      )}
+      {persona && (
+        <Campo etiqueta="Capacidad semanal (horas)" error={errores.capacidad} ayuda="Vacío usa 35 h. Con 0 no recibe carga y no sale en el mapa de calor (dirección, administración).">
+          {(a) => <Entrada {...a} type="number" inputMode="numeric" min="0" max="80" step="1" value={capacidad} placeholder="35" onChange={(e) => setCapacidad(e.target.value)} />}
         </Campo>
       )}
       <fieldset className="flex flex-col gap-1.5">

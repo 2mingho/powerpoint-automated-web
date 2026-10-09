@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { alcanceUnidades } from "@/lib/alcance";
 import { estados, estadosFinales, prioridadPorDefecto, type Estado } from "@/lib/catalogo";
 import { hoyNegocio, isoDeFecha } from "@/lib/reloj";
+import { calorDeEquipo, type CalorEquipo } from "./calor";
 import { filtroTareasVisibles } from "@/lib/tareas/alcance";
 import type { UsuarioActual } from "@/lib/auth/session";
 import {
@@ -67,7 +68,7 @@ function inicioDiaUtc(iso: string): Date {
   return new Date(`${iso}T00:00:00-04:00`);
 }
 
-async function whereBase(u: UsuarioActual, unidades: number[]): Promise<Prisma.tasksWhereInput> {
+export async function whereBase(u: UsuarioActual, unidades: number[]): Promise<Prisma.tasksWhereInput> {
   return { AND: [await filtroTareasVisibles(u), { area_id: { in: unidades } }] };
 }
 
@@ -95,6 +96,7 @@ export type PanelEquipo = {
   carga: FilaCarga[];
   tendencia: PuntoTendencia[];
   porUnidad: FilaUnidad[];
+  calor: CalorEquipo;
 };
 
 export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<PanelEquipo> {
@@ -128,6 +130,7 @@ export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<P
   });
   const nombres = new Map(personas.map((p) => [p.id, p.username]));
   const lista = unidades.map((a) => ({ id: a.id, nombre: a.name }));
+  const calor = await calorDeEquipo(await whereBase(u, alcance.elegidas), alcance.elegidas, finalesLista, hoy);
   const elegidas = lista.filter((a) => alcance.elegidas.includes(a.id));
 
   return {
@@ -138,6 +141,7 @@ export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<P
     carga: cargaPorPersona(tareas, finales, hoy, catalogo.map((e) => e.nombre), nombres),
     tendencia: tendencia(tareas, finales, hoy, 8),
     porUnidad: vencidasPorUnidad(tareas, finales, hoy, elegidas),
+    calor,
   };
 }
 

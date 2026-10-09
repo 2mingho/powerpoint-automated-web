@@ -5,6 +5,7 @@ import { generarHash } from "@/lib/auth/password";
 import { HERRAMIENTAS } from "@/lib/auth/session";
 import { registrarActividad } from "@/lib/actividad";
 import { enteroONulo, idDeRuta, SOLO_ADMIN, texto } from "@/lib/admin/api";
+import { leerCapacidad } from "@/lib/seguimiento/estado";
 import { usuarioEditable, validarRol, validarSuperior } from "@/lib/admin/usuarios";
 
 /*
@@ -50,6 +51,11 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/usuarios/[id]">>(async 
     const jefeId = enteroONulo(d.managerId);
     if (jefeId) await validarSuperior(id, jefeId);
     if (jefeId !== actual.manager_id) { datos.manager_id = jefeId; cambios.push("superior actualizado"); }
+  }
+  if ("capacidad" in d) {
+    const c = leerCapacidad(d.capacidad);
+    if (!c.ok) throw new ErrorApi(400, c.error);
+    if (c.valor !== actual.weekly_capacity) { datos.weekly_capacity = c.valor; cambios.push(`capacidad semanal: ${actual.weekly_capacity ?? "estándar"} -> ${c.valor ?? "estándar"}`); }
   }
   if ("herramientas" in d) {
     if (!Array.isArray(d.herramientas)) throw new ErrorApi(400, "Herramientas inválidas.");

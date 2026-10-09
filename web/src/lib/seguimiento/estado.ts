@@ -25,6 +25,16 @@ export function leerHoras(crudo: unknown): Leido<number | null> {
   return { ok: true, valor: Math.round(n * 100) / 100 };
 }
 
+export const CAPACIDAD_MAX = 80;
+
+/* Capacidad semanal de un formulario: "" la quita (usa la estandar); 0 a 80 horas enteras. 0 = no recibe carga. */
+export function leerCapacidad(crudo: unknown): Leido<number | null> {
+  if (crudo === null || crudo === undefined || (typeof crudo === "string" && !crudo.trim())) return { ok: true, valor: null };
+  const n = typeof crudo === "number" ? crudo : typeof crudo === "string" ? Number(crudo.trim()) : Number.NaN;
+  if (!Number.isInteger(n) || n < 0 || n > CAPACIDAD_MAX) return { ok: false, error: `La capacidad semanal es un número entero de horas, de 0 a ${CAPACIDAD_MAX}.` };
+  return { ok: true, valor: n };
+}
+
 /* "Bloqueado", "Bloqueada", "En bloqueo": el catalogo de estados es editable, asi que se reconoce por el nombre. */
 export function esEstadoDeBloqueo(nombre: string): boolean {
   return /bloque/i.test(nombre);

@@ -111,7 +111,7 @@ export async function listarUsuarios(f: FiltrosUsuarios) {
     take: POR_PAGINA_USUARIOS,
     select: {
       id: true, username: true, email: true, role: true, is_active: true, created_at: true, allowed_tools: true,
-      area_id: true, manager_id: true, force_logout: true, areas: { select: { name: true } }, manager: { select: { username: true } },
+      area_id: true, manager_id: true, weekly_capacity: true, force_logout: true, areas: { select: { name: true } }, manager: { select: { username: true } },
     },
   });
   return {
@@ -119,7 +119,7 @@ export async function listarUsuarios(f: FiltrosUsuarios) {
     filas: filas.map((u) => ({
       id: u.id, nombre: u.username, email: u.email, rol: u.role, activo: u.is_active !== false,
       creado: u.created_at?.toISOString() ?? null, unidadId: u.area_id, unidad: u.areas?.name ?? null,
-      managerId: u.manager_id, manager: u.manager?.username ?? null, expulsado: !!u.force_logout,
+      managerId: u.manager_id, capacidad: u.weekly_capacity, manager: u.manager?.username ?? null, expulsado: !!u.force_logout,
       herramientas: herramientasDe(u.role, u.allowed_tools),
     })),
   };

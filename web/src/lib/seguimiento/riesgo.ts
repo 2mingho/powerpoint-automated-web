@@ -96,25 +96,31 @@ export function puntualidad(tareas: TareaSeg[], hoy: string): number | null {
 }
 
 /*
- * Horas abiertas de una persona por semana. Las horas pendientes (las totales
- * menos lo avanzado) se reparten parejas entre los dias habiles desde el inicio
- * (o hoy, si ya arranco) hasta la entrega; una vencida o sin dias habiles carga
- * su resto en hoy. `semanas` son lunes; las horas fuera de ellas se ignoran.
+ * Horas que una tarea abierta aporta a cada semana (sin redondear). Las horas
+ * pendientes (las totales menos lo avanzado) se reparten parejas entre los dias
+ * habiles desde el inicio (o hoy, si ya arranco) hasta la entrega; una vencida
+ * o sin dias habiles carga su resto en hoy. `semanas` son lunes; lo que cae
+ * fuera de ellas se ignora. Hecha o sin entrega no aporta nada.
  */
+export function repartoSemanal(t: TareaSeg, semanas: string[], hoy: string): number[] {
+  const out = semanas.map(() => 0);
+  if (t.estado === "hecha" || !t.entrega) return out;
+  const resto = t.horas * (1 - avance(t));
+  const inicio = inicioDe(t)!;
+  let dias = habilesEntre(inicio > hoy ? inicio : hoy, t.entrega >= hoy ? t.entrega : hoy);
+  if (!dias.length) dias = [hoy];
+  const porDia = resto / dias.length;
+  for (const d of dias) {
+    const i = semanas.findIndex((w) => d >= w && d <= sumarDias(w, 6));
+    if (i >= 0) out[i] += porDia;
+  }
+  return out;
+}
+
+/* Horas abiertas de una persona por semana, redondeadas (ver repartoSemanal). */
 export function cargaPorSemana(tareas: TareaSeg[], semanas: string[], hoy: string): number[] {
   const out = semanas.map(() => 0);
-  for (const t of tareas) {
-    if (t.estado === "hecha" || !t.entrega) continue;
-    const resto = t.horas * (1 - avance(t));
-    const inicio = inicioDe(t)!;
-    let dias = habilesEntre(inicio > hoy ? inicio : hoy, t.entrega >= hoy ? t.entrega : hoy);
-    if (!dias.length) dias = [hoy];
-    const porDia = resto / dias.length;
-    for (const d of dias) {
-      const i = semanas.findIndex((w) => d >= w && d <= sumarDias(w, 6));
-      if (i >= 0) out[i] += porDia;
-    }
-  }
+  for (const t of tareas) repartoSemanal(t, semanas, hoy).forEach((h, i) => { out[i] += h; });
   return out.map((x) => Math.round(x));
 }
 
