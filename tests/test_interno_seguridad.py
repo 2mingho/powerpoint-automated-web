@@ -3,8 +3,11 @@ Seguridad de la puerta de la API interna (blueprints/interno.py) mas alla de
 lo que cubre test_interno.py: valores raros en X-Usuario-Id, que con un token
 valido no pueden tumbar el servicio ni resolver a otro usuario.
 """
+import io
+
 import pytest
 
+from blueprints import interno
 from test_interno import TOKEN, client, usuarios  # noqa: F401  (fixtures)
 
 
@@ -27,6 +30,20 @@ def test_un_x_usuario_id_raro_nunca_es_500(client, usuarios, valor):  # noqa: F8
     assert r.status_code in (200, 401), (valor, r.status_code)
     if valor.strip() != '1':
         assert r.status_code == 401, valor
+
+
+def test_el_limite_por_herramienta_vale_tambien_sin_content_length(client, usuarios, monkeypatch):  # noqa: F811
+    """Una subida 'chunked' no trae Content-Length: el limite de la herramienta
+    se saltaba y solo quedaba el global de 200 MB (60 MB para reportes)."""
+    from werkzeug.test import EnvironBuilder
+
+    monkeypatch.setitem(interno.LIMITES, 'csv_analysis', 500)
+    cuerpo = EnvironBuilder(method='POST', data={'archivo': (io.BytesIO(b'a,b\n' * 2000), 'x.csv')}).get_environ()
+    crudo = cuerpo['wsgi.input'].read()
+    cabeceras = {**_h(str(usuarios['ana'])), 'Content-Type': cuerpo['CONTENT_TYPE'], 'Transfer-Encoding': 'chunked'}
+    r = client.post('/api/interno/analisis/detectar', headers=cabeceras, input_stream=io.BytesIO(crudo),
+                    environ_overrides={'wsgi.input_terminated': True})
+    assert r.status_code == 413, r.get_json()
 
 
 def test_el_token_no_se_compara_por_prefijo(client, usuarios):  # noqa: F811

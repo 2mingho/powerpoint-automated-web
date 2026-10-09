@@ -138,7 +138,12 @@ def _http(e):
 
 
 def _comprobar_tamano(clave):
-    """413 antes de leer el cuerpo si el Content-Length ya lo delata."""
+    """413 antes de leer el cuerpo si el Content-Length ya lo delata.
+
+    Sin Content-Length (subida 'chunked', que Next reenvia en streaming) el
+    limite lo aplica Werkzeug al leer: max_content_length por peticion.
+    """
+    request.max_content_length = LIMITES[clave]
     largo = request.content_length
     if largo is not None and largo > LIMITES[clave]:
         limite = LIMITES[clave] // MB
