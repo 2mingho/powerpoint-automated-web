@@ -30,6 +30,13 @@ export async function clientesVisibles(u: UsuarioActual): Promise<string[]> {
   return filas.map((f) => f.client!).filter(Boolean);
 }
 
+/* De esos nombres, los de clientes marcados inactivos: salen en el filtro pero no se sugieren al escribir una tarea. */
+export async function clientesInactivos(visibles: string[]): Promise<string[]> {
+  if (!visibles.length) return [];
+  const filas = await db.clients.findMany({ where: { is_active: false, name: { in: visibles } }, select: { name: true } });
+  return filas.map((f) => f.name);
+}
+
 /* Unidades para el filtro de admin. */
 export async function unidadesParaFiltro(u: UsuarioActual) {
   if (!u.isAdmin) return [];

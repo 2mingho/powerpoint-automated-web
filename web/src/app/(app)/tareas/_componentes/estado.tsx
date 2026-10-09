@@ -22,6 +22,8 @@ export type Inicial = {
   prioridades: PrioridadCatalogo[];
   personas: PersonaDTO[];
   clientes: string[];
+  /* Clientes inactivos de la lista: se filtran por ellos, pero no se sugieren al crear. */
+  clientesInactivos: string[];
   etiquetas: Array<EtiquetaDTO & { gestionable: boolean }>;
   unidades: Array<{ id: number; name: string }>;
   puedeImportar: boolean;

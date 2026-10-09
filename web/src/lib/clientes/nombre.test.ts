@@ -42,3 +42,47 @@ describe("agrupar variantes", () => {
     expect(agruparVariantes([{ nombre: "", n: 5 }, { nombre: "  ", n: 1 }])).toEqual([]);
   });
 });
+
+import { parecido, parecidos } from "./nombre";
+
+describe("parecido entre clientes", () => {
+  it("la puntuacion sola no los distingue", () => {
+    expect(parecido("claro.", "claro")).toBe(3);
+    expect(parecido("banco popular, s.a.", "banco popular sa")).toBe(3);
+    expect(parecido("grupo-ramos", "grupo ramos")).toBe(3);
+  });
+
+  it("uno es el comienzo del otro, por palabras", () => {
+    expect(parecido("claro", "claro rd")).toBe(2);
+    expect(parecido("claro rd", "claro")).toBe(2);
+    expect(parecido("banco popular", "banco popular dominicano")).toBe(2);
+  });
+
+  it("no confunde prefijos que no son palabra completa ni nombres cortos", () => {
+    expect(parecido("claro", "claros")).toBe(0);
+    expect(parecido("al", "al banco")).toBe(0);
+    expect(parecido("altice", "altos")).toBe(0);
+  });
+
+  it("una letra de diferencia solo cuenta en nombres largos", () => {
+    expect(parecido("cerveceria nacional", "cervecria nacional")).toBe(1);
+    expect(parecido("arajet", "arajat")).toBe(1);
+    expect(parecido("claro", "clara")).toBe(0);
+    // Dos letras ya dan falsos parecidos entre nombres largos.
+    expect(parecido("cerveceria nacional", "cerveria nacional")).toBe(0);
+    expect(parecido("activo mv1fgz873451", "inactivo mv1fgz873451")).toBe(0);
+  });
+
+  it("lo distinto o lo igual no se sugiere", () => {
+    expect(parecido("claro", "altice")).toBe(0);
+    expect(parecido("claro", "claro")).toBe(0);
+    expect(parecido("peña", "pena")).toBe(0);
+  });
+
+  it("parecidos ordena del mas al menos parecido y limita", () => {
+    const otros = [{ clave: "claro rd" }, { clave: "altice" }, { clave: "claro." }, { clave: "claro mobile" }, { clave: "claro tv" }];
+    expect(parecidos("claro", otros).map((x) => x.clave)).toEqual(["claro.", "claro mobile", "claro rd"]);
+    expect(parecidos("claro", otros, 1).map((x) => x.clave)).toEqual(["claro."]);
+    expect(parecidos("zzz", otros)).toEqual([]);
+  });
+});

@@ -27,8 +27,10 @@ const RUTAS_API: [string, string][] = [
   ["POST", "/api/admin/ia"], ["PATCH", "/api/admin/ia/1"], ["DELETE", "/api/admin/ia/1"], ["POST", "/api/admin/ia/1/activar"],
   ["POST", "/api/admin/ia/1/desactivar"], ["POST", "/api/admin/ia/1/probar"], ["GET", "/api/admin/actividad"], ["POST", "/api/admin/tareas/lote"],
   ["POST", "/api/admin/tareas/borrar"], ["POST", "/api/admin/tareas/restaurar"],
+  ["GET", "/api/admin/clientes"], ["POST", "/api/admin/clientes"], ["PATCH", "/api/admin/clientes/1"], ["DELETE", "/api/admin/clientes/1"],
+  ["POST", "/api/admin/clientes/1/unir"], ["POST", "/api/admin/clientes/vincular"],
 ];
-const PAGINAS = ["/admin", "/admin/personas", "/admin/organizacion", "/admin/catalogo", "/admin/plantillas", "/admin/ia", "/admin/actividad"];
+const PAGINAS = ["/admin", "/admin/personas", "/admin/organizacion", "/admin/catalogo", "/admin/clientes", "/admin/plantillas", "/admin/ia", "/admin/actividad"];
 
 test("un no admin recibe 403 en cada ruta de la API de administracion", async ({ browser }) => {
   test.setTimeout(180_000);

@@ -140,7 +140,7 @@ export function NuevaTarea() {
                 )}
               </Campo>
               <Campo etiqueta="Cliente">{(a) => <Entrada {...a} list="clientes-nueva" value={f.client} maxLength={100} onChange={(e) => set("client", e.target.value)} />}</Campo>
-              <datalist id="clientes-nueva">{ctx.clientes.map((c) => <option key={c} value={c} />)}</datalist>
+              <datalist id="clientes-nueva">{ctx.clientes.filter((c) => !ctx.clientesInactivos.includes(c)).map((c) => <option key={c} value={c} />)}</datalist>
               <Campo etiqueta="Dirección o gerencia">{(a) => <Entrada {...a} value={f.directorate} onChange={(e) => set("directorate", e.target.value)} />}</Campo>
               <Campo etiqueta="Solicitado por">{(a) => <Entrada {...a} value={f.requested_by} onChange={(e) => set("requested_by", e.target.value)} />}</Campo>
               <Campo etiqueta="Tipo de presupuesto">{(a) => <Entrada {...a} value={f.budget_type} onChange={(e) => set("budget_type", e.target.value)} />}</Campo>

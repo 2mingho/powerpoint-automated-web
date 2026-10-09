@@ -4,6 +4,7 @@ export type Seccion = { href: string; rotulo: string; icono: string; descripcion
 export const SECCIONES: Seccion[] = [
   { href: "/admin/personas", rotulo: "Personas", icono: "UserRound", descripcion: "Cuentas, roles, herramientas permitidas y sesiones." },
   { href: "/admin/organizacion", rotulo: "Organización", icono: "Network", descripcion: "Unidades, quién las lidera y a quién reporta cada persona." },
+  { href: "/admin/clientes", rotulo: "Clientes", icono: "Building2", descripcion: "Quién es cada cliente, su líder de cuenta y qué nombres unir." },
   { href: "/admin/catalogo", rotulo: "Catálogo", icono: "ListOrdered", descripcion: "Estados y prioridades de tarea." },
   { href: "/admin/plantillas", rotulo: "Plantillas", icono: "Presentation", descripcion: "Plantillas PowerPoint para los reportes." },
   { href: "/admin/ia", rotulo: "IA", icono: "Cpu", descripcion: "Conexiones a proveedores y consumo." },

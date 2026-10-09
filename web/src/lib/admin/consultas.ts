@@ -1,4 +1,5 @@
 import "server-only";
+import { contarPendientes } from "@/lib/clientes/admin";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
@@ -40,7 +41,7 @@ export async function resumenAdmin() {
   const hace1 = new Date(Date.now() - 86_400_000);
   const [
     usuarios, activos, sinUnidad, unidades, lideres, roles, estadosCat, prioridadesCat,
-    plantillas, conexiones, activa, consumo, fallos, actividad24, ultima,
+    plantillas, conexiones, activa, consumo, fallos, actividad24, ultima, clientesActivos, clientesInactivos, clientesPendientes,
   ] = await Promise.all([
     db.users.count(),
     db.users.count({ where: { is_active: true } }),
@@ -57,11 +58,15 @@ export async function resumenAdmin() {
     db.ai_usage.count({ where: { created_at: { gte: hace30 }, ok: false } }),
     db.activity_logs.count({ where: { timestamp: { gte: hace1 } } }),
     db.activity_logs.findFirst({ orderBy: { timestamp: "desc" }, select: { timestamp: true, action: true, users: { select: { username: true } } } }),
+    db.clients.count({ where: { is_active: true } }),
+    db.clients.count({ where: { is_active: false } }),
+    contarPendientes(),
   ]);
   const conLider = new Set(lideres.map((l) => l.area_id));
   return {
     personas: { total: usuarios, activas: activos, inactivas: usuarios - activos, sinUnidad, roles },
     organizacion: { unidades: unidades.length, sinLider: unidades.filter((u) => !conLider.has(u.id)).length },
+    clientes: { activos: clientesActivos, inactivos: clientesInactivos, pendientes: clientesPendientes },
     catalogo: {
       estados: estadosCat.length,
       iniciales: estadosCat.filter((e) => e.es_inicial).length,

@@ -27,6 +27,12 @@ function lineas(r: ResumenAdmin): Record<string, Linea> {
       conteos: [{ valor: fCompacto(r.organizacion.unidades), rotulo: "unidades" }, { valor: fCompacto(r.organizacion.unidades - r.organizacion.sinLider), rotulo: "con líder" }],
       estado: r.organizacion.sinLider ? { tono: "aviso", texto: "Revisar", detalle: `${r.organizacion.sinLider} unidad(es) sin líder: nadie recibe sus solicitudes` } : { tono: "bien", texto: "Al día" },
     },
+    "/admin/clientes": {
+      conteos: [{ valor: fCompacto(r.clientes.activos), rotulo: "activos" }, { valor: fCompacto(r.clientes.inactivos), rotulo: "inactivos" }],
+      estado: r.clientes.pendientes
+        ? { tono: "aviso", texto: "Revisar", detalle: `${r.clientes.pendientes} tarea(s) con un nombre de cliente sin vincular` }
+        : { tono: "bien", texto: "Al día" },
+    },
     "/admin/catalogo": {
       conteos: [{ valor: String(r.catalogo.estados), rotulo: "estados" }, { valor: String(r.catalogo.prioridades), rotulo: "prioridades" }],
       estado: catalogoMal

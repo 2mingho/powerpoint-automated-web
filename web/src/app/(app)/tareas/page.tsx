@@ -8,7 +8,7 @@ import { asegurarAvisosDeVencimiento } from "@/lib/tareas/avisos";
 import { contarSalidas, leerFiltros, listarTareas } from "@/lib/tareas/consultas";
 import { etiquetasVisibles } from "@/lib/tareas/etiquetas";
 import { puedeImportar } from "@/lib/tareas/importar";
-import { clientesVisibles, personasDelAmbito, unidadesParaFiltro } from "@/lib/tareas/personas";
+import { clientesInactivos, clientesVisibles, personasDelAmbito, unidadesParaFiltro } from "@/lib/tareas/personas";
 import { MisTareas } from "./_componentes/mis-tareas";
 import type { Vista } from "./_componentes/estado";
 
@@ -37,13 +37,15 @@ async function Datos({ searchParams }: { searchParams: PageProps<"/tareas">["sea
     listarTareas(u, filtros), contarSalidas(u, filtros.alcance), puedeVerEquipo(u),
   ]);
 
+  const inactivos = await clientesInactivos(clientes);
+
   return (
     <MisTareas inicial={{
       usuario: { id: u.id, nombre: u.username, esAdmin: u.isAdmin, unidadId: u.areaId, lidera },
       hoy: hoyNegocio(),
       estados: cat.estados,
       prioridades: cat.prioridades,
-      personas, clientes, etiquetas, unidades, puedeImportar: importar,
+      personas, clientes, clientesInactivos: inactivos, etiquetas, unidades, puedeImportar: importar,
       filtros, vista, tarea,
       tareas: lista.tareas, truncada: lista.truncada, contadores,
     }} />

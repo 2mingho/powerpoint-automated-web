@@ -59,3 +59,48 @@ export function agruparVariantes(filas: Variante[]): GrupoCliente[] {
     })
     .sort((a, b) => (a.clave < b.clave ? -1 : 1));
 }
+
+/* La clave sin puntuacion ni simbolos: «Claro.» y «Claro» comparten esta forma. */
+function soloLetras(clave: string): string {
+  return clave.replace(/[-_/]/g, " ").replace(/[^\p{L}\p{N}ñ ]/gu, "").replace(/\s+/g, " ").trim();
+}
+
+function distancia(a: string, b: string): number {
+  if (a === b) return 0;
+  let previa = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const fila = [i];
+    for (let j = 1; j <= b.length; j++) fila[j] = Math.min(previa[j] + 1, fila[j - 1] + 1, previa[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    previa = fila;
+  }
+  return previa[b.length];
+}
+
+/*
+ * Cuanto se parecen dos claves distintas, de 3 (casi seguro el mismo cliente)
+ * a 0 (nada). Es solo una sugerencia para que un admin decida; nunca une nada.
+ *   3  solo cambia la puntuacion («claro.» y «claro»)
+ *   2  una es el comienzo de la otra, por palabras («claro» y «claro rd»)
+ *   1  una letra de diferencia (ni mas: dos letras ya dan falsos parecidos) en nombres largos («cerveceria nacional» y «cervecria nacional»)
+ */
+export function parecido(a: string, b: string): 0 | 1 | 2 | 3 {
+  if (a === b) return 0;
+  const sa = soloLetras(a);
+  const sb = soloLetras(b);
+  if (sa && sa === sb) return 3;
+  const [corta, larga] = sa.length <= sb.length ? [sa, sb] : [sb, sa];
+  if (corta.length >= 3 && larga.startsWith(`${corta} `)) return 2;
+  const minimo = Math.min(sa.length, sb.length);
+  if (minimo >= 6 && distancia(sa, sb) <= 1) return 1;
+  return 0;
+}
+
+/* Los clientes mas parecidos a `clave`, del mas al menos parecido (maximo `limite`). */
+export function parecidos<T extends { clave: string }>(clave: string, otros: T[], limite = 3): T[] {
+  return otros
+    .map((o) => ({ o, p: parecido(clave, o.clave) }))
+    .filter((x) => x.p > 0)
+    .sort((x, y) => y.p - x.p || (x.o.clave < y.o.clave ? -1 : 1))
+    .slice(0, limite)
+    .map((x) => x.o);
+}
