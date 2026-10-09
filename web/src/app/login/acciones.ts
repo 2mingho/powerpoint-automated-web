@@ -8,6 +8,7 @@ import { verificarCuenta } from "@/lib/auth/password";
 import { registrarActividad } from "@/lib/actividad";
 import { permitir } from "@/lib/limite";
 import { rutaInterna } from "@/lib/rutas";
+import { ipCliente } from "@/lib/ip";
 
 export type EstadoLogin = { error?: string; email?: string };
 
@@ -15,9 +16,8 @@ export async function iniciarSesion(_: EstadoLogin, form: FormData): Promise<Est
   const email = String(form.get("email") ?? "").trim();
   const contrasena = String(form.get("password") ?? "");
   const h = await headers();
-  // La ultima entrada de x-forwarded-for la añade el proxy de confianza; la
-  // primera la escribe el cliente y se puede falsificar para saltarse el limite.
-  const ip = (h.get("x-forwarded-for")?.split(",").at(-1) ?? h.get("x-real-ip") ?? "local").trim();
+  // La ultima entrada de x-forwarded-for la añade el proxy de confianza (ver ipCliente).
+  const ip = ipCliente(h) ?? "local";
 
   // Se limita por IP y por cuenta: aunque alguien rote IPs, una misma cuenta
   // no admite mas de 5 intentos por minuto.
