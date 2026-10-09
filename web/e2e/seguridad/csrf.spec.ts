@@ -18,7 +18,7 @@ test("una mutacion con Origin ajeno o desde otro sitio se rechaza", async ({ con
   await context.addCookies([await cookieDe(e.empleado)]);
   const api = context.request;
 
-  for (const headers of [
+  for (const headers of <Record<string, string>[]>[
     { Origin: "https://evil.example" },
     { Origin: "https://intranet.newlink.example" },
     { "Sec-Fetch-Site": "same-site" },
