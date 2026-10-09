@@ -17,6 +17,7 @@ const MENCIONES = utf16(
 test("clasificar: reglas, preset, proceso y descarga", async ({ page }) => {
   await entrar(page, USUARIOS.herramientas);
   await page.goto("/clasificacion");
+  await page.waitForLoadState("networkidle");
   await page.locator('input[type="file"]').setInputFiles({ name: "menciones.csv", mimeType: "text/csv", buffer: MENCIONES });
   await expect(page.getByText(/UTF-16 · tabulador · 3 columnas/)).toBeVisible();
   await expect(page.getByRole("region", { name: "Vista previa del archivo" })).toContainText("Nuevo hospital");

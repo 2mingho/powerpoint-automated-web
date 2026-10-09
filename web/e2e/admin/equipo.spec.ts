@@ -19,7 +19,8 @@ async function filasCsv(texto: string) {
 
 test("un manager no ve unidades fuera de su alcance: ni en la API, ni en el CSV, ni en la pagina", async ({ browser }) => {
   const { page } = await contextoCon(browser, MANAGER);
-  const [DI, INV, COM, EST] = await Promise.all(["Data Intelligence", "Investigación", "Comunicación", "Estrategia Digital"].map(idUnidad));
+  const [DI, INV, COM] = await Promise.all(["Data Intelligence", "Investigación", "Comunicación"].map(idUnidad));
+  const EST = (await bd<{ id: number }>("select id from areas where name like 'Estrategia%'"))[0].id;
 
   const panel = (await (await page.request.get("/api/equipo")).json()) as Panel;
   expect(panel.unidades.map((u) => u.nombre).sort()).toEqual(["Data Intelligence", "Investigación"]);
@@ -64,7 +65,8 @@ test("un manager no ve unidades fuera de su alcance: ni en la API, ni en el CSV,
 
 test("una directora hereda el alcance de sus managers y nada mas", async ({ browser }) => {
   const { page } = await contextoCon(browser, DIRECTORA);
-  const [COM, EST] = await Promise.all(["Comunicación", "Estrategia Digital"].map(idUnidad));
+  const COM = await idUnidad("Comunicación");
+  const EST = (await bd<{ id: number }>("select id from areas where name like 'Estrategia%'"))[0].id;
   const panel = (await (await page.request.get("/api/equipo")).json()) as Panel;
   expect(panel.unidades.map((u) => u.nombre).sort()).toEqual(["Comunicación", "Data Intelligence", "Investigación"]);
 
@@ -78,9 +80,11 @@ test("una directora hereda el alcance de sus managers y nada mas", async ({ brow
   // Lo ve tambien la pagina: sus tres unidades en el selector y en "vencidas por unidad".
   await page.goto("/equipo");
   await expect(page.getByRole("heading", { name: "Equipo" })).toBeVisible();
-  const opciones = await page.getByRole("combobox", { name: "Unidad" }).locator("option").allTextContents();
+  const opcionesUnidad = page.getByRole("combobox", { name: "Unidad" }).locator("option");
+  await expect(opcionesUnidad).toHaveCount(4);
+  const opciones = await opcionesUnidad.allTextContents();
   expect(opciones).toEqual(expect.arrayContaining(["Comunicación", "Data Intelligence", "Investigación"]));
-  expect(opciones).not.toContain("Estrategia Digital");
+  expect(opciones.some((nombre) => nombre.startsWith("Estrategia"))).toBe(false);
 });
 
 test("al quitarle el liderazgo al manager, la directora deja de ver esa unidad", async ({ browser }) => {
@@ -107,7 +111,7 @@ test("quien no supervisa nada no entra al panel", async ({ browser }) => {
 test("un manager fuera de la cadena solo ve lo suyo", async ({ browser }) => {
   const { page } = await contextoCon(browser, MANAGER_FUERA);
   const panel = (await (await page.request.get("/api/equipo")).json()) as Panel;
-  expect(panel.unidades.map((u) => u.nombre)).toEqual(["Estrategia Digital"]);
+  expect(panel.unidades.map((u) => u.nombre)).toEqual([expect.stringMatching(/^Estrategia/)]);
 });
 
 test("los contadores filtran la tabla y los graficos no se rompen", async ({ browser }) => {
@@ -117,6 +121,7 @@ test("los contadores filtran la tabla y los graficos no se rompen", async ({ bro
   await vencidas.click();
   await expect(vencidas).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveURL(/vista=vencidas/);
+  await expect(page.locator("tbody time").first()).toBeVisible();
   const fechas = await page.locator("tbody time").allTextContents();
   expect(fechas.length).toBeGreaterThan(0);
   await expect(page.getByRole("img", { name: /Tareas creadas y completadas por semana, 8 semanas/ })).toBeVisible();

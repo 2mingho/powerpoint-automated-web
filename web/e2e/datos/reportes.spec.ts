@@ -19,6 +19,7 @@ test("subir los widgets, ver el progreso y abrir el reporte", async ({ page }, i
   await entrar(page, USUARIOS.analista);
   await page.goto("/reportes/nuevo");
   await expect(page.getByRole("heading", { name: "Generar reporte" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
 
   // Validacion inmediata: un tipo que no vale no llega a subirse.
   await page.locator('input[type="file"]').setInputFiles({ name: "notas.txt", mimeType: "text/plain", buffer: Buffer.from("hola") });

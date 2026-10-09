@@ -103,6 +103,7 @@ test("la paleta abre con el teclado, filtra y navega", async ({ page, context })
   await entrada.fill("solicitu");
   await expect(page.getByRole("option", { name: "Solicitudes" })).toBeVisible();
   // Sin el endpoint de tareas, la paleta no rompe.
+  await page.route("**/api/tareas?*", (route) => route.fulfill({ status: 503, json: { error: "Servicio no disponible" } }));
   await entrada.fill("informe");
   await expect(page.getByText(/Nada coincide con «informe»/)).toBeVisible();
   await entrada.fill("solicitu");

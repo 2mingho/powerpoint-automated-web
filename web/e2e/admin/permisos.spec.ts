@@ -49,9 +49,7 @@ test("un no admin ve 'Sin permisos' en cada pagina de administracion, sin datos"
   const { page } = await contextoCon(browser, ANALISTA);
   for (const ruta of PAGINAS) {
     const r = await page.goto(ruta);
-    // La pagina se transmite por partes (Cache Components): el 403 llega como
-    // forbidden() dentro del flujo, con noindex. Nunca un 2xx con datos.
-    expect([200, 403], ruta).toContain(r?.status());
+    expect(r?.status(), ruta).toBe(403);
     await expect(page.getByRole("heading", { name: "Sin permisos" }), ruta).toBeVisible();
     const html = await page.content();
     expect(html).toContain('name="robots" content="noindex"');

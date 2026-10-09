@@ -63,3 +63,9 @@ src/**/*.test.ts                           pruebas unitarias Vitest de la lógic
 - Servidor propio: `DATABASE_URL=… npx next dev -p <puerto>`, con el puerto que te toque. Detenlo al terminar.
 - Usuarios de prueba en todas las bases (contraseña `demo1234`): `demo@local.test` (admin) y `analista@local.test` (rol DI, unidad "Data Intelligence"). Crea tus propios datos de prueba en tu base.
 - Antes de terminar: `npm run typecheck` sin errores, `npx eslint <tus archivos>` limpio, tus pruebas e2e en verde, y revisa tus pantallas en escritorio (1440px) y móvil (390px), en tema claro y oscuro.
+
+## Batería integrada
+
+Usa una base PostgreSQL **descartable y explícita** con `DATABASE_URL`; las semillas truncan tablas. No ejecutes todos los specs de Playwright en un único comando contra una misma base: `e2e/solicitudes/sembrar.ts` vacía tareas y deja sin datos las pruebas de Equipo. Con el servidor Next.js y el servicio Python apuntando a esa base, siembra para Admin, corre `e2e/admin`; corre `e2e/datos`; después `e2e/solicitudes` (se siembra al iniciar) y `e2e/tareas` (cada caso crea su escenario). Usa `--workers=1` porque los casos comparten base y sesiones.
+
+`ANALYTICS_URL` es la **raíz** de Flask (por ejemplo `http://127.0.0.1:5101`); el cliente añade `/api/interno` por sí mismo. Poner ese prefijo en la variable devuelve 404 en subidas y previsualizaciones.
