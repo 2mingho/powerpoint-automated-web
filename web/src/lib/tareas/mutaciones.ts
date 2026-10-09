@@ -7,7 +7,7 @@ import { estadoInicial, estadosFinales, estadosValidos, prioridadesValidas, prio
 import type { UsuarioActual } from "@/lib/auth/session";
 import { filtroTareasVisibles, puedeAsignarA } from "@/lib/tareas/alcance";
 import { notificarVarios } from "@/lib/notificaciones";
-import { aDTOs, areaDe, diaDb, enlaceTarea, INCLUIR_TAREA, MAX_FILAS, tareaEditable, texto, type TareaFila } from "./base";
+import { aDTOs, areaDe, diaDb, enlaceTarea, filtroVisiblesYObservadas, INCLUIR_TAREA, MAX_FILAS, tareaEditable, texto, type TareaFila } from "./base";
 import { avisarAsignacion, avisarCambioDeEstado } from "./avisos";
 import { esFinDeSemana, generarFechasRecurrencia, parsearFechaEntrada, TIPOS_RECURRENCIA } from "./fechas";
 import { colocar, compararColumna } from "./posiciones";
@@ -283,6 +283,7 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
   const aId = (v: unknown) => { const n = Number(v); return v != null && v !== "" && Number.isInteger(n) ? n : null; };
 
   // La columna de destino, en el orden que pinta el tablero y dentro del alcance.
+  const visibles = await filtroVisiblesYObservadas(u);
   const columna = (await db.tasks.findMany({
     where: { AND: [await filtroTareasVisibles(u), { status: estado, id: { not: t.id } }] },
     select: { id: true, board_position: true, due_date: true },
@@ -299,14 +300,20 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
       if (esperado && esperado !== actual) throw new ConflictoTarea(await tx.tasks.findUniqueOrThrow({ where: { id: t.id }, include: INCLUIR_TAREA }));
       await tx.tasks.update({ where: { id: t.id }, data: { status: estado, board_position: posicion } });
       if (finales.includes(estado)) {
-        const pendientes = await tx.tasks.findMany({
-          where: { deleted_at: null, status: { notIn: finales }, bloquea_a: { some: { blocked_task_id: t.id } } },
-          select: { title: true }, orderBy: { due_date: "asc" },
-        });
-        if (pendientes.length) {
+        const abiertas: Prisma.tasksWhereInput = { deleted_at: null, status: { notIn: finales }, bloquea_a: { some: { blocked_task_id: t.id } } };
+        // Las bloqueadoras de otra unidad se cuentan, pero su titulo no sale: no se pueden ver.
+        const [pendientes, total] = await Promise.all([
+          tx.tasks.findMany({ where: { AND: [abiertas, visibles] }, select: { title: true }, orderBy: { due_date: "asc" } }),
+          tx.tasks.count({ where: abiertas }),
+        ]);
+        const ocultas = total - pendientes.length;
+        if (total) {
           // No se impide: quien cierra sabe si la dependencia sigue en pie. Pero se dice.
           const resto = pendientes.length - 3;
-          aviso = `Sigue bloqueada por: ${pendientes.slice(0, 3).map((p) => p.title).join(", ")}${resto > 0 ? ` y ${resto} más` : ""}.`;
+          const nombres = pendientes.slice(0, 3).map((p) => p.title).join(", ");
+          const mas = resto > 0 ? ` y ${resto} más` : "";
+          const fuera = ocultas ? `${pendientes.length ? " y " : ""}${ocultas} que no puedes ver` : "";
+          aviso = `Sigue bloqueada por: ${nombres}${mas}${fuera}.`;
         }
       }
       await avisarCambioDeEstado({ id: t.id, title: t.title, status: estado }, u.id, tx);
