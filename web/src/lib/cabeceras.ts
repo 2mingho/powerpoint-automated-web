@@ -6,7 +6,7 @@
  * La CSP no restringe script-src: Next mete scripts en linea (la carga del
  * RSC y el arranque del tema) y hacerlo bien exige nonces por peticion. Lo que
  * si cierra: enmarcar la app, cambiar la base de las URL, plugins y enviar
- * formularios a otro origen.
+ * formularios (o seguir sus redirecciones) a otro origen.
  */
 export const CABECERAS_SEGURIDAD: { key: string; value: string }[] = [
   { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },

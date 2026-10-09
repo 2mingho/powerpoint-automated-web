@@ -23,7 +23,8 @@ test("tras salir, una copia de la cookie deja de valer", async ({ playwright }) 
   expect((await api.get("/api/notificaciones/contador")).status()).toBe(200);
   const r = await api.post("/api/sesion/salir", { maxRedirects: 0 });
   expect(r.status()).toBe(303);
-  expect(r.headers()["location"]).toMatch(/\/login$/);
+  expect(r.headers()["location"]).toBe("/login");
+  expect(r.headers()["set-cookie"] ?? "").toMatch(/nl_sesion=;/);
   // La misma cookie, reenviada a mano: el servidor ya no la reconoce.
   const copia = await playwright.request.newContext({ baseURL: BASE, extraHTTPHeaders: { Cookie: `nl_sesion=${cookie.value}` } });
   expect((await copia.get("/api/notificaciones/contador")).status()).toBe(401);
