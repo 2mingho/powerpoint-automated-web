@@ -423,3 +423,8 @@ scratch/
 instance/test_*.db
 ci_migrations.db
 flask-dev.log
+
+# Evidencia visual de las revisiones: pesa decenas de MB, se archiva fuera de git
+.impeccable/review/**/*.png
+.impeccable/review/*.png
+.impeccable/review/**/*.webm

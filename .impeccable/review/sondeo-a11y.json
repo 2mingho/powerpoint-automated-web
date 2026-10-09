@@ -1,0 +1,1471 @@
+{
+  "tactil /": {
+    "total": 30,
+    "pequenos": [
+      {
+        "tag": "a",
+        "nombre": "Saltar al contenido",
+        "w": 1,
+        "h": 1
+      },
+      {
+        "tag": "a",
+        "nombre": "Ver todas",
+        "w": 55,
+        "h": 20
+      }
+    ],
+    "sinNombre": []
+  },
+  "tactil /tareas": {
+    "total": 58,
+    "pequenos": [
+      {
+        "tag": "a",
+        "nombre": "Saltar al contenido",
+        "w": 1,
+        "h": 1
+      },
+      {
+        "tag": "button",
+        "nombre": "Actualizar la lista",
+        "w": 36,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Panel",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Tablero",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Calendario",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Asignadas a mí",
+        "w": 113,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Creadas por mí",
+        "w": 112,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Mi unidad",
+        "w": 77,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Reporte semanal de menciones Banco Popular",
+        "w": 213,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Limpiar exportación de Meltwater de septiembre",
+        "w": 228,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Clasificar menciones de la campaña de lanzamiento",
+        "w": 228,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Preparar tablero de sentimiento para dirección",
+        "w": 213,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Revisar nube de palabras del informe mensual",
+        "w": 219,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Análisis de competencia telecomunicaciones",
+        "w": 224,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Informe de crisis: retraso de vuelos",
+        "w": 209,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Corte semanal de indicadores",
+        "w": 174,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Unir archivos de Brandwatch y Talkwalker",
+        "w": 228,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Plantilla de reporte trimestral",
+        "w": 175,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Corte semanal de indicadores",
+        "w": 174,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Depurar diccionario de clasificación",
+        "w": 209,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Resumen ejecutivo de redes sociales",
+        "w": 216,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Corte semanal de indicadores",
+        "w": 174,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Corte semanal de indicadores",
+        "w": 174,
+        "h": 20
+      },
+      {
+        "tag": "button",
+        "nombre": "Ver todas",
+        "w": 92,
+        "h": 32
+      }
+    ],
+    "sinNombre": []
+  },
+  "tactil /tareas?alcance=unidad&vista=tablero": {
+    "total": 60,
+    "pequenos": [
+      {
+        "tag": "a",
+        "nombre": "Saltar al contenido",
+        "w": 1,
+        "h": 1
+      },
+      {
+        "tag": "button",
+        "nombre": "Actualizar la lista",
+        "w": 36,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Panel",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Tablero",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Calendario",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Asignadas a mí",
+        "w": 111,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Creadas por mí",
+        "w": 112,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Mi unidad",
+        "w": 79,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Ver 90 días",
+        "w": 64,
+        "h": 20
+      }
+    ],
+    "sinNombre": []
+  },
+  "tactil /tareas?alcance=unidad&vista=calendario": {
+    "total": 60,
+    "pequenos": [
+      {
+        "tag": "a",
+        "nombre": "Saltar al contenido",
+        "w": 1,
+        "h": 1
+      },
+      {
+        "tag": "button",
+        "nombre": "Actualizar la lista",
+        "w": 36,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Panel",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Tablero",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Calendario",
+        "w": 40,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Asignadas a mí",
+        "w": 111,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Creadas por mí",
+        "w": 112,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Mi unidad",
+        "w": 79,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "nombre": "Hoy",
+        "w": 47,
+        "h": 32
+      },
+      {
+        "tag": "button",
+        "nombre": "Medición de alcance del patrocinio, Completado, en",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Contrato de licencias de monitoreo, Pendiente, ent",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Auditoría de fuentes del monitoreo, En Progreso, e",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Reporte semanal de menciones Banco Popular, En Pro",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Reporte de menciones del fin de semana, Completado",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Benchmark de engagement por canal, Bloqueado, entr",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Limpiar exportación de Meltwater de septiembre, Pe",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Revisión de permisos de usuarios, En Progreso, ent",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Clasificar menciones de la campaña de lanzamiento,",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Revisar nube de palabras del informe mensual, En R",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Preparar tablero de sentimiento para dirección, En",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Informe mensual de reputación, Pendiente, entrega ",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Revisión de calidad de la clasificación, En Revisi",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Revisión de carga del equipo, Pendiente, entrega 0",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Unir archivos de Brandwatch y Talkwalker, Pendient",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Análisis de competencia telecomunicaciones, Bloque",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Informe de crisis: retraso de vuelos, Pendiente, e",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Etiquetado de menciones de producto, En Progreso, ",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Análisis de picos de conversación, Pendiente, entr",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Plan de capacitación en la herramienta, En Progres",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Configurar alertas de crisis, Pendiente, entrega 1",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Corte semanal de indicadores, Pendiente, entrega 1",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Cuadro de mando de influenciadores, Pendiente, ent",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Mapa de temas emergentes, Pendiente, entrega 14 oc",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Plantilla de reporte trimestral, Pendiente, entreg",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Indicadores para el comité, Pendiente, entrega 16 ",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Depurar diccionario de clasificación, Pendiente, e",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Actualizar consultas booleanas, Pendiente, entrega",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Corte semanal de indicadores, Pendiente, entrega 1",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Presentación de resultados Q3, Pendiente, entrega ",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Resumen ejecutivo de redes sociales, Pendiente, en",
+        "w": 340,
+        "h": 28
+      },
+      {
+        "tag": "button",
+        "nombre": "Corte semanal de indicadores, Pendiente, entrega 2",
+        "w": 340,
+        "h": 28
+      }
+    ],
+    "sinNombre": []
+  },
+  "tactil /solicitudes": {
+    "total": 14,
+    "pequenos": [
+      {
+        "tag": "a",
+        "nombre": "Saltar al contenido",
+        "w": 1,
+        "h": 1
+      }
+    ],
+    "sinNombre": []
+  },
+  "tactil /reportes/nuevo": {
+    "total": 10,
+    "pequenos": [
+      {
+        "tag": "a",
+        "nombre": "Saltar al contenido",
+        "w": 1,
+        "h": 1
+      },
+      {
+        "tag": "input",
+        "nombre": "",
+        "w": 1,
+        "h": 1
+      }
+    ],
+    "sinNombre": []
+  },
+  "teclado /tareas?alcance=unidad&vista=tablero": [
+    {
+      "tag": "a",
+      "nombre": "Saltar al contenido",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 12
+    },
+    {
+      "tag": "a",
+      "nombre": "Data Intel",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 0
+    },
+    {
+      "tag": "a",
+      "nombre": "Inicio",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 100
+    },
+    {
+      "tag": "a",
+      "nombre": "Mis tareas",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 138
+    },
+    {
+      "tag": "a",
+      "nombre": "Solicitudes",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 176
+    },
+    {
+      "tag": "a",
+      "nombre": "Generar reporte",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 259
+    },
+    {
+      "tag": "a",
+      "nombre": "Mis reportes",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 297
+    },
+    {
+      "tag": "a",
+      "nombre": "Clasificación",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 335
+    },
+    {
+      "tag": "a",
+      "nombre": "Unión de archivos",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 373
+    },
+    {
+      "tag": "a",
+      "nombre": "Análisis CSV",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 411
+    },
+    {
+      "tag": "button",
+      "nombre": "Cambiar a tema oscuro",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 851
+    },
+    {
+      "tag": "a",
+      "nombre": "Cerrar sesión",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 851
+    },
+    {
+      "tag": "button",
+      "nombre": "Buscar o ir a (Ctrl + K)",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Ver el tour de bienvenida",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Notificaciones: 5 sin leer",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Actualizar la lista",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Panel",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Tablero",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Calendario",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Plantillas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Etiquetas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "CSV",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Nueva tarea",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Vencidas6",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Hoy6",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "En curso10",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Bloqueadas4por dependencias abiertas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Asignadas a mí",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 261
+    },
+    {
+      "tag": "button",
+      "nombre": "Creadas por mí",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 261
+    },
+    {
+      "tag": "button",
+      "nombre": "Mi unidad",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 261
+    },
+    {
+      "tag": "input",
+      "nombre": "",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 259
+    },
+    {
+      "tag": "button",
+      "nombre": "Filtros",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 259
+    },
+    {
+      "tag": "li",
+      "nombre": "Contrato de licencias de monitoreo02 oct",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 369
+    },
+    {
+      "tag": "li",
+      "nombre": "Limpiar exportación de Meltwater de sept",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 458
+    },
+    {
+      "tag": "li",
+      "nombre": "Clasificar menciones de la campaña de la",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 547
+    },
+    {
+      "tag": "li",
+      "nombre": "Informe mensual de reputación09 octhoyca",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 660
+    },
+    {
+      "tag": "li",
+      "nombre": "Revisión de carga del equipo09 octhoyluc",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 773
+    },
+    {
+      "tag": "li",
+      "nombre": "Unir archivos de Brandwatch y Talkwalker",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 819
+    },
+    {
+      "tag": "li",
+      "nombre": "Informe de crisis: retraso de vuelos12 o",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 398
+    },
+    {
+      "tag": "li",
+      "nombre": "Análisis de picos de conversación12 octl",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 511
+    },
+    {
+      "tag": "li",
+      "nombre": "Configurar alertas de crisis12 octlundem",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 600
+    },
+    {
+      "tag": "li",
+      "nombre": "Corte semanal de indicadores12 octlunana",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 672
+    },
+    {
+      "tag": "li",
+      "nombre": "Cuadro de mando de influenciadores13 oct",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 743
+    },
+    {
+      "tag": "li",
+      "nombre": "Mapa de temas emergentes14 octmiémaria.p",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 833
+    },
+    {
+      "tag": "li",
+      "nombre": "Plantilla de reporte trimestral15 octjue",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 406
+    }
+  ],
+  "teclado /tareas?alcance=unidad&vista=calendario": [
+    {
+      "tag": "a",
+      "nombre": "Saltar al contenido",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 12
+    },
+    {
+      "tag": "a",
+      "nombre": "Data Intel",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 0
+    },
+    {
+      "tag": "a",
+      "nombre": "Inicio",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 100
+    },
+    {
+      "tag": "a",
+      "nombre": "Mis tareas",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 138
+    },
+    {
+      "tag": "a",
+      "nombre": "Solicitudes",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 176
+    },
+    {
+      "tag": "a",
+      "nombre": "Generar reporte",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 259
+    },
+    {
+      "tag": "a",
+      "nombre": "Mis reportes",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 297
+    },
+    {
+      "tag": "a",
+      "nombre": "Clasificación",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 335
+    },
+    {
+      "tag": "a",
+      "nombre": "Unión de archivos",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 373
+    },
+    {
+      "tag": "a",
+      "nombre": "Análisis CSV",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 411
+    },
+    {
+      "tag": "button",
+      "nombre": "Cambiar a tema oscuro",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 851
+    },
+    {
+      "tag": "a",
+      "nombre": "Cerrar sesión",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 851
+    },
+    {
+      "tag": "button",
+      "nombre": "Buscar o ir a (Ctrl + K)",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Ver el tour de bienvenida",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Notificaciones: 5 sin leer",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Actualizar la lista",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Panel",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Tablero",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Calendario",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Plantillas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Etiquetas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "CSV",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Nueva tarea",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Vencidas6",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Hoy6",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "En curso10",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Bloqueadas4por dependencias abiertas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Asignadas a mí",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 261
+    },
+    {
+      "tag": "button",
+      "nombre": "Creadas por mí",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 261
+    },
+    {
+      "tag": "button",
+      "nombre": "Mi unidad",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 261
+    },
+    {
+      "tag": "input",
+      "nombre": "",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 259
+    },
+    {
+      "tag": "button",
+      "nombre": "Filtros",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 259
+    },
+    {
+      "tag": "button",
+      "nombre": "Mes anterior",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 316
+    },
+    {
+      "tag": "button",
+      "nombre": "Hoy",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 320
+    },
+    {
+      "tag": "button",
+      "nombre": "Mes siguiente",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 316
+    },
+    {
+      "tag": "button",
+      "nombre": "Archivo histórico de reportes, Completad",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 429
+    },
+    {
+      "tag": "button",
+      "nombre": "Medición de alcance del patrocinio, Comp",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 429
+    },
+    {
+      "tag": "button",
+      "nombre": "Contrato de licencias de monitoreo, Pend",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 461
+    },
+    {
+      "tag": "button",
+      "nombre": "Auditoría de fuentes del monitoreo, En P",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 542
+    },
+    {
+      "tag": "button",
+      "nombre": "Reporte semanal de menciones Banco Popul",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 542
+    },
+    {
+      "tag": "button",
+      "nombre": "Reporte de menciones del fin de semana, ",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 542
+    },
+    {
+      "tag": "button",
+      "nombre": "Benchmark de engagement por canal, Bloqu",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 574
+    },
+    {
+      "tag": "button",
+      "nombre": "Limpiar exportación de Meltwater de sept",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 542
+    },
+    {
+      "tag": "button",
+      "nombre": "Revisión de permisos de usuarios, En Pro",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 574
+    },
+    {
+      "tag": "button",
+      "nombre": "Clasificar menciones de la campaña de la",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 542
+    }
+  ],
+  "teclado /tareas": [
+    {
+      "tag": "a",
+      "nombre": "Saltar al contenido",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 12
+    },
+    {
+      "tag": "a",
+      "nombre": "Data Intel",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 0
+    },
+    {
+      "tag": "a",
+      "nombre": "Inicio",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 100
+    },
+    {
+      "tag": "a",
+      "nombre": "Mis tareas",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 138
+    },
+    {
+      "tag": "a",
+      "nombre": "Solicitudes",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 176
+    },
+    {
+      "tag": "a",
+      "nombre": "Generar reporte",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 259
+    },
+    {
+      "tag": "a",
+      "nombre": "Mis reportes",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 297
+    },
+    {
+      "tag": "a",
+      "nombre": "Clasificación",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 335
+    },
+    {
+      "tag": "a",
+      "nombre": "Unión de archivos",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 373
+    },
+    {
+      "tag": "a",
+      "nombre": "Análisis CSV",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 411
+    },
+    {
+      "tag": "button",
+      "nombre": "Cambiar a tema oscuro",
+      "outline": "solid 2px rgb(195, 200, 207)",
+      "sombra": "none",
+      "y": 851
+    },
+    {
+      "tag": "a",
+      "nombre": "Cerrar sesión",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 851
+    },
+    {
+      "tag": "button",
+      "nombre": "Buscar o ir a (Ctrl + K)",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Ver el tour de bienvenida",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Notificaciones: 5 sin leer",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 8
+    },
+    {
+      "tag": "button",
+      "nombre": "Actualizar la lista",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Panel",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Tablero",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Calendario",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 79
+    },
+    {
+      "tag": "button",
+      "nombre": "Plantillas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Etiquetas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "CSV",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Seleccionar varias",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Nueva tarea",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 77
+    },
+    {
+      "tag": "button",
+      "nombre": "Vencidas2",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Hoy3",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "En curso4",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "button",
+      "nombre": "Bloqueadas3por dependencias abiertas",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 135
+    },
+    {
+      "tag": "input",
+      "nombre": "",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 258
+    },
+    {
+      "tag": "button",
+      "nombre": "Asignadas a mí",
+      "outline": "solid 2px rgb(255, 255, 255)",
+      "sombra": "none",
+      "y": 337
+    },
+    {
+      "tag": "button",
+      "nombre": "Creadas por mí",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 337
+    },
+    {
+      "tag": "button",
+      "nombre": "Mi unidad",
+      "outline": "solid 2px rgb(71, 77, 85)",
+      "sombra": "none",
+      "y": 337
+    },
+    {
+      "tag": "input",
+      "nombre": "",
+      "outline": "none 2px rgb(11, 13, 16)",
+      "sombra": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0",
+      "y": 335
+    },
+    {
+      "tag": "button",
+      "nombre": "Filtros",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 335
+    },
+    {
+      "tag": "button",
+      "nombre": "Completar «Reporte semanal de menciones ",
+      "outline": "solid 2px rgb(107, 113, 120)",
+      "sombra": "none",
+      "y": 463
+    },
+    {
+      "tag": "button",
+      "nombre": "Reporte semanal de menciones Banco Popul",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 465
+    },
+    {
+      "tag": "button",
+      "nombre": "Completar «Limpiar exportación de Meltwa",
+      "outline": "solid 2px rgb(107, 113, 120)",
+      "sombra": "none",
+      "y": 508
+    },
+    {
+      "tag": "button",
+      "nombre": "Limpiar exportación de Meltwater de sept",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 510
+    },
+    {
+      "tag": "button",
+      "nombre": "Completar «Clasificar menciones de la ca",
+      "outline": "solid 2px rgb(107, 113, 120)",
+      "sombra": "none",
+      "y": 589
+    },
+    {
+      "tag": "button",
+      "nombre": "Clasificar menciones de la campaña de la",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 591
+    },
+    {
+      "tag": "button",
+      "nombre": "Completar «Preparar tablero de sentimien",
+      "outline": "solid 2px rgb(107, 113, 120)",
+      "sombra": "none",
+      "y": 634
+    },
+    {
+      "tag": "button",
+      "nombre": "Preparar tablero de sentimiento para dir",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 636
+    },
+    {
+      "tag": "button",
+      "nombre": "Completar «Revisar nube de palabras del ",
+      "outline": "solid 2px rgb(107, 113, 120)",
+      "sombra": "none",
+      "y": 679
+    },
+    {
+      "tag": "button",
+      "nombre": "Revisar nube de palabras del informe men",
+      "outline": "solid 2px rgb(11, 13, 16)",
+      "sombra": "none",
+      "y": 681
+    },
+    {
+      "tag": "button",
+      "nombre": "Completar «Análisis de competencia telec",
+      "outline": "solid 2px rgb(107, 113, 120)",
+      "sombra": "none",
+      "y": 760
+    }
+  ],
+  "paleta foco": {
+    "tag": "input",
+    "nombre": "Buscar una tarea, una pantalla o una acc",
+    "outline": "none 3px rgb(11, 13, 16)",
+    "sombra": "none",
+    "y": 91
+  },
+  "paleta activo": "Cambiar a tema oscuro"
+}

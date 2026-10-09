@@ -25,6 +25,12 @@ export async function sql<T = Record<string, unknown>>(texto: string, p: unknown
   return (await pool.query(texto, p)).rows as T[];
 }
 
+/* Cierra el pool de sql(): los scripts sueltos (capturas) no terminan mientras siga abierto. */
+export async function cerrarBase() {
+  await pool?.end();
+  pool = null;
+}
+
 export async function idDeCorreo(email: string): Promise<number> {
   const [u] = await sql<{ id: number }>("SELECT id FROM users WHERE email = $1", [email]);
   if (!u) throw new Error(`No existe ${email}: ¿se sembró la base (npx tsx e2e/semilla.ts)?`);
