@@ -7,7 +7,7 @@ import { entrar, sembrar } from "./ayuda";
  */
 test.describe.configure({ mode: "serial" });
 test.beforeEach(({}, info) => { test.skip(info.project.name !== "escritorio" || !process.env.CAPTURAS, "Solo con CAPTURAS=1"); });
-test.beforeAll(() => { if (process.env.CAPTURAS) sembrar(); });
+test.beforeAll(async () => { if (process.env.CAPTURAS) await sembrar(); });
 
 const DIR = "e2e/capturas/solicitudes";
 const ANCHOS = [{ n: "1440", w: 1440, h: 900 }, { n: "390", w: 390, h: 844 }];
@@ -21,7 +21,7 @@ const quieto = (page: Page) => page.addStyleTag({ content: "*,*::before,*::after
 
 for (const a of ANCHOS) for (const tema of TEMAS) {
   test(`pantallas ${a.n} ${tema}`, async ({ page, context }) => {
-    await entrar(context, "lider.di@local.test");
+    await entrar(context, "carlos@equipo.test");
     await preparar(page, tema, a.w, a.h);
     await page.goto("/solicitudes");
     await page.getByRole("heading", { name: "Solicitudes" }).waitFor();

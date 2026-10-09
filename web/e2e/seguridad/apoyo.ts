@@ -9,8 +9,14 @@
  *   npx playwright test e2e/seguridad --workers=1
  */
 import { expect, type Browser, type Page } from "@playwright/test";
+import { BASE_URL, selloSesion } from "../comun";
 import { escenario } from "../tareas/apoyo";
-export { BASE, cookieDe, entrarComo, escenario, sql, HOY, sumarDias } from "../tareas/apoyo";
+export { BASE, entrarComo, escenario, sql, HOY, sumarDias } from "../tareas/apoyo";
+
+/* Cookie de sesion valida para ese usuario (rota su session_token como un login). */
+export async function cookieDe(userId: number) {
+  return { name: "nl_sesion", value: await selloSesion(userId, { rotar: true }), url: BASE_URL };
+}
 
 let n = 0;
 export function ipNueva() {

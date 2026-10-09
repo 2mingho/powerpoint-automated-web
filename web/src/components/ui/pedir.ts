@@ -2,6 +2,8 @@
  * fetch JSON para el cliente con la forma de error de las rutas de /api
  * ({ error: "mensaje" }). Nunca lanza: devuelve ok o el mensaje para pintar.
  */
+import { irAlLogin } from "./sesion";
+
 export type Respuesta<T> = { ok: true; datos: T; status: number } | { ok: false; error: string; status: number };
 
 export async function pedir<T>(url: string, init?: RequestInit & { json?: unknown }): Promise<Respuesta<T>> {
@@ -13,6 +15,7 @@ export async function pedir<T>(url: string, init?: RequestInit & { json?: unknow
       body: json !== undefined ? JSON.stringify(json) : resto.body,
       cache: "no-store",
     });
+    if (r.status === 401) irAlLogin();
     const datos = await r.json().catch(() => null);
     if (!r.ok) {
       const error = datos && typeof datos.error === "string" ? datos.error : r.status === 401

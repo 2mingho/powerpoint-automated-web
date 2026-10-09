@@ -49,6 +49,8 @@ async function Contenido({ searchParams }: { searchParams: Busqueda }) {
 
   return (
     <Bandejas
+      // Otra solicitud pedida por URL (campana) sin salir de /solicitudes: bandejas nuevas con esa abierta.
+      key={pedida ?? "bandejas"}
       inicial={inicial}
       bandejaInicial={bandeja}
       seleccionInicial={seleccion}

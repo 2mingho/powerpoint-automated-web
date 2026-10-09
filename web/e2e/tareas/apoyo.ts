@@ -3,36 +3,18 @@
  * selladas con iron-session, sin pasar por el formulario de login (que tiene
  * limite de 5 intentos por minuto).
  */
-import { randomBytes } from "node:crypto";
-import { Pool } from "pg";
-
-// Las columnas de fecha y hora guardan UTC sin zona: pg serializa con la hora local del proceso.
-process.env.TZ = "UTC";
-import { sealData } from "iron-session";
 import type { BrowserContext } from "@playwright/test";
 import { hoyNegocio } from "../../src/lib/reloj";
 import { sumarDias } from "../../src/lib/tareas/fechas";
+import { BASE_URL, iniciarSesion, sql } from "../comun";
 
-export const BASE = process.env.BASE_URL ?? "http://127.0.0.1:3101";
-const SECRETO = process.env.SESSION_SECRET ?? "dev-only-session-secret-change-me-32chars-min";
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL ?? "postgresql://newlink:newlink_dev@127.0.0.1:55432/newlink_tareas", max: 3 });
+export const BASE = BASE_URL;
 export const HOY = hoyNegocio();
-export { sumarDias };
+export { sql, sumarDias };
 
-export async function sql<T = Record<string, unknown>>(texto: string, p: unknown[] = []): Promise<T[]> {
-  return (await pool.query(texto, p)).rows as T[];
-}
-
-/* Cookie de sesion valida para ese usuario (rota su session_token como un login). */
-export async function cookieDe(userId: number) {
-  const token = randomBytes(24).toString("hex");
-  await sql("UPDATE users SET session_token = $1, force_logout = false WHERE id = $2", [token, userId]);
-  const valor = await sealData({ userId, token }, { password: SECRETO });
-  return { name: "nl_sesion", value: valor, url: BASE };
-}
-
+/* Sesion de ese usuario en el contexto (rota su session_token como un login). */
 export async function entrarComo(contexto: BrowserContext, userId: number) {
-  await contexto.addCookies([await cookieDe(userId)]);
+  await iniciarSesion(contexto, userId, { rotar: true });
 }
 
 /* Escenario aislado: dos unidades con un empleado cada una, un compañero y etiquetas. */

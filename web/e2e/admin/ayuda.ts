@@ -1,10 +1,10 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { Client } from "pg";
+import { iniciarSesion, sql } from "../comun";
 
 /*
- * Ayudas de las pruebas de Administracion y Equipo. Cada sesion entra con su
- * propia IP (x-forwarded-for): el limite de inicio de sesion es de 5 por
- * minuto y por IP, y una bateria de pruebas lo agota.
+ * Ayudas de las pruebas de Administracion y Equipo, sobre la base comun
+ * (e2e/semilla.ts). Las sesiones se sellan (comun.ts); el formulario solo se
+ * usa donde lo que se prueba es el propio inicio de sesion.
  */
 export const CLAVE = "demo1234";
 export const ADMIN = "demo@local.test";
@@ -16,17 +16,7 @@ export const MANAGER = "carlos@equipo.test"; // lidera Data Intelligence e Inves
 export const MANAGER_COM = "sofia@equipo.test";
 export const MANAGER_FUERA = "andres@equipo.test"; // Estrategia Digital, fuera de la cadena de Laura
 
-const URL_BD = process.env.DATABASE_URL ?? "postgresql://newlink:newlink_dev@127.0.0.1:55432/newlink_admin";
-
-export async function bd<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
-  const c = new Client({ connectionString: URL_BD });
-  await c.connect();
-  try {
-    return (await c.query(sql, params)).rows as T[];
-  } finally {
-    await c.end();
-  }
-}
+export const bd = sql;
 
 let n = 0;
 function ipNueva() {
@@ -35,6 +25,13 @@ function ipNueva() {
 }
 
 export async function contextoCon(browser: Browser, email: string): Promise<{ ctx: BrowserContext; page: Page }> {
+  const ctx = await browser.newContext();
+  await iniciarSesion(ctx, email);
+  return { ctx, page: await ctx.newPage() };
+}
+
+/* Contexto que entra por el formulario de login (con su propia IP: el limite es de 5 por minuto). */
+export async function contextoConLogin(browser: Browser, email: string): Promise<{ ctx: BrowserContext; page: Page }> {
   const ctx = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": ipNueva() } });
   const page = await ctx.newPage();
   await entrar(page, email);

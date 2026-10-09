@@ -199,9 +199,11 @@ export type DatosCatalogo = Awaited<ReturnType<typeof catalogo>>;
 /* ── Plantillas ── */
 
 export async function plantillasDelRepositorio(): Promise<string[]> {
-  const dir = process.env.PLANTILLAS_DIR ?? path.join(process.cwd(), "..", "powerpoints");
+  // Carpeta de Flask, fuera de web/: se lee en tiempo de ejecucion. Sin el
+  // turbopackIgnore, el trazado del build incluiria el proyecto entero.
+  const dir = process.env.PLANTILLAS_DIR ?? path.join(/*turbopackIgnore: true*/ process.cwd(), "..", "powerpoints");
   try {
-    return (await readdir(dir, { withFileTypes: true }))
+    return (await readdir(/*turbopackIgnore: true*/ dir, { withFileTypes: true }))
       .filter((f) => f.isFile() && f.name.toLowerCase().endsWith(".pptx"))
       .map((f) => f.name)
       .sort();

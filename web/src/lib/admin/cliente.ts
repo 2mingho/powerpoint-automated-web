@@ -3,6 +3,8 @@
  * { error: "mensaje en espanol" } y se lanzan con ese texto para mostrarlo tal
  * cual en el aviso. Una sesion caducada o cerrada por un admin manda a /login.
  */
+import { irAlLogin } from "@/components/ui/sesion";
+
 export class ErrorPedido extends Error {
   constructor(public status: number, mensaje: string) { super(mensaje); }
 }
@@ -19,12 +21,7 @@ export async function pedir<T = unknown>(url: string, opts: { metodo?: string; c
   } catch {
     throw new ErrorPedido(0, "Sin conexión con el servidor. Revisa tu red y vuelve a intentarlo.");
   }
-  if (r.status === 401 && typeof window !== "undefined") {
-    // Recarga completa a proposito: la sesion ya no vale y no hay estado que conservar.
-    const destino = new URL("/login", window.location.origin);
-    destino.searchParams.set("destino", window.location.pathname + window.location.search);
-    window.location.assign(destino.toString());
-  }
+  if (r.status === 401) irAlLogin();
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new ErrorPedido(r.status, (datos as { error?: string }).error ?? `Error ${r.status}.`);
   return datos as T;

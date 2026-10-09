@@ -2,6 +2,7 @@ import { ZONA_NEGOCIO } from "@/lib/reloj";
 import { diasEntre, lunesDe, sumarDias } from "@/lib/tareas/fechas";
 import type { EstadoCatalogo, Filtros, TareaDTO } from "@/lib/tareas/tipos";
 import type { Tono } from "@/components/ui/estado";
+import { irAlLogin } from "@/components/ui/sesion";
 
 /* Utilidades del lado del navegador: peticiones JSON y formatos de fecha. */
 
@@ -23,6 +24,7 @@ export async function pedir<T>(url: string, opts: { metodo?: string; cuerpo?: un
     if ((e as Error).name === "AbortError") throw e;
     throw new ErrorPeticion(0, "Sin conexión. Comprueba la red y vuelve a intentarlo.");
   }
+  if (r.status === 401) irAlLogin();
   const datos = (await r.json().catch(() => ({}))) as Record<string, unknown>;
   if (!r.ok) {
     const mensaje = typeof datos.error === "string" ? datos.error

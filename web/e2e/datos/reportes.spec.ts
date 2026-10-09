@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { entrar, prepararUsuarios, USUARIOS, widgets } from "./ayuda";
+import { entrar, USUARIOS, widgets } from "./ayuda";
 
 /*
  * Reportes: subir → progreso → reporte, y quien puede hacer que.
@@ -10,8 +10,6 @@ test.describe.configure({ mode: "serial" });
 
 let token = "";
 const nombre = `Cliente E2E ${Date.now()}`;
-
-test.beforeAll(async () => { await prepararUsuarios(); });
 
 test("subir los widgets, ver el progreso y abrir el reporte", async ({ page }, info) => {
   test.skip(info.project.name !== "escritorio", "el flujo completo se prueba en escritorio");

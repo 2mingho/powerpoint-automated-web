@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EstadoProceso, FaseProceso } from "@/components/ui/proceso";
 import type { Trabajo } from "@/lib/datos/tipos";
+import { irAlLogin } from "@/components/ui/sesion";
 
 /*
  * Un proceso de datos visto desde el navegador: la subida (con su progreso
@@ -61,7 +62,10 @@ export function subirConProgreso(url: string, datos: FormData, alAvanzar: (pct: 
     xhr.open("POST", url);
     xhr.responseType = "json";
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) alAvanzar((e.loaded / e.total) * 100); };
-    xhr.onload = () => resolver({ status: xhr.status, datos: (xhr.response ?? {}) as Record<string, unknown> });
+    xhr.onload = () => {
+      if (xhr.status === 401) irAlLogin();
+      resolver({ status: xhr.status, datos: (xhr.response ?? {}) as Record<string, unknown> });
+    };
     xhr.onerror = () => rechazar(new Error("Se perdió la conexión mientras se subía el archivo."));
     xhr.onabort = () => rechazar(new DOMException("cancelado", "AbortError"));
     senal?.addEventListener("abort", () => xhr.abort());
@@ -77,6 +81,7 @@ export async function pedirJson<T>(url: string, init?: RequestInit): Promise<T> 
   } catch {
     throw new Error("Sin conexión. Comprueba la red e inténtalo de nuevo.");
   }
+  if (r.status === 401) irAlLogin();
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(typeof datos.error === "string" ? datos.error : "No se pudo completar la operación.");
   return datos as T;
@@ -119,6 +124,7 @@ export function useProcesoDatos<R>({ alTerminar }: { alTerminar?: (r: R) => void
       if (!vivo.current) return;
       try {
         const r = await fetch(`/api/datos/trabajos/${id}`, { cache: "no-store" });
+        if (r.status === 401) { irAlLogin(); return; }
         if (r.status === 404) {
           setEstado((e) => ({ ...e, situacion: "fallido", proceso: { ...e.proceso, error: "El proceso ya no existe: caducó o se reinició el servicio." } }));
           return;

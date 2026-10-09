@@ -11,14 +11,18 @@
  *   iniciarTour()            relanza el tour de bienvenida ("tour:iniciar").
  *   abrirPaleta()            abre la paleta de comandos ("paleta:abrir");
  *                            tambien Ctrl/Cmd + K.
+ *   /tareas?nueva=1          abre "Nueva tarea" al llegar a Mis tareas;
+ *   abrirNuevaTarea()        lo mismo si ya se esta alli ("tarea:nueva").
  */
 export const EVENTO_ABRIR_SOLICITUD = "solicitud:abrir";
 export const EVENTO_SOLICITUD_ENVIADA = "solicitud:enviada";
 export const EVENTO_INICIAR_TOUR = "tour:iniciar";
 export const EVENTO_ABRIR_PALETA = "paleta:abrir";
+export const EVENTO_NUEVA_TAREA = "tarea:nueva";
 
 export type DetalleSolicitudEnviada = { id: number; destino: string };
 
 export function abrirSolicitud() { window.dispatchEvent(new CustomEvent(EVENTO_ABRIR_SOLICITUD)); }
 export function iniciarTour() { window.dispatchEvent(new CustomEvent(EVENTO_INICIAR_TOUR)); }
+export function abrirNuevaTarea() { window.dispatchEvent(new CustomEvent(EVENTO_NUEVA_TAREA)); }
 export function abrirPaleta() { window.dispatchEvent(new CustomEvent(EVENTO_ABRIR_PALETA)); }

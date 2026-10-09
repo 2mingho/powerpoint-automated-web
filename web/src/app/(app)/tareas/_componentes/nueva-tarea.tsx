@@ -1,5 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { EVENTO_NUEVA_TAREA } from "@/components/cabecera/eventos";
 import { Plus } from "lucide-react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Boton } from "@/components/ui/boton";
@@ -29,6 +31,24 @@ export function NuevaTarea() {
   });
   const [f, setF] = useState(vacio);
   const set = (k: keyof ReturnType<typeof vacio>, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
+
+  // /tareas?nueva=1 (la paleta, un enlace): se abre y el parametro se retira para que recargar no lo repita.
+  const nueva = useSearchParams().get("nueva") === "1";
+  useEffect(() => {
+    if (!nueva) return;
+    // La URL es la orden externa de abrir.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setErrores({});
+    setAbierto(true);
+    const u = new URL(window.location.href);
+    u.searchParams.delete("nueva");
+    window.history.replaceState(window.history.state, "", u);
+  }, [nueva]);
+  useEffect(() => {
+    const abrir = () => { setErrores({}); setAbierto(true); };
+    window.addEventListener(EVENTO_NUEVA_TAREA, abrir);
+    return () => window.removeEventListener(EVENTO_NUEVA_TAREA, abrir);
+  }, []);
 
   const serie = f.is_recurrent && f.recurrence_end && f.due_date ? generarFechasRecurrencia(f.due_date, f.recurrence_type, f.recurrence_end).length : 0;
 

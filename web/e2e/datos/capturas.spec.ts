@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { CAPTURAS, entrar, prepararUsuarios, USUARIOS, widgets } from "./ayuda";
+import { CAPTURAS, entrar, USUARIOS, widgets } from "./ayuda";
 
 /*
  * Capturas de revision: 1440 px (escritorio) y 390 px (movil), en claro y en
@@ -9,8 +9,6 @@ import { CAPTURAS, entrar, prepararUsuarios, USUARIOS, widgets } from "./ayuda";
  */
 test.describe.configure({ mode: "serial" });
 test.skip(!process.env.CAPTURAS, "solo con CAPTURAS=1");
-test.beforeAll(async () => { await prepararUsuarios(); });
-
 const utf16 = (s: string) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, "utf16le")]);
 const TEMAS = ["light", "dark"] as const;
 

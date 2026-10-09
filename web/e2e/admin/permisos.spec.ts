@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN, ANALISTA, bd, contextoCon, idDe } from "./ayuda";
+import { ADMIN, ANALISTA, bd, contextoCon, contextoConLogin, idDe } from "./ayuda";
 
 /* Una cuenta propia para la expulsion: si fuera analista, las pruebas en paralelo perderian su sesion. */
 const VICTIMA = "rosa@equipo.test";
@@ -90,7 +90,7 @@ test("api_key nunca aparece en ninguna respuesta de administracion", async ({ br
 });
 
 test("forzar cierre de sesion expulsa al usuario en su siguiente peticion", async ({ browser }) => {
-  const victima = await contextoCon(browser, VICTIMA);
+  const victima = await contextoConLogin(browser, VICTIMA);
   const admin = await contextoCon(browser, ADMIN);
   const id = await idDe(VICTIMA);
   const antes = (await bd<{ session_token: string }>("select session_token from users where id = $1", [id]))[0].session_token;
@@ -112,7 +112,7 @@ test("forzar cierre de sesion expulsa al usuario en su siguiente peticion", asyn
   // Queda registrado y el siguiente inicio de sesion limpia la marca.
   const log = await bd("select 1 from activity_logs where action = 'user_kick' and entity_id = $1", [id]);
   expect(log.length).toBeGreaterThan(0);
-  const otra = await contextoCon(browser, VICTIMA);
+  const otra = await contextoConLogin(browser, VICTIMA);
   expect((await otra.page.request.get("/api/admin/resumen")).status()).toBe(403);
   expect((await bd<{ force_logout: boolean }>("select force_logout from users where id = $1", [id]))[0].force_logout).toBe(false);
 });
