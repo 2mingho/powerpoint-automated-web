@@ -1,8 +1,8 @@
 /*
- * Busqueda de tareas para la paleta: GET /api/tareas?q=. Ese endpoint es del
- * modulo de tareas; aqui solo se lee, tolerando su forma (lista suelta o
- * { tareas | items | resultados }) y campos en espanol o en ingles. Si falla
- * o no existe todavia, devuelve [] y la paleta sigue sin el grupo de tareas.
+ * Busqueda de tareas para la paleta: GET /api/tareas?q=&alcance=unidad&limite=6.
+ * alcance=unidad es "todo lo que puedo ver" (sin el, la API solo mira las
+ * asignadas a mi); limite corta la lista y ahorra los contadores. Se tolera
+ * la forma de la respuesta; si falla, [] y la paleta sigue sin el grupo.
  */
 export type TareaEncontrada = { id: number; titulo: string; detalle: string };
 
@@ -21,7 +21,7 @@ function aTarea(t: Cruda): TareaEncontrada | null {
 
 export async function buscarTareas(q: string, signal: AbortSignal): Promise<TareaEncontrada[]> {
   try {
-    const r = await fetch(`/api/tareas?q=${encodeURIComponent(q)}&limite=6`, { signal, cache: "no-store" });
+    const r = await fetch(`/api/tareas?q=${encodeURIComponent(q)}&alcance=unidad&limite=6`, { signal, cache: "no-store" });
     if (!r.ok) return [];
     const d: unknown = await r.json();
     const lista = Array.isArray(d)

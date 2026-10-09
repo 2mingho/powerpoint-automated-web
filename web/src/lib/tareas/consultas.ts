@@ -94,7 +94,7 @@ export async function condicionesFiltro(u: UsuarioActual, f: Filtros, hoy: strin
  *   - Con rango (calendario): todo lo que vence en el rango, cerrado o no.
  * Ordenada por entrega y con tope de 500 (FUN-04).
  */
-export async function listarTareas(u: UsuarioActual, f: Filtros, rango?: { desde: string; hasta: string }) {
+export async function listarTareas(u: UsuarioActual, f: Filtros, rango?: { desde: string; hasta: string }, maximo = MAX_FILAS) {
   const finales = await estadosFinales();
   const hoy = hoyNegocio();
   const y: Prisma.tasksWhereInput[] = [await filtroTareasVisibles(u), ...(await condicionesFiltro(u, f, hoy, finales))];
@@ -109,10 +109,10 @@ export async function listarTareas(u: UsuarioActual, f: Filtros, rango?: { desde
     where: { AND: y },
     include: INCLUIR_TAREA,
     orderBy: [{ due_date: "asc" }, { id: "asc" }],
-    take: MAX_FILAS + 1,
+    take: maximo + 1,
   });
-  const truncada = filas.length > MAX_FILAS;
-  return { tareas: await aDTOs(filas.slice(0, MAX_FILAS), u.id), truncada };
+  const truncada = filas.length > maximo;
+  return { tareas: await aDTOs(filas.slice(0, maximo), u.id), truncada };
 }
 
 /* Los cuatro contadores, dentro del alcance visible y del chip elegido. */
