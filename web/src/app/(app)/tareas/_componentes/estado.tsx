@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAvisos } from "@/components/ui/avisos";
 import type { Contadores, EstadoCatalogo, EtiquetaDTO, Filtros, PersonaDTO, PrioridadCatalogo, TareaDTO } from "@/lib/tareas/tipos";
 import { consultaDeFiltros, ErrorPeticion, pedir } from "./cliente";
@@ -92,6 +93,13 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
   const [filtros, setFiltrosEstado] = useState(inicial.filtros);
   const [vista, setVistaEstado] = useState<Vista>(inicial.vista);
   const [seleccionada, setSeleccionada] = useState<number | null>(inicial.tarea);
+  // ?tarea=ID que llega navegando sin salir de /tareas (campana, paleta, Inicio): abre ese pase.
+  const pedida = useSearchParams().get("tarea");
+  const [pedidaPrevia, setPedidaPrevia] = useState(pedida);
+  if (pedida !== pedidaPrevia) {
+    setPedidaPrevia(pedida);
+    if (pedida && /^\d+$/.test(pedida)) setSeleccionada(Number(pedida));
+  }
   const [etiquetas, setEtiquetas] = useState(inicial.etiquetas);
   const [version, setVersion] = useState(0);
   const [completadasSesion, setCompletadasSesion] = useState<Set<number>>(() => new Set());
