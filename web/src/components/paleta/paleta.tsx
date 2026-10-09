@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as Iconos from "lucide-react";
 import { cx } from "@/components/ui/cx";
 import type { ItemNav } from "@/components/shell/navegacion";
-import { EVENTO_ABRIR_PALETA, iniciarTour } from "@/components/cabecera/eventos";
+import { abrirNuevaTarea, EVENTO_ABRIR_PALETA, iniciarTour } from "@/components/cabecera/eventos";
 import { buscarTareas, type TareaEncontrada } from "./buscar-tareas";
 
 type Comando = {
@@ -102,7 +102,10 @@ export function Paleta({ items, puedeTareas }: { items: ItemNav[]; puedeTareas: 
   const comandos = useMemo<Comando[]>(() => {
     const acciones: Comando[] = [];
     if (puedeTareas) {
-      acciones.push({ id: "nueva-tarea", grupo: "Acciones", titulo: "Nueva tarea", claves: "crear", icono: "Plus", ejecutar: () => ir("/tareas?nueva=1") });
+      acciones.push({ id: "nueva-tarea", grupo: "Acciones", titulo: "Nueva tarea", claves: "crear", icono: "Plus", ejecutar: () => {
+        // En Mis tareas ya montada, el parametro no vuelve a cambiar: se pide por evento.
+        if (pathname === "/tareas") { cerrar(); abrirNuevaTarea(); } else ir("/tareas?nueva=1");
+      } });
       acciones.push({
         id: "solicitar", grupo: "Acciones", titulo: "Solicitar trabajo a otra unidad", claves: "solicitud pedir nueva", icono: "Send",
         ejecutar: () => {
