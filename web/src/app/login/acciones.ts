@@ -7,6 +7,7 @@ import { obtenerSesion } from "@/lib/auth/session";
 import { verificarContrasena } from "@/lib/auth/password";
 import { registrarActividad } from "@/lib/actividad";
 import { permitir } from "@/lib/limite";
+import { rutaInterna } from "@/lib/rutas";
 
 export type EstadoLogin = { error?: string; email?: string };
 
@@ -44,6 +45,5 @@ export async function iniciarSesion(_: EstadoLogin, form: FormData): Promise<Est
   await sesion.save();
 
   await registrarActividad(u.id, "login", `Inicio de sesión: ${u.username}`);
-  const destino = String(form.get("destino") ?? "/");
-  redirect(destino.startsWith("/") && !destino.startsWith("//") ? destino : "/");
+  redirect(rutaInterna(form.get("destino")) ?? "/");
 }

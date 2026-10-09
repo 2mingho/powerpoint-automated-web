@@ -3,6 +3,7 @@
  * Sin base ni sesion: lo que se puede probar con Vitest sin montar nada.
  */
 import type { Tono } from "@/lib/catalogo";
+import { rutaInterna } from "@/lib/rutas";
 
 export const ESTADOS_SOLICITUD = ["Pendiente", "Aceptada", "Rechazada", "Cancelada"] as const;
 export type EstadoSolicitud = (typeof ESTADOS_SOLICITUD)[number];
@@ -113,6 +114,5 @@ export function enlaceNuevo(enlace: string | null | undefined): string | null {
   if (tarea) return `/tareas?tarea=${tarea[1]}`;
   if (enlace === "/task-requests" || enlace.startsWith("/task-requests?")) return "/solicitudes";
   if (enlace === "/tasks" || enlace.startsWith("/tasks?")) return "/tareas";
-  if (!enlace.startsWith("/") || enlace.startsWith("//")) return null;
-  return enlace;
+  return rutaInterna(enlace);
 }
