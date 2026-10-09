@@ -1,0 +1,58 @@
+/*
+ * Tokens de los graficos del modulo Datos. Viven aqui y no en globals.css
+ * porque solo los usan estas pantallas.
+ *
+ * Paleta categorica: los seis primeros pasos de la paleta de referencia de la
+ * skill dataviz, en ese orden (el orden es el mecanismo de seguridad para
+ * daltonismo). Validada con validate_palette.js sobre las superficies reales:
+ * claro #ffffff y oscuro #151a20. En claro, aqua, amarillo y magenta quedan
+ * por debajo de 3:1, asi que todo grafico categorico lleva sus valores
+ * escritos (etiquetas directas o tabla).
+ *
+ * Sentimiento usa los tonos de estado del sistema (bien / neutro / alerta):
+ * es polaridad, no identidad.
+ */
+:root {
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
+  --serie-5: #e87ba4;
+  --serie-6: #008300;
+  --serie-otras: #9aa0a8;
+  --serie-previa: #9aa0a8;
+  --rejilla: #e6e8eb;
+  --eje: #b5bac1;
+  --div-pos: #2a78d6;
+  --div-neg: #e34948;
+  --div-medio: #f0f1f3;
+}
+
+:root[data-theme="dark"] {
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --serie-5: #d55181;
+  --serie-6: #008300;
+  --serie-otras: #5d646c;
+  --serie-previa: #6b7178;
+  --rejilla: #232a32;
+  --eje: #39424d;
+  --div-pos: #3987e5;
+  --div-neg: #e66767;
+  --div-medio: #1b2128;
+}
+
+/* Recharts: el texto de los ejes con la tipografia de datos y tinta muted. */
+.viz .recharts-cartesian-axis-tick-value {
+  fill: var(--texto-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.viz .recharts-cartesian-grid line { stroke: var(--rejilla); }
+.viz .recharts-surface:focus { outline: none; }
+
+@media print {
+  .viz * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}

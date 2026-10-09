@@ -1,0 +1,48 @@
+/*
+ * El reporte en PDF (Imprimir → Guardar como PDF). Fuera el armazon de la
+ * app; dentro, el reporte a ancho completo, siempre en claro aunque se este
+ * usando el tema oscuro, y sin partir un grafico entre dos paginas.
+ */
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+
+  :root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --fondo: #ffffff;
+    --superficie: #ffffff;
+    --superficie-2: #f5f6f8;
+    --superficie-hundida: #e3e6ea;
+    --hilo: #d6d9de;
+    --hilo-fuerte: #b5bac1;
+    --texto: #0b0d10;
+    --texto-2: #474d55;
+    --texto-3: #6b7178;
+    --tono-neutro: #5d646c;
+    --tono-bien: #1f7546;
+    --tono-alerta: #c0341d;
+    --serie-1: #2a78d6;
+    --serie-2: #eb6834;
+    --serie-3: #1baf7a;
+    --serie-4: #eda100;
+    --serie-5: #e87ba4;
+    --serie-6: #008300;
+    --serie-otras: #9aa0a8;
+    --serie-previa: #9aa0a8;
+    --rejilla: #e6e8eb;
+    --eje: #b5bac1;
+  }
+
+  html, body { background: #ffffff !important; }
+  body > div > aside,
+  body header.sticky,
+  body nav,
+  [aria-live="polite"].fixed { display: none !important; }
+  .md\:pl-60 { padding-left: 0 !important; }
+  main#contenido { padding: 0 !important; }
+
+  .reporte { max-width: none; }
+  .reporte section { break-inside: avoid-page; box-shadow: none !important; }
+  .reporte .salto { break-before: page; }
+  .reporte [contenteditable] { outline: none !important; }
+  .reporte figure, .reporte table, .reporte li { break-inside: avoid; }
+}
