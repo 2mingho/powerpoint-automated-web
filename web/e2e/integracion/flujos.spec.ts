@@ -259,9 +259,11 @@ test.describe("cierre forzado", () => {
     for (const api of ["/api/tareas", "/api/tareas/contadores", "/api/solicitudes", "/api/notificaciones/contador", "/api/datos/reportes", "/api/equipo"]) {
       expect((await page.request.get(`${BASE_URL}${api}`)).status(), api).toBe(401);
     }
-    // La pantalla abierta: la siguiente accion lleva al login.
-    await page.getByRole("button", { name: "Actualizar la lista" }).click();
-    await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
+    // La pantalla abierta: la siguiente accion lleva al login. Puede llegar antes por el sondeo de
+    // fondo (el contador de avisos recibe el 401), asi que el clic es opcional y lo que se exige es el destino.
+    const alLogin = expect(page).toHaveURL(/\/login/, { timeout: 20_000 });
+    await page.getByRole("button", { name: "Actualizar la lista" }).click({ timeout: 4_000 }).catch(() => {});
+    await alLogin;
     for (const r of pantallas) {
       await page.goto(r);
       await expect(page, r).toHaveURL(/\/login/);
