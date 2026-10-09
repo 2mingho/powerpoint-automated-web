@@ -68,6 +68,8 @@ model areas {
   name                                            String           @unique @db.VarChar(100)
   description                                     String?
   created_at                                      DateTime?        @db.Timestamp(6)
+  color                                           String?          @db.VarChar(20)
+  has_studies                                     Boolean          @default(false)
   solicitudes_salientes task_requests[]  @relation("task_requests_from_area_idToareas")
   solicitudes_entrantes   task_requests[]  @relation("task_requests_to_area_idToareas")
   task_tags                                       task_tags[]
@@ -312,6 +314,13 @@ model tasks {
   deleted_at                                                 DateTime?              @db.Timestamp(6)
   deleted_by_id                                              Int?
   board_position                                             Float?
+  estimated_hours                                            Float?
+  reviewer_id                                                Int?
+  block_reason                                               String?                @db.VarChar(255)
+  done_at                                                    DateTime?              @db.Timestamp(6)
+  task_type                                                  String                 @default("normal") @db.VarChar(10)
+  phase                                                      String?                @db.VarChar(40)
+  study_method                                               String?                @db.VarChar(40)
   task_checklist_items                                       task_checklist_items[]
   task_comments                                              task_comments[]
   bloqueada_por task_dependencies[]    @relation("task_dependencies_blocked_task_idTotasks")
@@ -322,6 +331,7 @@ model tasks {
   areas                                                      areas?                 @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_area_id")
   borrada_por                           users?                 @relation("tasks_deleted_by_idTousers", fields: [deleted_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_deleted_by_id")
   asignado                             users                  @relation("tasks_assignee_idTousers", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  revisor                              users?                 @relation("tasks_reviewer_idTousers", fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_reviewer_id_users")
   creador                              users                  @relation("tasks_creator_idTousers", fields: [creator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   padre                                                      tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   hijas                                                      tasks[]                @relation("tasksTotasks")
@@ -332,6 +342,7 @@ model tasks {
   @@index([due_date], map: "ix_tasks_due_date")
   @@index([parent_task_id], map: "ix_tasks_parent_task_id")
   @@index([priority], map: "ix_tasks_priority")
+  @@index([reviewer_id], map: "ix_tasks_reviewer_id")
 }
 
 model temp_artifacts {
@@ -375,6 +386,7 @@ model users {
   is_area_lead                                      Boolean?                 @default(false)
   manager_id                                        Int?
   tour_completed_at                                 DateTime?                @db.Timestamp(6)
+  weekly_capacity                                   Int?
   activity_logs                                     activity_logs[]
   ai_providers                                      ai_providers[]
   ai_usage                                          ai_usage[]
@@ -394,6 +406,7 @@ model users {
   tareas_borradas                  tasks[]                  @relation("tasks_deleted_by_idTousers")
   tareas_asignadas                    tasks[]                  @relation("tasks_assignee_idTousers")
   tareas_creadas                     tasks[]                  @relation("tasks_creator_idTousers")
+  tareas_a_revisar                   tasks[]                  @relation("tasks_reviewer_idTousers")
   temp_artifacts                                    temp_artifacts[]
   unit_leads                                        unit_leads[]
   manager                                             users?                   @relation("usersTousers", fields: [manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_manager_id")

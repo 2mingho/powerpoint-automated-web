@@ -30,6 +30,10 @@ class Area(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Color de la unidad en mapas de calor y graficos (#rrggbb). Nulo = el de la paleta.
+    color = db.Column(db.String(20), nullable=True)
+    # Solo las unidades con estudios pueden crear tareas de tipo "estudio".
+    has_studies = db.Column(db.Boolean, nullable=False, default=False, server_default=false())
 
     def __repr__(self):
         return f"<Area {self.name}>"
@@ -210,6 +214,9 @@ class User(UserMixin, db.Model):
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
     is_area_lead = db.Column(db.Boolean, default=False, server_default=false())
+    # Horas por semana que esta persona puede trabajar. Nulo = la capacidad
+    # estandar de la app; 0 = no recibe carga (direccion, administracion).
+    weekly_capacity = db.Column(db.Integer, nullable=True)
     # Indexada: el alcance de unidad filtra usuarios por area_id en cada
     # consulta de tareas.
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
@@ -458,12 +465,24 @@ class Task(db.Model):
     # tarjeta entre otras dos sin renumerar la columna entera. Nula = nunca se
     # ha colocado a mano; esas van al final, por fecha de entrega.
     board_position = db.Column(db.Float, nullable=True)
+    # Seguimiento: horas, revision, bloqueo y estudios. Todo nulo o con valor por
+    # defecto, asi que las tareas existentes no cambian.
+    estimated_hours = db.Column(db.Float, nullable=True)
+    reviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    block_reason = db.Column(db.String(255), nullable=True)
+    # Cuando pasó a un estado final. Nulo en las que se cerraron antes de existir
+    # la columna: no se reconstruye, para no inventar la puntualidad.
+    done_at = db.Column(db.DateTime, nullable=True)
+    task_type = db.Column(db.String(10), nullable=False, default='normal', server_default='normal')
+    phase = db.Column(db.String(40), nullable=True)
+    study_method = db.Column(db.String(40), nullable=True)
 
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     assignee_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     creator = db.relationship('User', foreign_keys=[creator_id], backref='created_tasks')
     assignee = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_tasks')
+    reviewer = db.relationship('User', foreign_keys=[reviewer_id])
     area_ref = db.relationship('Area', foreign_keys=[area_id])
     children = db.relationship('Task', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
 
