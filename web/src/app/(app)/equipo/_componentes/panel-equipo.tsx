@@ -162,7 +162,7 @@ function TablaTareas({ tareas, filtros, estados, tonoDe, hoy, finales, cargando,
         <h2 className="mr-2 font-rotulo text-sm font-semibold uppercase tracking-[0.14em]">Tareas</h2>
         <Entrada type="search" aria-label="Buscar por título" placeholder="Buscar por título" value={busca} className="w-full md:w-56"
           onChange={(e) => { const v = e.target.value; setBusca(v); clearTimeout(temporizador.current); temporizador.current = setTimeout(() => cambiar({ q: v }), 300); }} />
-        <Selector aria-label="Estado" value={filtros.estado ?? ""} onChange={(e) => cambiar({ estado: e.target.value })} className="w-full sm:w-40">
+        <Selector aria-label="Estado" value={filtros.estado ?? ""} onChange={(e) => cambiar({ estado: e.target.value })} className="w-full sm:w-44">
           <option value="">Todos los estados</option>
           {estados.map((e) => <option key={e} value={e}>{e}</option>)}
         </Selector>

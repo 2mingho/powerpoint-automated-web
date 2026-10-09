@@ -95,7 +95,7 @@ export function CargaPorPersona({ filas, estados, onPersona, activa }: {
               </span>
               <span className="text-right font-mono text-sm cifras">
                 {f.total}
-                {f.vencidas > 0 && <span className="ml-1.5 text-xs text-alerta" title={`${f.vencidas} vencidas`}>{f.vencidas}<span className="sr-only"> vencidas</span>!</span>}
+                {f.vencidas > 0 && <span className="block text-[0.6875rem] leading-none text-alerta sm:ml-1.5 sm:inline">{f.vencidas} venc.</span>}
               </span>
             </button>
           </li>

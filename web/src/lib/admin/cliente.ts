@@ -20,7 +20,10 @@ export async function pedir<T = unknown>(url: string, opts: { metodo?: string; c
     throw new ErrorPedido(0, "Sin conexión con el servidor. Revisa tu red y vuelve a intentarlo.");
   }
   if (r.status === 401 && typeof window !== "undefined") {
-    window.location.href = `/login?destino=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    // Recarga completa a proposito: la sesion ya no vale y no hay estado que conservar.
+    const destino = new URL("/login", window.location.origin);
+    destino.searchParams.set("destino", window.location.pathname + window.location.search);
+    window.location.assign(destino.toString());
   }
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new ErrorPedido(r.status, (datos as { error?: string }).error ?? `Error ${r.status}.`);

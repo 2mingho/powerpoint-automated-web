@@ -105,20 +105,20 @@ export function PantallaIa({ inicial, proveedores, precios }: { inicial: DatosIa
         <span className="text-sm text-texto-3">Histórico completo. El coste se congela al hacer cada llamada.</span>
       </>}>
         {datos.consumo.length === 0 ? <p className="px-4 py-4 text-texto-2">Aún no se ha hecho ninguna llamada.</p> : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead className="border-b border-hilo"><tr><Th>Modelo</Th><Th className="text-right">Llamadas</Th><Th className="text-right">Fallos</Th><Th className="text-right">Tokens entrada</Th><Th className="text-right">Tokens salida</Th><Th className="w-[28%]">Coste</Th><Th className="hidden lg:table-cell">Última</Th></tr></thead>
+          <div>
+            <table className="w-full border-collapse text-sm">
+              <thead className="border-b border-hilo"><tr><Th>Modelo</Th><Th className="text-right">Llamadas</Th><Th className="hidden text-right sm:table-cell">Fallos</Th><Th className="hidden text-right md:table-cell">Tokens entrada</Th><Th className="hidden text-right md:table-cell">Tokens salida</Th><Th className="md:w-[28%]">Coste</Th><Th className="hidden lg:table-cell">Última</Th></tr></thead>
               <tbody>
                 {datos.consumo.map((c) => (
                   <tr key={`${c.proveedor}${c.modelo}`} className={claseFila}>
-                    <td className={claseCelda}><span className="font-mono text-xs">{c.modelo}</span> <span className="text-texto-3">· {c.proveedor}</span></td>
+                    <td className={cx(claseCelda, "max-w-0 truncate")}><span className="font-mono text-xs">{c.modelo}</span> <span className="text-texto-3">· {c.proveedor}</span></td>
                     <td className={cx(claseCelda, "text-right font-mono cifras")}>{fEntero(c.llamadas)}</td>
-                    <td className={cx(claseCelda, "text-right font-mono cifras", c.fallos ? "text-alerta" : "text-texto-3")}>{c.fallos}</td>
-                    <td className={cx(claseCelda, "text-right font-mono cifras")}>{fCompacto(c.tokensIn)}</td>
-                    <td className={cx(claseCelda, "text-right font-mono cifras")}>{fCompacto(c.tokensOut)}</td>
+                    <td className={cx(claseCelda, "hidden text-right font-mono cifras sm:table-cell", c.fallos ? "text-alerta" : "text-texto-3")}>{c.fallos}</td>
+                    <td className={cx(claseCelda, "hidden text-right font-mono cifras md:table-cell")}>{fCompacto(c.tokensIn)}</td>
+                    <td className={cx(claseCelda, "hidden text-right font-mono cifras md:table-cell")}>{fCompacto(c.tokensOut)}</td>
                     <td className={claseCelda}>
                       <span className="flex items-center gap-2">
-                        <span aria-hidden className="h-2 flex-1 overflow-hidden rounded-full bg-hundida">
+                        <span aria-hidden className="hidden h-2 flex-1 overflow-hidden rounded-full bg-hundida sm:block">
                           <span className="block h-full rounded-full bg-texto-2" style={{ width: `${maxCoste ? Math.max(2, (c.coste / maxCoste) * 100) : 0}%` }} />
                         </span>
                         <span className="w-24 text-right font-mono text-xs cifras">{fUsd(c.coste)}</span>
@@ -132,9 +132,9 @@ export function PantallaIa({ inicial, proveedores, precios }: { inicial: DatosIa
                 <tr>
                   <td className={cx(claseCelda, "rotulo")}>Total</td>
                   <td className={cx(claseCelda, "text-right font-mono font-semibold cifras")}>{fEntero(datos.totales.llamadas)}</td>
-                  <td className={claseCelda} />
-                  <td className={cx(claseCelda, "text-right font-mono cifras")}>{fCompacto(datos.totales.tokensIn)}</td>
-                  <td className={cx(claseCelda, "text-right font-mono cifras")}>{fCompacto(datos.totales.tokensOut)}</td>
+                  <td className={cx(claseCelda, "hidden sm:table-cell")} />
+                  <td className={cx(claseCelda, "hidden text-right font-mono cifras md:table-cell")}>{fCompacto(datos.totales.tokensIn)}</td>
+                  <td className={cx(claseCelda, "hidden text-right font-mono cifras md:table-cell")}>{fCompacto(datos.totales.tokensOut)}</td>
                   <td className={cx(claseCelda, "text-right font-mono font-semibold cifras")}>{fUsd(datos.totales.coste)}</td>
                   <td className="hidden lg:table-cell" />
                 </tr>

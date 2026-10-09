@@ -19,8 +19,9 @@ async function capturar(page: Page, ruta: string, quien: string) {
       await page.setViewportSize({ width: ancho, height: ancho > 800 ? 900 : 844 });
       await page.goto(ruta);
       await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, tema);
-      await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(900);
+      await page.waitForLoadState("load");
+      await page.locator("h1").first().waitFor({ timeout: 30_000 });
+      await page.waitForTimeout(1500);
       const nombre = `${quien}${ruta.replace(/\//g, "_") || "_inicio"}-${ancho}-${tema === "light" ? "claro" : "oscuro"}.png`;
       await page.screenshot({ path: `e2e/capturas/admin/${nombre}`, fullPage: true });
     }

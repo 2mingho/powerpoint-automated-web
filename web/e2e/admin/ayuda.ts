@@ -8,6 +8,8 @@ import { Client } from "pg";
  */
 export const CLAVE = "demo1234";
 export const ADMIN = "demo@local.test";
+export const ADMIN_2 = "admin2@equipo.test"; // para pruebas que corren a la vez que las de ADMIN
+export const EMPLEADO = "luis@equipo.test";
 export const ANALISTA = "analista@local.test";
 export const DIRECTORA = "laura@equipo.test";
 export const MANAGER = "carlos@equipo.test"; // lidera Data Intelligence e Investigacion

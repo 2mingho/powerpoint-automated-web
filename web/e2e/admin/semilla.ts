@@ -97,6 +97,8 @@ export async function sembrar() {
   const paula = await persona("Paula Vidal", "paula", "EST", EST, andres);
   const diego = await persona("Diego Romero", "diego", "EST", EST, andres);
   await persona("Rosa Ibáñez", "rosa", "COM", COM, null);
+  // Segundo admin: las pruebas en paralelo no pueden compartir cuenta (cada inicio de sesion rota el token).
+  await persona("Admin Catálogo", "admin2", "admin", null, null);
   const inactiva = await persona("Tomás Ferrer", "tomas", "DI", DI, carlos);
   await db.users.update({ where: { id: inactiva }, data: { is_active: false } });
 
