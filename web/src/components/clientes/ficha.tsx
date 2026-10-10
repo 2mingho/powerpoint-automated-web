@@ -129,7 +129,12 @@ export function FichaClienteHost() {
     setPos(posicionarFicha(r, { w: t.width, h: t.height }, { w: window.innerWidth, h: window.innerHeight }));
   }, [abierta, estado]);
 
-  useEffect(() => { if (abierta?.enfocar && estado) caja.current?.focus({ preventScroll: true }); }, [abierta, estado]);
+  // El foco solo se acepta en algo visible: la ficha esta `invisible` hasta medir su posicion, asi que se pide cuando ya hay posicion.
+  const lista = estrecha || pos !== null;
+  useEffect(() => {
+    const c = caja.current;
+    if (abierta?.enfocar && estado && lista && c && !c.contains(document.activeElement)) c.focus({ preventScroll: true });
+  }, [abierta, estado, lista]);
 
   if (!abierta) return null;
   const e = estado?.id === abierta.id ? estado : null;
