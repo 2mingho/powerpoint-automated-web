@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { exigirAdmin } from "@/lib/admin/guardia";
+import { esAdminProtegido } from "@/lib/admin/protegido";
 import { leerFiltrosUsuarios, listarUsuarios, opcionesPersonas } from "@/lib/admin/consultas";
 import { Encabezado, EsqueletoTabla } from "../_componentes/encabezado";
 import { PantallaPersonas } from "./_componentes/personas";
@@ -22,6 +23,7 @@ async function Datos({ searchParams }: { searchParams: PageProps<"/admin/persona
       inicial={lista}
       opciones={opciones}
       yoId={yo.id}
+      puedeSuplantar={esAdminProtegido(yo.email) && !yo.suplantadoPor}
       filtrosIniciales={{ q: f.q, rol: f.rol, unidad: f.unidad, estado: f.estado, p: f.pagina > 1 ? String(f.pagina) : "" }}
     />
   );

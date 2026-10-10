@@ -16,7 +16,11 @@ import { origenAjeno } from "@/lib/api";
 export async function POST(req: Request) {
   if (origenAjeno(req)) return NextResponse.json({ error: "Petición rechazada: no viene de esta aplicación." }, { status: 403 });
   const u = await usuarioActual();
-  if (u) {
+  if (u?.suplantadoPor) {
+    // Salir viendo como otra persona cierra la sesion de quien suplanta; la de la persona suplantada no se toca.
+    await db.users.update({ where: { id: u.suplantadoPor.id }, data: { session_token: randomBytes(24).toString("hex") } });
+    await registrarActividad(u.suplantadoPor.id, "logout", `Cierre de sesión: ${u.suplantadoPor.nombre} (viendo como ${u.username})`);
+  } else if (u) {
     await db.users.update({ where: { id: u.id }, data: { session_token: randomBytes(24).toString("hex") } });
     await registrarActividad(u.id, "logout", `Cierre de sesión: ${u.username}`);
   }

@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Newlink · aplicación web (Next.js)
 
-## Getting Started
+Next.js 16 (Cache Components) + Prisma 7 + PostgreSQL. La interfaz y la API de tareas, solicitudes, estudios, ingresos y administración viven aquí; el **análisis de datos sigue en Flask** (`../blueprints/interno.py`) y se llama como servicio interno.
 
-First, run the development server:
+- Convenciones y reglas de permisos: [`CONVENCIONES.md`](CONVENCIONES.md) (léelo antes de escribir código).
+- Despliegue, variables y corte de Flask: [`../docs/despliegue.md`](../docs/despliegue.md).
+
+## Desarrollo
 
 ```bash
+cp .env.example .env        # DATABASE_URL, SESSION_SECRET, ANALYTICS_URL, ANALYTICS_TOKEN
+npm ci && npm run db:generate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+El esquema **no** se crea desde aquí: lo aplica Alembic (`flask db upgrade`, desde la raíz). Prisma solo lo lee; si cambias una tabla, la migración va en `../migrations` y `prisma/schema.prisma` se actualiza a mano para coincidir (el CI compara las dos).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Pruebas
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run typecheck && npm run lint && npm test      # unitarias (Vitest)
+DATABASE_URL=postgresql://…/newlink_algo npx playwright test   # e2e
+```
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Las pruebas e2e **vacían y siembran** la base de `DATABASE_URL`: usa siempre una descartable llamada `newlink_<algo>` (la semilla se niega en otra). Detalles en `CONVENCIONES.md`.

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, Pencil, Plus, Power, UserRoundCheck } from "lucide-react";
+import { Eye, LogOut, Pencil, Plus, Power, UserRoundCheck } from "lucide-react";
 import { Boton } from "@/components/ui/boton";
 import { Campo, Entrada, Selector } from "@/components/ui/campo";
 import { cx } from "@/components/ui/cx";
@@ -29,8 +29,8 @@ const HERRAMIENTAS: { clave: string; nombre: string; corto: string }[] = [
   { clave: "tasks", nombre: "Gestión de tareas", corto: "Tar" },
 ];
 
-export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, filtrosIniciales }: {
-  inicial: Lista; opciones: Opciones; yoId: number; filtrosIniciales: Record<string, string>;
+export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, puedeSuplantar, filtrosIniciales }: {
+  inicial: Lista; opciones: Opciones; yoId: number; puedeSuplantar: boolean; filtrosIniciales: Record<string, string>;
 }) {
   const router = useRouter();
   const { avisar } = useAvisos();
@@ -173,6 +173,7 @@ export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, f
         persona={editando === "nueva" ? null : editando}
         opciones={opciones}
         yoId={yoId}
+        puedeSuplantar={puedeSuplantar}
         onCerrar={cerrar}
         onGuardada={async (msg) => { avisar(msg, { tipo: "exito" }); setEditando(null); await recargarTodo(); }}
         onExpulsar={(u) => setConfirmar({ tipo: "expulsar", u })}
@@ -202,7 +203,8 @@ async function pedirOpciones(): Promise<Opciones> {
   return pedir<Opciones>("/api/admin/roles");
 }
 
-function FormularioPersona({ abierta, persona, opciones, yoId, onCerrar, onGuardada, onExpulsar, onDesactivar, onActivar }: {
+function FormularioPersona({ abierta, persona, opciones, yoId, puedeSuplantar, onCerrar, onGuardada, onExpulsar, onDesactivar, onActivar }: {
+  puedeSuplantar: boolean;
   abierta: boolean; persona: FilaUsuario | null; opciones: Opciones; yoId: number; onCerrar: () => void;
   onGuardada: (msg: string) => void; onExpulsar: (u: FilaUsuario) => void; onDesactivar: (u: FilaUsuario) => void; onActivar: (u: FilaUsuario) => void;
 }) {
@@ -214,7 +216,7 @@ function FormularioPersona({ abierta, persona, opciones, yoId, onCerrar, onGuard
       titulo={persona ? persona.nombre : "Nueva persona"}
       subtitulo={persona ? <span className="font-mono text-xs">{persona.email}</span> : "Podrás asignarle superior y liderazgo en Organización."}
     >
-      {abierta && <CamposPersona key={clave} persona={persona} opciones={opciones} yoId={yoId} onGuardada={onGuardada}
+      {abierta && <CamposPersona key={clave} persona={persona} opciones={opciones} yoId={yoId} puedeSuplantar={puedeSuplantar} onGuardada={onGuardada}
         onExpulsar={onExpulsar} onDesactivar={onDesactivar} onActivar={onActivar} />}
     </PanelLateral>
   );
@@ -260,7 +262,36 @@ function PermisosIngresos({ unidades, valor, onChange }: { unidades: { id: numbe
   );
 }
 
-function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesactivar, onActivar }: {
+/* Ver la aplicacion como esa persona: solo la cuenta de administracion principal, con confirmacion. */
+function Suplantar({ persona }: { persona: FilaUsuario }) {
+  const { avisar } = useAvisos();
+  const [abierto, setAbierto] = useState(false);
+  const [trabajando, setTrabajando] = useState(false);
+  async function entrar() {
+    setTrabajando(true);
+    try {
+      await pedir(`/api/admin/usuarios/${persona.id}/suplantar`, { cuerpo: {} });
+      // Carga completa a proposito: el menu, el nombre y los permisos del armazon deben rehacerse para la otra identidad.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/");
+    } catch (e) {
+      avisar(mensajeDe(e), { tipo: "error" });
+      setTrabajando(false);
+    }
+  }
+  return (
+    <>
+      <Boton variante="secundario" icono={<Eye className="size-4" aria-hidden />} onClick={() => setAbierto(true)}>Ver como esta persona</Boton>
+      <Dialogo abierto={abierto} onCerrar={() => setAbierto(false)} ancho="sm" titulo="Ver como esta persona"
+        pie={<><Boton variante="fantasma" onClick={() => setAbierto(false)}>Cancelar</Boton><Boton variante="primario" cargando={trabajando} onClick={entrar}>Ver como {persona.nombre}</Boton></>}>
+        <p>Vas a ver la aplicación con los permisos y los datos de <strong>{persona.nombre}</strong>. Arriba tendrás siempre el aviso con «Volver a mi cuenta». Lo que hagas queda registrado como suplantación.</p>
+      </Dialogo>
+    </>
+  );
+}
+
+function CamposPersona({ persona, opciones, yoId, puedeSuplantar, onGuardada, onExpulsar, onDesactivar, onActivar }: {
+  puedeSuplantar: boolean;
   persona: FilaUsuario | null; opciones: Opciones; yoId: number; onGuardada: (msg: string) => void;
   onExpulsar: (u: FilaUsuario) => void; onDesactivar: (u: FilaUsuario) => void; onActivar: (u: FilaUsuario) => void;
 }) {
@@ -384,6 +415,7 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
           <div className="flex flex-col gap-2">
             {persona.activo ? (
               <>
+                {puedeSuplantar && <Suplantar persona={persona} />}
                 <Boton variante="secundario" icono={<LogOut className="size-4" aria-hidden />} onClick={() => onExpulsar(persona)}>Forzar cierre de sesión</Boton>
                 <Boton variante="peligro" icono={<Power className="size-4" aria-hidden />} onClick={() => onDesactivar(persona)}>Desactivar cuenta</Boton>
               </>

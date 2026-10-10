@@ -28,15 +28,16 @@ export async function proxy(req: NextRequest) {
   }
   const ruta = req.nextUrl.pathname;
   if (ruta === "/admin" || ruta.startsWith("/admin/")) {
-    const sesion = await unsealData<{ userId?: number; token?: string }>(req.cookies.get("nl_sesion")!.value, {
+    const sesion = await unsealData<{ userId?: number; token?: string; suplantadoPor?: unknown }>(req.cookies.get("nl_sesion")!.value, {
       password: process.env.SESSION_SECRET!,
-    }).catch((): { userId?: number; token?: string } => ({}));
+    }).catch((): { userId?: number; token?: string; suplantadoPor?: unknown } => ({}));
     const usuario = sesion.userId ? await db.users.findUnique({
       where: { id: sesion.userId },
       select: { role: true, is_active: true, force_logout: true, session_token: true },
     }) : null;
-    if (!usuario || !usuario.is_active || usuario.force_logout ||
-        (usuario.session_token && sesion.token !== usuario.session_token)) {
+    // Con suplantacion la validez la decide la sesion de quien suplanta (usuarioActual); aqui solo el rol de la persona vista.
+    if (!usuario || !usuario.is_active || (!sesion.suplantadoPor && (usuario.force_logout ||
+        (usuario.session_token && sesion.token !== usuario.session_token)))) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
     if (usuario.role !== "admin") {
@@ -55,5 +56,5 @@ export async function proxy(req: NextRequest) {
  * sesion igual, con conUsuario, y responden 401 en JSON.
  */
 export const config = {
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|logo-newlink.png|api/interno|api/datos).*)"],
+  matcher: ["/((?!login|healthz|_next/static|_next/image|favicon.ico|logo-newlink.png|api/interno|api/datos).*)"],
 };

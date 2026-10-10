@@ -167,7 +167,7 @@ export async function filtroVisiblesYObservadas(u: UsuarioActual): Promise<Prism
   return {
     OR: [
       await filtroTareasVisibles(u),
-      { deleted_at: null, visibility: "shared", task_watchers: { some: { user_id: u.id } } },
+      { deleted_at: null, task_type: { not: "estudio" }, visibility: "shared", task_watchers: { some: { user_id: u.id } } },
     ],
   };
 }

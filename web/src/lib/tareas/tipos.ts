@@ -63,7 +63,7 @@ export type PersonaDTO = { id: number; nombre: string; unidad: string; unidadId:
 
 export type Contadores = { vencidas: number; hoy: number; enCurso: number; bloqueadas: number };
 
-export type Alcance = "mias" | "creadas" | "unidad";
+export type Alcance = "mias" | "creadas" | "unidad" | "observadas";
 export type FiltroRapido = "" | "vencidas" | "hoy" | "en_curso" | "bloqueadas";
 
 export type Filtros = {

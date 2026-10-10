@@ -254,6 +254,26 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
+# ─────────────────────────────────────────────────────────────
+# Corte gradual hacia la app Next.js
+# ─────────────────────────────────────────────────────────────
+# La interfaz web ya vive en Next.js; esta aplicacion debe quedar solo con la API interna
+# (/api/interno, que usa el analisis de datos), /healthz y las migraciones. FLASK_SOLO_INTERNO=1
+# apaga todo lo demas SIN tocar el codigo ni redesplegar: es el interruptor del corte, y quitarlo
+# devuelve las pantallas viejas si algo fallara. Se evalua en cada peticion (app.config) para
+# poder probarlo.
+app.config['SOLO_INTERNO'] = _env_bool('FLASK_SOLO_INTERNO', False)
+
+@app.before_request
+def solo_interno():
+    if not app.config.get('SOLO_INTERNO'):
+        return None
+    ruta = request.path
+    if ruta == '/healthz' or ruta.startswith('/api/interno/'):
+        return None
+    return jsonify({'error': 'Esta aplicación ya no sirve la interfaz web: usa la app principal.'}), 404
+
+
 # Registrar blueprints
 app.register_blueprint(auth)
 app.register_blueprint(admin_bp)

@@ -6,6 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { HERRAMIENTAS, type Herramienta } from "@/lib/auth/session";
 import { concesionesDeVarios } from "@/lib/finanzas/permisos";
+import { EMAIL_ADMIN_PROTEGIDO } from "./protegido";
 import { enmascararClave } from "./mascara";
 import { arbolDeMando, cadenaHaciaArriba, calcularAlcances, type PersonaOrg } from "./mando";
 
@@ -17,9 +18,7 @@ import { arbolDeMando, cadenaHaciaArriba, calcularAlcances, type PersonaOrg } fr
  * servidor y el cliente solo recibe "••••abcd".
  */
 
-/* La cuenta de administrador protegida (DEFAULT_ADMIN_EMAIL de Flask). */
-export const EMAIL_ADMIN_PROTEGIDO = (process.env.ADMIN_EMAIL ?? "admin@dataintel.com").toLowerCase();
-export const esAdminProtegido = (email: string) => email.toLowerCase() === EMAIL_ADMIN_PROTEGIDO;
+export { EMAIL_ADMIN_PROTEGIDO, esAdminProtegido } from "./protegido";
 
 export const POR_PAGINA_USUARIOS = 25;
 export const POR_PAGINA_ACTIVIDAD = 50;

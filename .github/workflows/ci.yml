@@ -168,6 +168,23 @@ jobs:
         working-directory: web
         run: npx playwright test
 
+      # La imagen que se despliega: se construye y se arranca contra la base ya migrada.
+      # /healthz debe decir que la base responde y que el esquema es el que espera el codigo.
+      - name: Imagen de Docker de la web y su /healthz
+        run: |
+          docker build -t newlink-web:ci web/
+          docker run -d --name web-ci --network host -e PORT=3401 -e DATABASE_URL="$DATABASE_URL" -e SESSION_SECRET="$SESSION_SECRET" newlink-web:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3401/healthz >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://127.0.0.1:3401/healthz | tee healthz.json
+          grep -q '"schema":"ok"' healthz.json
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3401/login)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3401/_next/image?url=%2Flogo-newlink.png&w=64&q=75')" = "200"
+          docker rm -f web-ci
+
+      - name: Registros de la imagen si algo falla
+        if: failure()
+        run: docker logs web-ci 2>&1 | tail -n 60 || true
+
       - name: Trazas y registros si algo falla
         if: failure()
         uses: actions/upload-artifact@v7

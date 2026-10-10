@@ -286,6 +286,7 @@ test.describe("en pantalla", () => {
     }).toPass({ timeout: 15_000 });
     await page.getByRole("button", { name: "Dejar de repetir" }).first().click();
     await expect(page.getByText("No se repite").first()).toBeVisible();
-    expect((await serie(t))[0].is_recurrent).toBe(false);
+    // La pantalla cambia al instante; la base, cuando llega la respuesta.
+    await expect.poll(async () => (await serie(t))[0].is_recurrent).toBe(false);
   });
 });

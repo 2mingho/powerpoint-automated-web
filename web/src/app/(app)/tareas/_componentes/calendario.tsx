@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { useAvisos } from "@/components/ui/avisos";
+import { Dialogo } from "@/components/ui/dialogo";
 import { Boton } from "@/components/ui/boton";
 import { Esqueleto, Vacio } from "@/components/ui/panel";
 import { cx } from "@/components/ui/cx";
@@ -25,6 +27,9 @@ export function Calendario() {
   const [tareas, setTareas] = useState<TareaDTO[] | null>(null);
   const [error, setError] = useState("");
   const [abiertos, setAbiertos] = useState<Set<string>>(() => new Set());
+  const { avisar } = useAvisos();
+  const [porBorrar, setPorBorrar] = useState<string | null>(null);
+  const [borrando, setBorrando] = useState(false);
 
   const inicio = lunesDe(`${mes}-01`);
   const dias = useMemo(() => Array.from({ length: 42 }, (_, i) => sumarDias(inicio, i)), [inicio]);
@@ -48,6 +53,27 @@ export function Calendario() {
     const r = await ctx.guardar(t.id, { due_date: dia }, { mensaje: `«${t.titulo}» pasa al ${fechaCorta(dia)}.`, version: t.actualizada });
     if (r) setTareas((l) => l?.map((x) => (x.id === r.id ? { ...x, ...r } : x)) ?? l);
     else void cargar();
+  };
+
+  /* Borrar todo lo que vence un dia: se confirma con el numero a la vista y se puede deshacer. */
+  const borrarDia = async () => {
+    if (!porBorrar) return;
+    const dia = porBorrar;
+    setBorrando(true);
+    try {
+      const r = await pedir<{ borradas: number; marca: string }>(`/api/tareas/dia/${dia}`, { metodo: "DELETE" });
+      setPorBorrar(null);
+      avisar(`Se ${r.borradas === 1 ? "borró 1 tarea" : `borraron ${r.borradas} tareas`} del ${fechaCorta(dia)}.`, {
+        tipo: "exito",
+        deshacer: r.borradas ? () => { void pedir(`/api/tareas/dia/${dia}/restaurar`, { cuerpo: { marca: r.marca } }).then(() => { avisar("Borrado deshecho."); void cargar(); void ctx.recargar(); }); } : undefined,
+      });
+      void cargar();
+      void ctx.recargar();
+    } catch (e) {
+      avisar((e as Error).message, { tipo: "error" });
+    } finally {
+      setBorrando(false);
+    }
   };
 
   const sensores = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -86,7 +112,7 @@ export function Calendario() {
               <div key={s} role="row" className="grid grid-cols-7 border-b border-hilo last:border-b-0">
                 {dias.slice(s * 7, s * 7 + 7).map((d) => (
                   <Dia key={d} dia={d} fuera={d.slice(0, 7) !== mes} tareas={porDia.get(d) ?? []} abierto={abiertos.has(d)}
-                    alAbrir={() => setAbiertos((x) => new Set(x).add(d))} alMover={mover} />
+                    alAbrir={() => setAbiertos((x) => new Set(x).add(d))} alMover={mover} alBorrar={() => setPorBorrar(d)} />
                 ))}
               </div>
             ))}
@@ -97,6 +123,8 @@ export function Calendario() {
               <li key={d} className="rounded-md border border-hilo bg-superficie">
                 <h3 className={cx("flex items-center gap-2 border-b border-hilo px-3 py-2 font-rotulo text-sm font-semibold uppercase tracking-[0.1em]", d === ctx.hoy && "text-texto")}>
                   {SEMANA[(diaSemana(d) + 6) % 7]} <span className="font-mono cifras">{fechaCorta(d)}</span>{d === ctx.hoy && <span className="text-xs text-texto-3">hoy</span>}
+                  <button type="button" onClick={() => setPorBorrar(d)} aria-label={`Borrar las ${porDia.get(d)?.length ?? 0} tareas del ${fechaCorta(d)}`}
+                    className="ml-auto grid size-9 place-items-center rounded-sm text-texto-3 hover:bg-hundida hover:text-alerta"><Trash2 aria-hidden className="size-4" /></button>
                 </h3>
                 <ul className="flex flex-col gap-1 p-2">{(porDia.get(d) ?? []).map((t) => <Ficha key={t.id} t={t} alMover={mover} />)}</ul>
               </li>
@@ -105,13 +133,17 @@ export function Calendario() {
           </ol>
         </DndContext>
       )}
+      <Dialogo abierto={porBorrar !== null} onCerrar={() => setPorBorrar(null)} titulo="Borrar las tareas del día" ancho="sm"
+        pie={<><Boton variante="fantasma" onClick={() => setPorBorrar(null)}>Cancelar</Boton><Boton variante="peligro" cargando={borrando} onClick={() => void borrarDia()}>Borrar {porBorrar ? porDia.get(porBorrar)?.length ?? 0 : 0} tareas</Boton></>}>
+        {porBorrar && <p>Se borran <strong className="font-mono cifras">{porDia.get(porBorrar)?.length ?? 0}</strong> tareas que vencen el <strong>{fechaCorta(porBorrar)}</strong>, de todas las personas de tu ámbito. Podrás deshacerlo durante unos segundos.</p>}
+      </Dialogo>
       {tareas && <p className="text-sm text-texto-3">Arrastra una tarea a otro día para mover su entrega. Con el teclado: Alt + flechas.</p>}
     </section>
   );
 }
 
-function Dia({ dia, fuera, tareas, abierto, alAbrir, alMover }: {
-  dia: string; fuera: boolean; tareas: TareaDTO[]; abierto: boolean; alAbrir: () => void; alMover: (t: TareaDTO, d: string) => void;
+function Dia({ dia, fuera, tareas, abierto, alAbrir, alMover, alBorrar }: {
+  dia: string; fuera: boolean; tareas: TareaDTO[]; abierto: boolean; alAbrir: () => void; alMover: (t: TareaDTO, d: string) => void; alBorrar: () => void;
 }) {
   const { hoy } = useTareas();
   const { setNodeRef, isOver } = useDroppable({ id: dia });
@@ -121,7 +153,15 @@ function Dia({ dia, fuera, tareas, abierto, alAbrir, alMover }: {
     <div ref={setNodeRef} role="gridcell" aria-label={`${fechaCorta(dia)}: ${tareas.length} tareas`}
       className={cx("flex min-h-28 min-w-0 flex-col gap-1 border-r border-hilo p-1.5 last:border-r-0 transition-colors duration-[var(--dur)]",
         finde && "bg-superficie-2", fuera && "opacity-55", isOver && "bg-hundida")}>
-      <span className={cx("self-start rounded-sm px-1 font-mono text-xs cifras", dia === hoy ? "bg-texto font-semibold text-superficie" : "text-texto-3")}>{Number(dia.slice(8))}</span>
+      <div className="group/dia flex items-center justify-between">
+        <span className={cx("self-start rounded-sm px-1 font-mono text-xs cifras", dia === hoy ? "bg-texto font-semibold text-superficie" : "text-texto-3")}>{Number(dia.slice(8))}</span>
+        {tareas.length > 0 && (
+          <button type="button" onClick={alBorrar} aria-label={`Borrar las ${tareas.length} tareas del ${fechaCorta(dia)}`} title="Borrar las tareas del día"
+            className="grid size-6 place-items-center rounded-sm text-texto-3 opacity-0 transition-opacity hover:text-alerta focus-visible:opacity-100 group-hover/dia:opacity-100 [@media(hover:none)]:opacity-100">
+            <Trash2 aria-hidden className="size-3.5" />
+          </button>
+        )}
+      </div>
       <ul className="flex min-w-0 flex-col gap-1">
         {visibles.map((t) => <Ficha key={t.id} t={t} alMover={alMover} />)}
       </ul>

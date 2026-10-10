@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import { CABECERAS_SEGURIDAD } from "./src/lib/cabeceras";
 
 const nextConfig: NextConfig = {
+  // Solo en la imagen de Docker (NEXT_OUTPUT=standalone): `next start` y el CI usan la salida normal.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   async headers() {
     return [{ source: "/:path*", headers: CABECERAS_SEGURIDAD }];
   },

@@ -228,6 +228,32 @@ export async function borrarTarea(u: UsuarioActual, id: number, serie: boolean) 
   return cuantas;
 }
 
+/*
+ * Borrar todas las tareas con entrega ese dia dentro del ambito de la persona
+ * (api_tasks_delete_day de Flask). Borrado suave; `marca` es el instante del borrado y
+ * sirve para deshacerlo sin tocar lo que otra persona borre despues.
+ */
+export async function borrarDia(u: UsuarioActual, dia: string) {
+  const fecha = parsearFechaEntrada(dia);
+  if (!fecha || fecha !== dia) throw new ErrorApi(400, "Fecha inválida.");
+  const ahora = new Date();
+  const donde: Prisma.tasksWhereInput = { AND: [await filtroTareasVisibles(u), { due_date: diaDb(fecha) }] };
+  const ids = (await db.tasks.findMany({ where: donde, select: { id: true } })).map((t) => t.id);
+  if (ids.length) await db.tasks.updateMany({ where: { id: { in: ids } }, data: { deleted_at: ahora, deleted_by_id: u.id } });
+  await registrarActividad(u.id, "task_delete_day", `Tareas eliminadas del día ${fecha}: ${ids.length}. ids=${JSON.stringify(ids)}`, { tipo: "task_bulk", id: ids[0] ?? null });
+  return { borradas: ids.length, fecha, marca: ahora.toISOString() };
+}
+
+/* Deshace borrarDia: solo lo que borro esta persona en ese instante y para ese dia. */
+export async function restaurarDia(u: UsuarioActual, dia: string, marca: unknown) {
+  const fecha = parsearFechaEntrada(dia);
+  const cuando = typeof marca === "string" ? new Date(marca) : null;
+  if (!fecha || fecha !== dia || !cuando || Number.isNaN(cuando.getTime())) throw new ErrorApi(400, "No hay nada que restaurar.");
+  const r = await db.tasks.updateMany({ where: { deleted_by_id: u.id, deleted_at: cuando, due_date: diaDb(fecha) }, data: { deleted_at: null, deleted_by_id: null } });
+  await registrarActividad(u.id, "task_restore", `Borrado del día ${fecha} deshecho (${r.count} tarea(s))`, { tipo: "task_bulk", id: null });
+  return { restauradas: r.count };
+}
+
 /* Deshacer un borrado reciente: solo lo que borro esta misma persona. */
 export async function restaurarTarea(u: UsuarioActual, id: number) {
   const t = await db.tasks.findFirst({ where: { id, deleted_by_id: u.id, deleted_at: { not: null } }, select: { id: true, deleted_at: true, title: true } });

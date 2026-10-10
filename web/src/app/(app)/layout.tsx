@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { exigirUsuario, tieneHerramienta } from "@/lib/auth/session";
 import { cache } from "react";
+import { Eye } from "lucide-react";
 import { papel, puedeVerEquipo } from "@/lib/alcance";
 import { unidadesVisiblesFinanzas } from "@/lib/finanzas/permisos";
 import { veEstudios } from "@/lib/estudios/servicio";
@@ -33,6 +34,21 @@ async function Cabecera() {
   return <AccionesCabecera items={d.items} tourPendiente={!u.tourCompletado} puedeTareas={tieneHerramienta(u, "tasks")} />;
 }
 
+/* Mientras un administrador ve la aplicacion como otra persona, un aviso fijo lo dice y ofrece volver. */
+async function AvisoSuplantacion() {
+  const u = await exigirUsuario();
+  if (!u.suplantadoPor) return null;
+  return (
+    <div role="status" className="sticky top-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-aviso bg-aviso/15 px-4 py-2 text-sm backdrop-blur">
+      <Eye aria-hidden className="size-4 shrink-0" />
+      <span>Estás viendo la aplicación como <strong>{u.username}</strong>. Lo que hagas queda registrado.</span>
+      <form method="post" action="/api/sesion/suplantacion/detener" className="ml-auto">
+        <button type="submit" className="rounded-sm border border-texto px-3 py-1 font-rotulo text-xs font-semibold uppercase tracking-[0.1em] hover:bg-superficie-2">Volver a mi cuenta</button>
+      </form>
+    </div>
+  );
+}
+
 export default function LayoutApp({ children }: LayoutProps<"/">) {
   return (
     <ProveedorAvisos>
@@ -41,6 +57,7 @@ export default function LayoutApp({ children }: LayoutProps<"/">) {
         navMovil={<Suspense fallback={null}><Movil /></Suspense>}
         campana={<Suspense fallback={<AccionesCabeceraEsqueleto />}><Cabecera /></Suspense>}
       >
+        <Suspense fallback={null}><AvisoSuplantacion /></Suspense>
         {children}
         <Suspense fallback={null}><FichaClienteHost /></Suspense>
       </Armazon>

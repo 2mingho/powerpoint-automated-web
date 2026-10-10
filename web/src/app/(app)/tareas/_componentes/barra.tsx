@@ -30,6 +30,7 @@ const ALCANCES: Array<{ clave: Alcance; rotulo: string }> = [
   { clave: "mias", rotulo: "Asignadas a mí" },
   { clave: "creadas", rotulo: "Creadas por mí" },
   { clave: "unidad", rotulo: "Mi unidad" },
+  { clave: "observadas", rotulo: "Observo" },
 ];
 
 export const VISTAS: Array<{ clave: Vista; rotulo: string; icono: React.ReactNode }> = [

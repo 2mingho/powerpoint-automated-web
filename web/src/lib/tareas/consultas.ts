@@ -5,7 +5,7 @@ import { estados, estadosFinales, prioridadesValidas } from "@/lib/catalogo";
 import { hoyNegocio } from "@/lib/reloj";
 import type { UsuarioActual } from "@/lib/auth/session";
 import { filtroTareasVisibles } from "@/lib/tareas/alcance";
-import { aDTOs, diaDb, INCLUIR_TAREA, MAX_FILAS } from "./base";
+import { aDTOs, diaDb, filtroVisiblesYObservadas, INCLUIR_TAREA, MAX_FILAS } from "./base";
 import { esIsoValida } from "./fechas";
 import type { Alcance, Contadores, FiltroRapido, Filtros } from "./tipos";
 
@@ -17,7 +17,7 @@ import type { Alcance, Contadores, FiltroRapido, Filtros } from "./tipos";
 
 export const DIAS_DE_CERRADAS = 14;
 
-const ALCANCES: Alcance[] = ["mias", "creadas", "unidad"];
+const ALCANCES: Alcance[] = ["mias", "creadas", "unidad", "observadas"];
 const FILTROS: FiltroRapido[] = ["", "vencidas", "hoy", "en_curso", "bloqueadas"];
 
 export function leerFiltros(p: URLSearchParams | Record<string, string | string[] | undefined>): Filtros {
@@ -62,7 +62,14 @@ async function condicionRapida(filtro: FiltroRapido, hoy: string, finales: strin
 function condicionAlcance(u: UsuarioActual, alcance: Alcance): Prisma.tasksWhereInput | null {
   if (alcance === "mias") return { assignee_id: u.id };
   if (alcance === "creadas") return { creator_id: u.id };
+  // Las que observo, sean de mi ambito o compartidas por otra unidad (api_tasks_watching de Flask).
+  if (alcance === "observadas") return { task_watchers: { some: { user_id: u.id } } };
   return null;
+}
+
+/* Lo observado incluye las tareas compartidas de otra unidad que se observan; el resto, lo del ambito. */
+function visibleSegun(u: UsuarioActual, alcance: Alcance) {
+  return alcance === "observadas" ? filtroVisiblesYObservadas(u) : filtroTareasVisibles(u);
 }
 
 /* Condiciones de filtro (sin alcance de visibilidad ni rango). */
@@ -97,7 +104,7 @@ export async function condicionesFiltro(u: UsuarioActual, f: Filtros, hoy: strin
 export async function listarTareas(u: UsuarioActual, f: Filtros, rango?: { desde: string; hasta: string }, maximo = MAX_FILAS) {
   const finales = await estadosFinales();
   const hoy = hoyNegocio();
-  const y: Prisma.tasksWhereInput[] = [await filtroTareasVisibles(u), ...(await condicionesFiltro(u, f, hoy, finales))];
+  const y: Prisma.tasksWhereInput[] = [await visibleSegun(u, f.alcance), ...(await condicionesFiltro(u, f, hoy, finales))];
   if (rango && f.filtro !== "vencidas") {
     if (esIsoValida(rango.desde)) y.push({ due_date: { gte: diaDb(rango.desde) } });
     if (esIsoValida(rango.hasta)) y.push({ due_date: { lte: diaDb(rango.hasta) } });
@@ -119,7 +126,7 @@ export async function listarTareas(u: UsuarioActual, f: Filtros, rango?: { desde
 export async function contarSalidas(u: UsuarioActual, alcance: Alcance): Promise<Contadores> {
   const finales = await estadosFinales();
   const hoy = hoyNegocio();
-  const base: Prisma.tasksWhereInput[] = [await filtroTareasVisibles(u)];
+  const base: Prisma.tasksWhereInput[] = [await visibleSegun(u, alcance)];
   const a = condicionAlcance(u, alcance);
   if (a) base.push(a);
   const contar = async (filtro: FiltroRapido) =>
@@ -137,7 +144,7 @@ export async function tablero(u: UsuarioActual, f: Filtros, dias: number) {
   const desde = new Date(Date.now() - dias * 86_400_000);
   const filas = await db.tasks.findMany({
     where: { AND: [
-      await filtroTareasVisibles(u),
+      await visibleSegun(u, f.alcance),
       ...(await condicionesFiltro(u, f, hoy, finales)),
       { OR: [{ status: { notIn: finales } }, { updated_at: { gte: desde } }] },
     ] },

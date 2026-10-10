@@ -5,8 +5,15 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { db } from "@/lib/db";
+import { esAdminProtegido } from "@/lib/admin/protegido";
 
-export type DatosSesion = { userId?: number; token?: string };
+/*
+ * userId/token: la persona con la que se trabaja. Con suplantacion (solo la cuenta de
+ * administracion protegida, ver /api/admin/usuarios/[id]/suplantar), userId es la persona
+ * suplantada y `suplantadoPor` guarda quien es de verdad y su token: si esa sesion se
+ * cierra, la suplantacion deja de valer.
+ */
+export type DatosSesion = { userId?: number; token?: string; suplantadoPor?: { id: number; token: string } };
 
 export const opcionesSesion: SessionOptions = {
   password: process.env.SESSION_SECRET as string,
@@ -48,6 +55,8 @@ export type UsuarioActual = {
   managerId: number | null;
   herramientas: Herramienta[];
   tourCompletado: boolean;
+  /* Quien esta detras cuando un administrador ve la aplicacion como esta persona; null si es su propia sesion. */
+  suplantadoPor: { id: number; nombre: string } | null;
 };
 
 function herramientasDe(role: string, permitidas: string | null): Herramienta[] {
@@ -78,8 +87,19 @@ export const usuarioActual = cache(async (): Promise<UsuarioActual | null> => {
     include: { areas: { select: { name: true } } },
   });
   if (!u || !u.is_active) return null;
-  if (u.force_logout) return null;
-  if (u.session_token && sesion.token !== u.session_token) return null;
+
+  // Con suplantacion manda la sesion de quien suplanta: debe seguir viva, ser la cuenta protegida y conservar su token.
+  // El cierre forzado o el token de la persona suplantada no cuentan: no es ella quien esta entrando.
+  let suplantadoPor: UsuarioActual["suplantadoPor"] = null;
+  if (sesion.suplantadoPor) {
+    const a = await db.users.findUnique({ where: { id: sesion.suplantadoPor.id }, select: { id: true, username: true, email: true, role: true, is_active: true, force_logout: true, session_token: true } });
+    const viva = a && a.is_active && !a.force_logout && a.role === "admin" && esAdminProtegido(a.email) && !!a.session_token && a.session_token === sesion.suplantadoPor.token;
+    if (!viva) return null;
+    suplantadoPor = { id: a.id, nombre: a.username };
+  } else {
+    if (u.force_logout) return null;
+    if (u.session_token && sesion.token !== u.session_token) return null;
+  }
 
   return {
     id: u.id,
@@ -92,6 +112,7 @@ export const usuarioActual = cache(async (): Promise<UsuarioActual | null> => {
     managerId: u.manager_id,
     herramientas: herramientasDe(u.role, u.allowed_tools),
     tourCompletado: !!u.tour_completed_at,
+    suplantadoPor,
   };
 });
 
