@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     name: Tests y migraciones
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     env:
       SECRET_KEY: ci-secret-key-not-used-in-production
@@ -58,7 +58,7 @@ jobs:
 
   web:
     name: Web (Next.js)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     # Alembic (Flask) es el dueño del esquema: la base se construye con sus
