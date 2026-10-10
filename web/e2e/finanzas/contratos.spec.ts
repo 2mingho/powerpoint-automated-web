@@ -300,7 +300,7 @@ test.describe("clientes y unidades con contratos", () => {
 });
 
 test.describe("metas", () => {
-  type Metas = { anio: number; direccion: { monto: number; puedeEditar: boolean } | null; unidades: { unidadId: number; nombre: string; monto: number; puedeEditar: boolean }[] };
+  type Metas = { anio: number; sumaUnidades: number; total: { monto: number; calculada: boolean }; direccion: { monto: number; puedeEditar: boolean } | null; unidades: { unidadId: number; nombre: string; monto: number; puedeEditar: boolean }[] };
   const metas = async (ctx: BrowserContext, anio = 2026) => (await (await ctx.request.get(`/api/finanzas/metas?anio=${anio}`)).json()) as Metas;
   const poner = (ctx: BrowserContext, cuerpo: Record<string, unknown>) => ctx.request.put("/api/finanzas/metas", { data: cuerpo });
   const guardada = async (anio: number, area: number | null) => (await sql<{ amount: string }>(area === null ? "SELECT amount FROM goals WHERE year = $1 AND area_id IS NULL" : "SELECT amount FROM goals WHERE year = $1 AND area_id = $2", area === null ? [anio] : [anio, area]))[0]?.amount;
@@ -364,6 +364,39 @@ test.describe("metas", () => {
     expect(JSON.stringify(m)).not.toContain("222");
     expect(JSON.stringify(m)).not.toContain(`Beta ${e.sufijo}`);
     expect((await context.request.get("/api/finanzas/metas?anio=1800")).status()).toBe(400);
+  });
+
+  test("la meta total se calcula: es la suma de las unidades que ve cada quien, y solo un valor fijado la reemplaza", async ({ browser, context }) => {
+    const { ctx } = await contextoCon(browser, ADMIN);
+    const e = await escenario("met-suma");
+    await poner(ctx, { anio: 2032, unidadId: e.alfa, monto: 1000 });
+    await poner(ctx, { anio: 2032, unidadId: e.beta, monto: 500.5 });
+
+    await lidera(e.empleado, e.alfa); // su cadena: solo Alfa
+    await entrarComo(context, e.empleado);
+    let m = await metas(context, 2032);
+    expect(m.sumaUnidades).toBe(1000);
+    expect(m.total).toEqual({ monto: 1000, calculada: true });
+    expect(m.direccion).toBeNull(); // nadie tecleo nada: no hay valor fijado que ver
+
+    await lidera(e.empleado, e.beta); // ahora su cadena suma las dos
+    m = await metas(context, 2032);
+    expect(m.total).toEqual({ monto: 1500.5, calculada: true });
+
+    // Cambiar una unidad cambia el total sin tocar nada mas.
+    await poner(ctx, { anio: 2032, unidadId: e.beta, monto: 2000 });
+    expect((await metas(context, 2032)).total.monto).toBe(3000);
+
+    // Un valor fijado a mano solo lo ve quien ve todas las unidades; para el resto sigue siendo la suma.
+    await poner(ctx, { anio: 2032, unidadId: null, monto: 9999 });
+    expect((await metas(context, 2032)).total).toEqual({ monto: 3000, calculada: true });
+    const admin = await metas(ctx, 2032);
+    expect(admin.total).toEqual({ monto: 9999, calculada: false });
+    expect(admin.direccion).toMatchObject({ monto: 9999, puedeEditar: true });
+    // Quitarlo (monto 0) vuelve a la suma.
+    await poner(ctx, { anio: 2032, unidadId: null, monto: 0 });
+    expect((await metas(ctx, 2032)).direccion?.monto).toBe(0);
+    expect((await metas(ctx, 2032)).total.calculada).toBe(true);
   });
 
   test("la meta de la direccion: la fija solo Administracion y la ve quien ve todas las unidades", async ({ browser, context }) => {

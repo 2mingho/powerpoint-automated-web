@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leerAnio, leerContrato, leerMonto, MONTO_MAX, textoDeProrrateo, usd } from "./contratos";
+import { leerAnio, leerContrato, leerMonto, MONTO_MAX, textoDeProrrateo, usd, usdS } from "./contratos";
 
 const base = { clienteId: 3, unidadId: 7, tipo: "Fee", monto: 15000, inicio: "2026-01-01", fin: "2026-12-31" };
 
@@ -73,6 +73,11 @@ describe("textos de dinero", () => {
     expect(usd(1250.5)).toBe("US$1,250.50");
     expect(usd(333.3333)).toBe("US$333.33");
     expect(usd(0)).toBe("US$0");
+  });
+
+  it("usdS abrevia como el MVP", () => {
+    expect([0, 850, 999.6, 1000, 6500, 9999, 12500, 143000, 1_200_000, 1_000_000, -6500].map(usdS)).toEqual(
+      ["US$0", "US$850", "US$1000", "US$1k", "US$6.5k", "US$10k", "US$13k", "US$143k", "US$1.2M", "US$1M", "-US$6.5k"]);
   });
 
   it("confirma el prorrateo como el MVP", () => {

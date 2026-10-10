@@ -9,6 +9,7 @@ import { Esqueleto } from "@/components/ui/panel";
 import { fDia } from "@/lib/admin/formato";
 import type { FichaCliente } from "@/lib/clientes/ficha";
 import { posicionarFicha } from "@/lib/clientes/posicion";
+import { usd, usdS } from "@/lib/finanzas/contratos";
 
 /*
  * Ficha flotante de un cliente. Un solo contenedor para toda la aplicacion:
@@ -182,6 +183,12 @@ function Cuerpo({ estado, nombre, reintentar }: { estado: Estado | null; nombre:
         <Cifra rotulo="Vencidas" valor={String(f.vencidas)} tono={f.vencidas ? "alerta" : undefined} />
         <Cifra rotulo="A tiempo" valor={pct == null ? "—" : `${pct} %`} nota={pct == null ? "sin cierres en 30 días" : `${f.aTiempo.cerradas} cerrada${f.aTiempo.cerradas === 1 ? "" : "s"} en 30 días`} />
       </dl>
+      {f.contratado && (
+        <p className="flex items-baseline justify-between gap-2 border-b border-hilo px-4 py-2 text-sm">
+          <span><span className="rotulo mr-2">Contratado {f.contratado.anio}</span><span className="font-mono font-medium cifras" title={usd(f.contratado.total)}>{usdS(f.contratado.total)}</span></span>
+          <Link href={`/ingresos?anio=${f.contratado.anio}`} onClick={cerrar} className="shrink-0 text-texto underline underline-offset-4">Ver ingresos</Link>
+        </p>
+      )}
       <section aria-label="Próximas entregas" className="px-4 py-3">
         <h3 className="rotulo mb-1.5">Próximas entregas</h3>
         {f.proximas.length === 0 ? <p className="text-sm text-texto-3">Nada abierto con fecha por delante.</p> : (

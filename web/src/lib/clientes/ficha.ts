@@ -7,6 +7,8 @@ import type { UsuarioActual } from "@/lib/auth/session";
 import { filtroTareasVisibles } from "@/lib/tareas/alcance";
 import { sumarDias } from "@/lib/tareas/fechas";
 import { puntualidad } from "@/lib/seguimiento/riesgo";
+import { enAnio } from "@/lib/seguimiento/finanzas";
+import { unidadesVisiblesFinanzas } from "@/lib/finanzas/permisos";
 
 /*
  * Ficha de un cliente (la que flota sobre su nombre). Todo se cuenta sobre las
@@ -27,6 +29,8 @@ export type FichaCliente = {
   /* Entre lo cerrado en los ultimos 30 dias: % que llego a tiempo (null si no hubo nada con fecha de cierre) y cuantas tareas son. */
   aTiempo: { porcentaje: number | null; cerradas: number };
   unidades: string[];
+  /* Lo contratado con este cliente este año, solo en las unidades cuyos ingresos puede ver quien pregunta; null si no ve ninguno. */
+  contratado: { anio: number; total: number } | null;
 };
 
 export async function fichaDeCliente(u: UsuarioActual, id: number): Promise<FichaCliente> {
@@ -66,6 +70,13 @@ export async function fichaDeCliente(u: UsuarioActual, id: number): Promise<Fich
     .filter((t) => t.hechaEl >= desde);
   const porcentaje = puntualidad(recientes.map((t) => ({ estado: "hecha" as const, horas: 0, esEntrega: true, ...t })), hoy);
 
+  const anio = Number(hoy.slice(0, 4));
+  const unidadesFin = await unidadesVisiblesFinanzas(u);
+  const contratos = unidadesFin.length
+    ? await db.contracts.findMany({ where: { client_id: id, area_id: { in: unidadesFin } }, select: { amount: true, start_date: true, end_date: true } })
+    : [];
+  const totalAnio = Math.round(contratos.reduce((t, c) => t + enAnio({ monto: Number(c.amount.toString()), inicio: isoDeFecha(c.start_date), fin: isoDeFecha(c.end_date) }, anio), 0) * 100) / 100;
+
   return {
     id: cliente.id,
     nombre: cliente.name,
@@ -77,5 +88,6 @@ export async function fichaDeCliente(u: UsuarioActual, id: number): Promise<Fich
     proximas: proximas.map((t) => ({ id: t.id, titulo: t.title, entrega: isoDeFecha(t.due_date), estado: t.status, asignado: t.asignado.username })),
     aTiempo: { porcentaje, cerradas: recientes.length },
     unidades: unidades.map((x) => x.area).sort((a, b) => a.localeCompare(b, "es")).slice(0, 6),
+    contratado: totalAnio > 0 ? { anio, total: totalAnio } : null,
   };
 }

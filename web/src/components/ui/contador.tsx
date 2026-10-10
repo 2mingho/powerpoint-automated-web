@@ -13,7 +13,7 @@ const tonoTexto: Record<Tono, string> = {
  * y el rotulo se enciende un instante. Cifras tabulares, nunca saltan de ancho.
  */
 export function Contador({
-  rotulo, valor, tono = "neutro", activo, onClick, detalle, texto,
+  rotulo, valor, tono = "neutro", activo, onClick, detalle, texto, compacto,
 }: {
   rotulo: string;
   valor: number;
@@ -23,6 +23,8 @@ export function Contador({
   detalle?: string;
   /* Lo que se pinta en lugar del numero ("50 %", "—"); `valor` sigue decidiendo el tono. */
   texto?: string;
+  /* Cifra mas chica en pantallas estrechas, para importes largos como "US$188k". */
+  compacto?: boolean;
 }) {
   const [clave, setClave] = useState(0);
   const previo = useRef(valor);
@@ -48,7 +50,7 @@ export function Contador({
         <span
           key={clave}
           className={cx(
-            "block font-mono text-3xl font-medium cifras",
+            "block font-mono font-medium cifras", compacto ? "text-2xl sm:text-3xl" : "text-3xl",
             tonoTexto[valor === 0 ? "neutro" : tono],
             valor === 0 && "text-texto-3",
             clave > 0 && "motion-safe:animate-[paleta_var(--dur-vista)_var(--curva)]",

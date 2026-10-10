@@ -190,7 +190,18 @@ async function veDireccion(u: Pieza, visibles: number[]) {
   return total > 0 && visibles.length === total;
 }
 
-export async function metasDelAnio(u: Pieza, anioCrudo: unknown): Promise<{ anio: number; direccion: MetaDTO | null; unidades: MetaDTO[] }> {
+export type MetasDelAnio = {
+  anio: number;
+  /* Meta total fijada a mano (la ve Administracion o quien ve todas las unidades); monto 0 = ninguna. */
+  direccion: MetaDTO | null;
+  /* Suma de las metas de las unidades que la persona ve: la meta total por defecto. */
+  sumaUnidades: number;
+  /* La meta total vigente para quien mira: la fijada a mano, si la ve, o la suma. */
+  total: { monto: number; calculada: boolean };
+  unidades: MetaDTO[];
+};
+
+export async function metasDelAnio(u: Pieza, anioCrudo: unknown): Promise<MetasDelAnio> {
   const anio = leerAnio(anioCrudo);
   if (!anio.ok) throw new ErrorApi(400, anio.error);
   const visibles = await unidadesVisiblesFinanzas(u);
@@ -202,10 +213,16 @@ export async function metasDelAnio(u: Pieza, anioCrudo: unknown): Promise<{ anio
   ]);
   const por = new Map(metas.map((m) => [m.area_id, dinero(m.amount)]));
   const editar = new Set(editables);
+  const unidades = areas.map((a) => ({ unidadId: a.id, nombre: a.name, monto: por.get(a.id) ?? 0, puedeEditar: editar.has(a.id) }));
+  const sumaUnidades = Math.round(unidades.reduce((t, x) => t + x.monto, 0) * 100) / 100;
+  const fijada = direccion ? (por.get(null) ?? 0) : 0;
   return {
     anio: anio.valor,
-    direccion: direccion ? { unidadId: null, nombre: "Dirección", monto: por.get(null) ?? 0, puedeEditar: u.isAdmin } : null,
-    unidades: areas.map((a) => ({ unidadId: a.id, nombre: a.name, monto: por.get(a.id) ?? 0, puedeEditar: editar.has(a.id) })),
+    direccion: direccion ? { unidadId: null, nombre: "Dirección", monto: fijada, puedeEditar: u.isAdmin } : null,
+    sumaUnidades,
+    // Por defecto se calcula; solo un valor fijado a mano (y visible para quien mira) la reemplaza.
+    total: fijada > 0 ? { monto: fijada, calculada: false } : { monto: sumaUnidades, calculada: true },
+    unidades,
   };
 }
 

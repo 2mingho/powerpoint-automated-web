@@ -17,12 +17,14 @@ import { PERIODOS, ROTULO_PERIODO, type Periodo } from "@/lib/seguimiento/period
 import { riesgoDe } from "@/lib/seguimiento/riesgo";
 import { fechaCorta, relativo } from "../tareas/_componentes/cliente";
 import { GraficosPanel } from "./graficos-panel";
+import { BloqueIngresos } from "./ingresos-panel";
+import type { IngresosPanel } from "@/lib/panel/datos";
 
 const PAGINA_INICIAL = 40;
 const PAGINA = 60;
 const numero = new Intl.NumberFormat("es-DO", { maximumFractionDigits: 1 });
 
-type Seleccion = "unidad" | "cliente" | "persona" | "tipo" | "estado" | "semana";
+type Seleccion = "unidad" | "cliente" | "persona" | "tipo" | "contrato" | "estado" | "semana";
 
 const ROTULO_ESTADO: Record<string, string> = {
   ...Object.fromEntries(GRUPOS_ESTADO.map((g) => [g.valor, g.rotulo])),
@@ -38,7 +40,7 @@ const ROTULO_ESTADO: Record<string, string> = {
  * clientes con una sola entrada.
  */
 export function PanelInicio({
-  filas, estados, hoy, periodo, desde, hasta, truncado, tope,
+  filas, estados, hoy, periodo, desde, hasta, truncado, tope, ingresos,
 }: {
   filas: FilaPanel[];
   estados: EstadoPanel[];
@@ -48,6 +50,7 @@ export function PanelInicio({
   hasta: string;
   truncado: boolean;
   tope: number;
+  ingresos: IngresosPanel | null;
 }) {
   const router = useRouter();
   const [cambiando, empezar] = useTransition();
@@ -62,6 +65,7 @@ export function PanelInicio({
     cliente: opcionesDe(filas, filtros, hoy, "cliente"),
     persona: opcionesDe(filas, filtros, hoy, "persona"),
     tipo: opcionesDe(filas, filtros, hoy, "tipo"),
+    contrato: opcionesDe(filas, filtros, hoy, "contrato"),
   }), [filas, filtros, hoy]);
   /* Lo urgente primero: lo abierto por entrega ascendente y, al final, lo cerrado por entrega descendente. */
   const detalle = useMemo(() => filas.filter((t) => pasaFiltros(t, filtros, hoy)).sort((a, b) => {
@@ -86,11 +90,12 @@ export function PanelInicio({
   };
 
   const activos: { dim: Seleccion; rotulo: string; texto: string }[] = [];
-  const nombreDe = (dim: "unidad" | "cliente" | "persona" | "tipo") => opciones[dim].find((o) => o.valor === filtros[dim])?.etiqueta ?? filtros[dim];
+  const nombreDe = (dim: "unidad" | "cliente" | "persona" | "tipo" | "contrato") => opciones[dim].find((o) => o.valor === filtros[dim])?.etiqueta ?? filtros[dim];
   if (filtros.unidad) activos.push({ dim: "unidad", rotulo: "Unidad", texto: nombreDe("unidad") });
   if (filtros.cliente) activos.push({ dim: "cliente", rotulo: "Cliente", texto: nombreDe("cliente") });
   if (filtros.persona) activos.push({ dim: "persona", rotulo: "Persona", texto: nombreDe("persona") });
   if (filtros.tipo) activos.push({ dim: "tipo", rotulo: "Tipo de cliente", texto: nombreDe("tipo") });
+  if (filtros.contrato) activos.push({ dim: "contrato", rotulo: "Contrato", texto: nombreDe("contrato") });
   if (filtros.semana) activos.push({ dim: "semana", rotulo: "Semana", texto: `del ${fechaCorta(filtros.semana)}` });
   if (filtros.estado) activos.push({ dim: "estado", rotulo: "Estado", texto: ROTULO_ESTADO[filtros.estado] ?? filtros.estado });
 
@@ -128,11 +133,14 @@ export function PanelInicio({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <FiltroLista etiqueta="Unidad" todas="Todas" valor={filtros.unidad} opciones={opciones.unidad} onChange={(v) => poner("unidad", v)} />
           <FiltroLista etiqueta="Cliente" todas="Todos" valor={filtros.cliente} opciones={opciones.cliente} onChange={(v) => poner("cliente", v)} />
           <FiltroLista etiqueta="Persona" todas="Todas" valor={filtros.persona} opciones={opciones.persona} onChange={(v) => poner("persona", v)} />
           <FiltroLista etiqueta="Tipo de cliente" todas="Todos" valor={filtros.tipo} opciones={opciones.tipo} onChange={(v) => poner("tipo", v)} />
+          {(ingresos || opciones.contrato.length > 0) && (
+            <FiltroLista etiqueta="Tipo de contrato" todas="Todos" valor={filtros.contrato} opciones={opciones.contrato} onChange={(v) => poner("contrato", v)} />
+          )}
           <Campo etiqueta="Estado">
             {(a) => (
               <Selector {...a} value={filtros.estado} onChange={(e) => poner("estado", e.target.value)}>
@@ -173,6 +181,8 @@ export function PanelInicio({
             detalle={cifras.aTiempo == null ? "sin cierres en 30 días" : "cierres de 30 días"} />
         </div>
       </div>
+
+      {ingresos && <BloqueIngresos ingresos={ingresos} filtros={filtros} hoy={hoy} />}
 
       {filas.length > 0 && <GraficosPanel filas={filas} filtros={filtros} hoy={hoy} metrica={metrica} elegir={elegir} />}
 

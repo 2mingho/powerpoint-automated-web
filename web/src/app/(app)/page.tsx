@@ -68,7 +68,7 @@ async function ContenidoPanel({ u, q }: { u: UsuarioActual; q: Record<string, st
         <p className="text-texto-2">Todo lo que puedes ver, filtrado entre sí</p>
       </header>
       <Pestanas actual="panel" />
-      <PanelInicio filas={d.filas} estados={d.estados} hoy={hoy} periodo={periodo} desde={rango.desde} hasta={rango.hasta} truncado={d.truncado} tope={MAX_FILAS_PANEL} />
+      <PanelInicio filas={d.filas} estados={d.estados} hoy={hoy} periodo={periodo} desde={rango.desde} hasta={rango.hasta} truncado={d.truncado} tope={MAX_FILAS_PANEL} ingresos={d.ingresos} />
     </>
   );
 }

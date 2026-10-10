@@ -37,7 +37,7 @@ export function resumen(filas: FilaPanel[], f: FiltrosCruzados, hoy: string, m: 
 
 export type Opcion = { valor: string; etiqueta: string; n: number };
 
-type DimensionDeLista = Extract<Dimension, "unidad" | "cliente" | "persona" | "tipo">;
+type DimensionDeLista = Extract<Dimension, "unidad" | "cliente" | "persona" | "tipo" | "contrato">;
 
 /*
  * Valores que puede tomar una dimension dado el resto de filtros: sin ellos

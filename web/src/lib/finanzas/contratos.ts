@@ -82,6 +82,16 @@ export function usd(n: number): string {
   return `US$${redondeado.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(redondeado) ? 0 : 2, maximumFractionDigits: 2 })}`;
 }
 
+/* Abreviado para ejes y cifras grandes: US$850, US$6.5k, US$143k, US$1.2M. */
+export function usdS(n: number): string {
+  const a = Math.abs(n);
+  const f = (v: number, sufijo: string) => `${n < 0 ? "-" : ""}US$${(Math.round(v * 10) / 10).toString()}${sufijo}`;
+  if (a >= 1_000_000) return f(a / 1_000_000, "M");
+  if (a >= 10_000) return f(Math.round(a / 1000), "k");
+  if (a >= 1_000) return f(a / 1000, "k");
+  return `${n < 0 ? "-" : ""}US$${Math.round(a)}`;
+}
+
 /* La confirmacion del prorrateo: "US$1,250 por mes durante 12 meses". */
 export function textoDeProrrateo(c: { monto: number; inicio: string; fin: string }): string {
   const n = mesesDe(c).length;
