@@ -60,3 +60,11 @@ setup_env.sh
 # No se ejecutan dentro del contenedor: de eso se encarga el CI antes de
 # construir la imagen.
 tests/
+
+# ─── La app web (Next.js) tiene su propia imagen (web/Dockerfile) ───
+# Sin esto, `COPY . .` metia node_modules, .next y las capturas de las pruebas en la imagen de Flask
+# (casi 8 GB). Tampoco entran los materiales de diseño ni los ficheros del despliegue.
+web/
+.impeccable/
+docker-compose*.yml
+2026-*.txt

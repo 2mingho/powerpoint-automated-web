@@ -69,3 +69,18 @@ def test_el_interruptor_se_lee_en_cada_peticion(client):
 
 def test_por_defecto_viene_apagado():
     assert app_module._env_bool('FLASK_SOLO_INTERNO_QUE_NO_EXISTE', False) is False
+
+
+def test_con_https_forzado_las_rutas_viejas_dan_404_y_no_una_redireccion(client):
+    """En produccion Talisman redirige HTTP a HTTPS; el interruptor debe contestar antes, o por HTTP interno
+    cualquier ruta vieja acabaria en una redireccion a un https que no existe en la red del stack."""
+    talisman = app_module.talisman
+    previo = talisman.force_https
+    talisman.force_https = True
+    try:
+        _encender()
+        for ruta in ('/login', '/tasks', '/'):
+            r = client.get(ruta)
+            assert r.status_code == 404, (ruta, r.status_code, r.headers.get('Location'))
+    finally:
+        talisman.force_https = previo

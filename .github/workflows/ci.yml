@@ -181,6 +181,12 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3401/_next/image?url=%2Flogo-newlink.png&w=64&q=75')" = "200"
           docker rm -f web-ci
 
+      # El compose que usa Coolify debe ser valido (y pedir sus variables obligatorias).
+      - name: El docker-compose de Coolify es valido
+        run: |
+          DATABASE_URL=x SECRET_KEY=x SESSION_SECRET=x ANALYTICS_TOKEN=x ADMIN_PASSWORD=x docker compose -f docker-compose.coolify.yml config -q
+          if docker compose -f docker-compose.coolify.yml config -q 2>/dev/null; then echo "FALLO: el compose arranco sin sus variables obligatorias"; exit 1; fi
+
       - name: Registros de la imagen si algo falla
         if: failure()
         run: docker logs web-ci 2>&1 | tail -n 60 || true
