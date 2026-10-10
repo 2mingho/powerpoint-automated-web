@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AtSign, Bell, Check, CheckCheck, CircleCheck, CircleX, Clock, Eye, Inbox, MessageSquare, Repeat, TriangleAlert, UserPlus,
+  AtSign, Bell, Check, CheckCheck, CircleCheck, CircleX, Clock, Eye, Inbox, Landmark, MessageSquare, Repeat, TriangleAlert, UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
@@ -17,7 +17,7 @@ type Notificacion = {
 const ICONOS: Record<string, LucideIcon> = {
   task_assigned: UserPlus, task_reassigned: Repeat, task_due_soon: Clock, task_overdue: TriangleAlert,
   task_comment: MessageSquare, mention: AtSign, request_received: Inbox, request_accepted: CircleCheck,
-  request_rejected: CircleX, task_watching: Eye,
+  request_rejected: CircleX, task_watching: Eye, finance_grant: Landmark,
 };
 
 const SONDEO_MS = 45_000;

@@ -39,6 +39,25 @@ class Area(db.Model):
         return f"<Area {self.name}>"
 
 
+class FinanceGrant(db.Model):
+    """Permiso de EDITAR los ingresos de una unidad (ver 0017_finanzas_permisos).
+
+    kind: 'contracts' (contratos) o 'goals' (metas de ingresos), independientes.
+    Solo concede edicion; quien puede ver lo decide la estructura de mando.
+    """
+    __tablename__ = 'finance_grants'
+    __table_args__ = (db.CheckConstraint("kind IN ('contracts', 'goals')", name='ck_finance_grants_kind'),)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='CASCADE'), primary_key=True, index=True)
+    kind = db.Column(db.String(20), primary_key=True)
+    granted_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    usuario = db.relationship('User', foreign_keys=[user_id])
+    unidad = db.relationship('Area', foreign_keys=[area_id])
+
+
 class Client(db.Model):
     """Cliente como entidad. Las tareas lo enlazan por client_id y siguen
     guardando su nombre en tasks.client, siempre igual al de esta fila.

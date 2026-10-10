@@ -6,6 +6,8 @@ import { HERRAMIENTAS } from "@/lib/auth/session";
 import { registrarActividad } from "@/lib/actividad";
 import { enteroONulo, idDeRuta, SOLO_ADMIN, texto } from "@/lib/admin/api";
 import { leerCapacidad } from "@/lib/seguimiento/estado";
+import { leerConcesiones } from "@/lib/finanzas/concesiones";
+import { fijarConcesiones } from "@/lib/finanzas/permisos";
 import { usuarioEditable, validarRol, validarSuperior } from "@/lib/admin/usuarios";
 
 /*
@@ -63,6 +65,12 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/usuarios/[id]">>(async 
     const nuevo = JSON.stringify(lista);
     if (nuevo !== actual.allowed_tools) { datos.allowed_tools = nuevo; cambios.push("permisos actualizados"); }
   }
+  // Permisos de ingresos (concesiones por unidad): se validan aqui y se aplican tras guardar la persona.
+  let finanzas: ReturnType<typeof leerConcesiones> | null = null;
+  if ("finanzas" in d) {
+    finanzas = leerConcesiones(d.finanzas);
+    if (!finanzas.ok) throw new ErrorApi(400, finanzas.error);
+  }
   if ("contrasena" in d && typeof d.contrasena === "string" && d.contrasena) {
     if (d.contrasena.length < 8) throw new ErrorApi(400, "La contraseña debe tener al menos 8 caracteres.");
     datos.password = generarHash(d.contrasena);
@@ -72,6 +80,11 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/usuarios/[id]">>(async 
   }
 
   if (Object.keys(datos).length) await db.users.update({ where: { id }, data: datos });
+  if (finanzas?.ok) {
+    const rolFinal = (datos.role as string | undefined) ?? actual.role;
+    const hechos = await fijarConcesiones(u, { id, username: (datos.username as string | undefined) ?? actual.username, isAdmin: rolFinal === "admin" }, finanzas.valor);
+    if (hechos.length) cambios.push("permisos de ingresos actualizados");
+  }
   await registrarActividad(u.id, "admin_edit_user", `Editó usuario #${id}: ${cambios.length ? cambios.join(", ") : "sin cambios"}`, { tipo: "user", id });
   return ok({ id, cambios: cambios.length });
 }, SOLO_ADMIN);

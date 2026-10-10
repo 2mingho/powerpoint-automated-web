@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 
 export const TIPOS_NOTIFICACION = [
   "task_assigned", "task_reassigned", "task_due_soon", "task_overdue", "task_comment", "mention",
-  "request_received", "request_accepted", "request_rejected", "task_watching",
+  "request_received", "request_accepted", "request_rejected", "task_watching", "finance_grant",
 ] as const;
 export type TipoNotificacion = (typeof TIPOS_NOTIFICACION)[number];
 

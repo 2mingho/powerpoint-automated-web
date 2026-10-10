@@ -14,6 +14,7 @@ import { mensajeDe, pedir } from "@/lib/admin/cliente";
 import { fFecha } from "@/lib/admin/formato";
 import type { FilaUsuario, listarUsuarios, opcionesPersonas } from "@/lib/admin/consultas";
 import { BuscadorDiferido, claseCelda, claseFila, Paginacion, Tabla, Th, useListaRemota } from "../../_componentes/comunes";
+import { CLAVES_FINANZAS, TIPOS_FINANZAS, type Concesiones, type TipoFinanzas } from "@/lib/finanzas/concesiones";
 import { Roles } from "./roles";
 
 type Lista = Awaited<ReturnType<typeof listarUsuarios>>;
@@ -143,6 +144,10 @@ export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, f
                       {HERRAMIENTAS.map((h) => (
                         <span key={h.clave} title={h.nombre} className={cx("rounded-sm border px-1 font-mono text-[0.6875rem]", u.herramientas.includes(h.clave as never) ? "border-hilo-fuerte text-texto" : "border-transparent text-texto-3/50 line-through")}>{h.corto}</span>
                       ))}
+                      {(u.finanzas.contracts.length > 0 || u.finanzas.goals.length > 0) && (
+                        <span title={`Edita ingresos: ${u.finanzas.contracts.length} unidades en contratos, ${u.finanzas.goals.length} en metas`}
+                          className="ml-1 rounded-sm border border-hilo-fuerte px-1 font-mono text-[0.6875rem] text-texto">Ing</span>
+                      )}
                     </span>
                   </td>
                   <td className="row-start-1 col-start-2 self-center md:h-11 md:px-4">
@@ -215,6 +220,46 @@ function FormularioPersona({ abierta, persona, opciones, yoId, onCerrar, onGuard
   );
 }
 
+const mismas = (a: number[], b: number[]) => a.length === b.length && a.every((x) => b.includes(x));
+
+/*
+ * Permisos de ingresos: dos listas independientes de unidades (contratos y
+ * metas). Conceden edicion; quien edita una unidad tambien ve sus ingresos.
+ */
+function PermisosIngresos({ unidades, valor, onChange }: { unidades: { id: number; nombre: string }[]; valor: Concesiones; onChange: (v: Concesiones) => void }) {
+  const poner = (tipo: TipoFinanzas, ids: number[]) => onChange({ ...valor, [tipo]: ids });
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="rotulo mb-1">Ingresos</legend>
+      <p className="text-sm text-texto-3">Elige las unidades cuyos contratos o metas puede editar. Con cualquiera de ellas también ve los ingresos de esa unidad.</p>
+      {CLAVES_FINANZAS.map((tipo) => (
+        <details key={tipo} className="rounded-sm border border-hilo" open={valor[tipo].length > 0}>
+          <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 px-3 font-rotulo text-sm font-semibold uppercase tracking-[0.1em] text-texto-2">
+            Edita {TIPOS_FINANZAS[tipo].toLowerCase()}
+            <span className="font-mono text-xs normal-case tracking-normal text-texto-3 cifras">{valor[tipo].length ? `${valor[tipo].length} de ${unidades.length}` : "ninguna"}</span>
+          </summary>
+          <div className="border-t border-hilo px-3 pb-2 pt-1">
+            <div className="flex gap-1 pb-1">
+              <Boton tamano="sm" variante="fantasma" onClick={() => poner(tipo, unidades.map((u) => u.id))}>Todas</Boton>
+              <Boton tamano="sm" variante="fantasma" onClick={() => poner(tipo, [])}>Ninguna</Boton>
+            </div>
+            <div className="max-h-52 overflow-y-auto">
+              {unidades.map((u) => (
+                <label key={u.id} className="flex min-h-10 cursor-pointer items-center gap-3 rounded-sm px-2 hover:bg-superficie-2">
+                  <input type="checkbox" className="size-4 accent-[var(--texto)]" checked={valor[tipo].includes(u.id)}
+                    onChange={(e) => poner(tipo, e.target.checked ? [...valor[tipo], u.id] : valor[tipo].filter((x) => x !== u.id))} />
+                  {u.nombre}
+                </label>
+              ))}
+              {!unidades.length && <p className="px-2 py-3 text-sm text-texto-3">Aún no hay unidades. Créalas en Organización.</p>}
+            </div>
+          </div>
+        </details>
+      ))}
+    </fieldset>
+  );
+}
+
 function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesactivar, onActivar }: {
   persona: FilaUsuario | null; opciones: Opciones; yoId: number; onGuardada: (msg: string) => void;
   onExpulsar: (u: FilaUsuario) => void; onDesactivar: (u: FilaUsuario) => void; onActivar: (u: FilaUsuario) => void;
@@ -226,6 +271,7 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
   const [superior, setSuperior] = useState(persona?.managerId ? String(persona.managerId) : "");
   const [capacidad, setCapacidad] = useState(persona?.capacidad != null ? String(persona.capacidad) : "");
   const [herr, setHerr] = useState<string[]>(persona?.herramientas ?? HERRAMIENTAS.map((h) => h.clave));
+  const [fin, setFin] = useState<Concesiones>(persona?.finanzas ?? { contracts: [], goals: [] });
   const [contrasena, setContrasena] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
@@ -249,6 +295,8 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
     const cuerpo = {
       nombre, email, rol, unidadId: unidad ? Number(unidad) : null, herramientas: herr,
       ...(persona ? { managerId: superior ? Number(superior) : null, capacidad } : {}),
+      // Solo si cambio algo: asi guardar otros datos no toca los permisos de ingresos.
+      ...(persona && !esAdmin && CLAVES_FINANZAS.some((t) => !mismas(fin[t], persona.finanzas[t])) ? { finanzas: Object.fromEntries(CLAVES_FINANZAS.filter((t) => !mismas(fin[t], persona.finanzas[t])).map((t) => [t, fin[t]])) } : {}),
       ...(contrasena ? { contrasena } : {}),
     };
     try {
@@ -316,6 +364,7 @@ function CamposPersona({ persona, opciones, yoId, onGuardada, onExpulsar, onDesa
           </label>
         ))}
       </fieldset>
+      {persona && !esAdmin && <PermisosIngresos unidades={opciones.unidades} valor={fin} onChange={setFin} />}
       {persona ? (
         <details className="group rounded-sm border border-hilo" open={!!errores.contrasena}>
           <summary className="flex min-h-10 cursor-pointer items-center px-3 font-rotulo text-sm font-semibold uppercase tracking-[0.1em] text-texto-2">Cambiar contraseña</summary>

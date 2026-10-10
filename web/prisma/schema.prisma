@@ -75,6 +75,7 @@ model areas {
   task_tags                                       task_tags[]
   task_templates                                  task_templates[]
   tasks                                           tasks[]
+  concesiones_finanzas                            finance_grants[]
   unit_leads                                      unit_leads[]
   users                                           users[]
 }
@@ -89,6 +90,20 @@ model clients {
   created_at      DateTime? @db.Timestamp(6)
   responsable     users?    @relation("clients_account_lead_idTousers", fields: [account_lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_clients_account_lead_id_users")
   tareas          tasks[]
+}
+
+model finance_grants {
+  user_id    Int
+  area_id    Int
+  kind       String    @db.VarChar(20)
+  granted_by Int?
+  created_at DateTime? @db.Timestamp(6)
+  usuario    users     @relation("finance_grants_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_finance_grants_user_id_users")
+  unidad     areas     @relation(fields: [area_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_finance_grants_area_id_areas")
+  concedio   users?    @relation("finance_grants_granted_byTousers", fields: [granted_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_finance_grants_granted_by_users")
+
+  @@id([user_id, area_id, kind], map: "pk_finance_grants")
+  @@index([area_id], map: "ix_finance_grants_area_id")
 }
 
 model classification_presets {
@@ -423,6 +438,8 @@ model users {
   tareas_creadas                     tasks[]                  @relation("tasks_creator_idTousers")
   tareas_a_revisar                   tasks[]                  @relation("tasks_reviewer_idTousers")
   clientes_a_cargo                   clients[]                @relation("clients_account_lead_idTousers")
+  concesiones_finanzas               finance_grants[]         @relation("finance_grants_user_idTousers")
+  concesiones_otorgadas              finance_grants[]         @relation("finance_grants_granted_byTousers")
   temp_artifacts                                    temp_artifacts[]
   unit_leads                                        unit_leads[]
   manager                                             users?                   @relation("usersTousers", fields: [manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_manager_id")

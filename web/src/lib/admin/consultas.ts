@@ -5,6 +5,7 @@ import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { HERRAMIENTAS, type Herramienta } from "@/lib/auth/session";
+import { concesionesDeVarios } from "@/lib/finanzas/permisos";
 import { enmascararClave } from "./mascara";
 import { arbolDeMando, cadenaHaciaArriba, calcularAlcances, type PersonaOrg } from "./mando";
 
@@ -119,9 +120,11 @@ export async function listarUsuarios(f: FiltrosUsuarios) {
       area_id: true, manager_id: true, weekly_capacity: true, force_logout: true, areas: { select: { name: true } }, manager: { select: { username: true } },
     },
   });
+  const concesiones = await concesionesDeVarios(filas.map((u) => u.id));
   return {
     total, pagina, paginas,
     filas: filas.map((u) => ({
+      finanzas: concesiones.get(u.id)!,
       id: u.id, nombre: u.username, email: u.email, rol: u.role, activo: u.is_active !== false,
       creado: u.created_at?.toISOString() ?? null, unidadId: u.area_id, unidad: u.areas?.name ?? null,
       managerId: u.manager_id, capacidad: u.weekly_capacity, manager: u.manager?.username ?? null, expulsado: !!u.force_logout,
