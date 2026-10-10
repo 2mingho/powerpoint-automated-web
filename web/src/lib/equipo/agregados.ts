@@ -63,6 +63,73 @@ export function contadores(tareas: TareaPanel[], finales: Set<string>, hoy: stri
   return c;
 }
 
+/*
+ * Las mismas cifras, pero a partir de CONTEOS que ya hizo la base (groupBy), no de cada tarea. Con decenas
+ * de miles de tareas, traerlas todas solo para contarlas era lo mas caro de Equipo; esto viaja en
+ * unas decenas de filas. Las funciones de arriba siguen definiendo la semantica y la prueba
+ * (agregados.test.ts) comprueba que ambos caminos dan lo mismo.
+ */
+export type ConteoCarga = { personaId: number; estado: string; n: number };
+export type ConteoUnidad = { unidadId: number; abiertas: number; vencidas: number };
+
+export function cargaDesdeConteos(
+  abiertas: ConteoCarga[],
+  vencidasPorPersona: Map<number, number>,
+  ordenEstados: string[],
+  nombres: Map<number, string>,
+): FilaCarga[] {
+  const porPersona = new Map<number, Map<string, number>>();
+  for (const c of abiertas) {
+    if (c.n <= 0) continue;
+    const m = porPersona.get(c.personaId) ?? new Map<string, number>();
+    m.set(c.estado, (m.get(c.estado) ?? 0) + c.n);
+    porPersona.set(c.personaId, m);
+  }
+  const rango = (e: string) => { const i = ordenEstados.indexOf(e); return i < 0 ? ordenEstados.length : i; };
+  return [...porPersona.entries()]
+    .map(([personaId, m]) => {
+      const segmentos = [...m.entries()].map(([estado, n]) => ({ estado, n })).sort((a, b) => rango(a.estado) - rango(b.estado) || a.estado.localeCompare(b.estado));
+      return {
+        personaId,
+        nombre: nombres.get(personaId) ?? `#${personaId}`,
+        total: segmentos.reduce((s, x) => s + x.n, 0),
+        vencidas: vencidasPorPersona.get(personaId) ?? 0,
+        segmentos,
+      };
+    })
+    .sort((a, b) => b.total - a.total || b.vencidas - a.vencidas || a.nombre.localeCompare(b.nombre, "es"));
+}
+
+export function vencidasPorUnidadDesdeConteos(conteos: ConteoUnidad[], unidades: { id: number; nombre: string }[]): FilaUnidad[] {
+  const filas = new Map(unidades.map((u) => [u.id, { unidadId: u.id, nombre: u.nombre, vencidas: 0, abiertas: 0 }]));
+  for (const c of conteos) {
+    const f = filas.get(c.unidadId);
+    if (!f) continue; // unidades ajenas al alcance elegido
+    f.abiertas += c.abiertas;
+    f.vencidas += c.vencidas;
+  }
+  return [...filas.values()].sort((a, b) => b.vencidas - a.vencidas || b.abiertas - a.abiertas || a.nombre.localeCompare(b.nombre, "es"));
+}
+
+/* Tendencia a partir de las marcas de alta y de cierre (no de todas las tareas): solo las de las ultimas semanas. */
+export function tendenciaDesdeMarcas(creadas: (Date | null)[], completadas: (Date | null)[], hoy: string, semanas = 8): PuntoTendencia[] {
+  const actual = lunesDe(hoy);
+  const puntos: PuntoTendencia[] = [];
+  for (let i = semanas - 1; i >= 0; i--) puntos.push({ semana: sumarDias(actual, -7 * i), creadas: 0, completadas: 0 });
+  const indice = new Map(puntos.map((p, i) => [p.semana, i]));
+  for (const c of creadas) {
+    const d = diaNegocio(c);
+    const i = d ? indice.get(lunesDe(d)) : undefined;
+    if (i != null) puntos[i].creadas++;
+  }
+  for (const c of completadas) {
+    const d = diaNegocio(c);
+    const i = d ? indice.get(lunesDe(d)) : undefined;
+    if (i != null) puntos[i].completadas++;
+  }
+  return puntos;
+}
+
 export type FilaCarga = {
   personaId: number;
   nombre: string;

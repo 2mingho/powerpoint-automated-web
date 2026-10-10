@@ -8,8 +8,8 @@ import { calorDeEquipo, type CalorEquipo } from "./calor";
 import { filtroTareasVisibles } from "@/lib/tareas/alcance";
 import type { UsuarioActual } from "@/lib/auth/session";
 import {
-  cargaPorPersona, contadores, generarCsv, lunesDe, sumarDias, tendencia, vencidasPorUnidad, DIAS_RIESGO,
-  type Contadores, type FilaCarga, type FilaUnidad, type PuntoTendencia, type TareaPanel,
+  cargaDesdeConteos, generarCsv, lunesDe, sumarDias, tendenciaDesdeMarcas, vencidasPorUnidadDesdeConteos, DIAS_RIESGO,
+  type Contadores, type FilaCarga, type FilaUnidad, type PuntoTendencia,
 } from "./agregados";
 
 /*
@@ -106,41 +106,69 @@ export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<P
     estadosFinales(),
     db.areas.findMany({ where: { id: { in: alcance.todas } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  const finales = new Set(finalesLista);
   const desde = inicioDiaUtc(sumarDias(lunesDe(hoy), -7 * 7));
+  const base = await whereBase(u, alcance.elegidas);
+  const lunes = inicioDiaUtc(lunesDe(hoy));
+  const limiteRiesgo = sumarDias(hoy, DIAS_RIESGO);
 
-  // Una sola consulta con lo minimo: abiertas (carga, vencidas) y lo tocado en 8 semanas (tendencia).
-  const filas = await db.tasks.findMany({
-    where: {
-      AND: [
-        await whereBase(u, alcance.elegidas),
-        { OR: [{ status: { notIn: finalesLista } }, { created_at: { gte: desde } }, { updated_at: { gte: desde } }] },
-      ],
-    },
-    select: { id: true, status: true, due_date: true, created_at: true, updated_at: true, assignee_id: true, area_id: true },
-  });
-  const tareas: TareaPanel[] = filas.map((t) => ({
-    id: t.id, estado: t.status, vence: isoDeFecha(t.due_date), creada: t.created_at, actualizada: t.updated_at,
-    asignadoId: t.assignee_id, unidadId: t.area_id,
-  }));
+  // Tres lecturas, ninguna con una fila por tarea: las abiertas se agrupan en la base por
+  // (persona, unidad, estado, fecha de entrega), que son unas cuantas filas aunque haya decenas de
+  // miles de tareas; las altas y los cierres de las ultimas 8 semanas viajan como una sola columna.
+  // (Antes se traia cada tarea abierta o tocada solo para sumarla aqui; y doce conteos sueltos
+  // eran peor: doce escaneos de la tabla.)
+  const [abiertasAgrupadas, creadas, cerradas] = await Promise.all([
+    db.tasks.groupBy({
+      by: ["assignee_id", "area_id", "status", "due_date"],
+      where: { AND: [base, { status: { notIn: finalesLista } }] },
+      _count: { _all: true },
+    }),
+    db.tasks.findMany({ where: { AND: [base, { created_at: { gte: desde } }] }, select: { created_at: true } }),
+    db.tasks.findMany({ where: { AND: [base, { status: { in: finalesLista }, updated_at: { gte: desde } }] }, select: { updated_at: true } }),
+  ]);
 
-  const personas = await db.users.findMany({
-    where: { id: { in: [...new Set(tareas.map((t) => t.asignadoId))] } },
-    select: { id: true, username: true },
-  });
-  const nombres = new Map(personas.map((p) => [p.id, p.username]));
+  const nombres = new Map(
+    (await db.users.findMany({
+      where: { id: { in: [...new Set(abiertasAgrupadas.map((f) => f.assignee_id))] } },
+      select: { id: true, username: true },
+    })).map((p) => [p.id, p.username]),
+  );
   const lista = unidades.map((a) => ({ id: a.id, nombre: a.name }));
-  const calor = await calorDeEquipo(await whereBase(u, alcance.elegidas), alcance.elegidas, finalesLista, hoy);
+
+  const porPersonaEstado = new Map<string, { personaId: number; estado: string; n: number }>();
+  const vencidasPersona = new Map<number, number>();
+  const porUnidadMapa = new Map<number, { unidadId: number; abiertas: number; vencidas: number }>();
+  let totalAbiertas = 0, totalVencidas = 0, nEnRiesgo = 0;
+  for (const f of abiertasAgrupadas) {
+    const n = f._count._all;
+    const vence = isoDeFecha(f.due_date);
+    const vencida = vence < hoy;
+    totalAbiertas += n;
+    if (vencida) totalVencidas += n;
+    else if (vence <= limiteRiesgo) nEnRiesgo += n;
+    const k = `${f.assignee_id}|${f.status}`;
+    const e = porPersonaEstado.get(k) ?? { personaId: f.assignee_id, estado: f.status, n: 0 };
+    e.n += n;
+    porPersonaEstado.set(k, e);
+    if (vencida) vencidasPersona.set(f.assignee_id, (vencidasPersona.get(f.assignee_id) ?? 0) + n);
+    if (f.area_id != null) {
+      const un = porUnidadMapa.get(f.area_id) ?? { unidadId: f.area_id, abiertas: 0, vencidas: 0 };
+      un.abiertas += n;
+      if (vencida) un.vencidas += n;
+      porUnidadMapa.set(f.area_id, un);
+    }
+  }
+  const nSemana = cerradas.filter((t) => t.updated_at && t.updated_at >= lunes).length;
+  const calor = await calorDeEquipo(base, alcance.elegidas, finalesLista, hoy);
   const elegidas = lista.filter((a) => alcance.elegidas.includes(a.id));
 
   return {
     hoy,
     unidades: lista,
     estados: catalogo,
-    contadores: contadores(tareas, finales, hoy),
-    carga: cargaPorPersona(tareas, finales, hoy, catalogo.map((e) => e.nombre), nombres),
-    tendencia: tendencia(tareas, finales, hoy, 8),
-    porUnidad: vencidasPorUnidad(tareas, finales, hoy, elegidas),
+    contadores: { abiertas: totalAbiertas, vencidas: totalVencidas, completadasSemana: nSemana, enRiesgo: nEnRiesgo },
+    carga: cargaDesdeConteos([...porPersonaEstado.values()], vencidasPersona, catalogo.map((e) => e.nombre), nombres),
+    tendencia: tendenciaDesdeMarcas(creadas.map((t) => t.created_at), cerradas.map((t) => t.updated_at), hoy, 8),
+    porUnidad: vencidasPorUnidadDesdeConteos([...porUnidadMapa.values()], elegidas),
     calor,
   };
 }
@@ -183,9 +211,11 @@ export async function opcionesEquipo(u: UsuarioActual, alcance: Alcance) {
       where: { is_active: true, area_id: { in: alcance.elegidas } },
       select: { id: true, username: true }, orderBy: { username: "asc" },
     }),
-    db.tasks.findMany({
+    // groupBy y no `distinct` (que Prisma resuelve en memoria, trayendo todas las filas).
+    db.tasks.groupBy({
+      by: ["client"],
       where: { AND: [await whereBase(u, alcance.elegidas), { client: { not: null } }, { NOT: { client: "" } }] },
-      distinct: ["client"], select: { client: true }, orderBy: { client: "asc" }, take: 300,
+      orderBy: { client: "asc" }, take: 300,
     }),
   ]);
   return { personas: personas.map((p) => ({ id: p.id, nombre: p.username })), clientes: clientes.map((c) => c.client!).filter(Boolean) };

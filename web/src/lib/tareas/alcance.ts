@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { ambitoUnidades } from "@/lib/alcance";
+import { porObjeto } from "@/lib/memo";
 import type { UsuarioActual } from "@/lib/auth/session";
 
 /*
@@ -16,7 +17,13 @@ import type { UsuarioActual } from "@/lib/auth/session";
  */
 
 /* Usuarios con los que trabaja (su ambito); sin unidades, solo el mismo. */
-export async function idsUsuariosDelAmbito(u: UsuarioActual, soloActivos = false): Promise<number[] | "todos"> {
+export function idsUsuariosDelAmbito(u: UsuarioActual, soloActivos = false): Promise<number[] | "todos"> {
+  return (soloActivos ? soloActivosDe : todosDe)(u);
+}
+const soloActivosDe = porObjeto((u: UsuarioActual) => calcularIdsDelAmbito(u, true));
+const todosDe = porObjeto((u: UsuarioActual) => calcularIdsDelAmbito(u, false));
+
+async function calcularIdsDelAmbito(u: UsuarioActual, soloActivos: boolean): Promise<number[] | "todos"> {
   if (u.isAdmin) return "todos";
   const unidades = await ambitoUnidades(u);
   if (!unidades.length) return [u.id];

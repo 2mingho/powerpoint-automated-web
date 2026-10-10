@@ -20,17 +20,22 @@ export async function calorDeEquipo(where: Prisma.tasksWhereInput, unidades: num
     where: { AND: [where, { status: { notIn: finales } }] },
     select: { id: true, assignee_id: true, due_date: true, start_date: true, estimated_hours: true },
   });
-  const ids = abiertas.map((t) => t.id);
-  const [total, hechos, personas] = await Promise.all([
-    db.task_checklist_items.groupBy({ by: ["task_id"], where: { task_id: { in: ids } }, _count: { _all: true } }),
-    db.task_checklist_items.groupBy({ by: ["task_id"], where: { task_id: { in: ids }, is_completed: true }, _count: { _all: true } }),
+  // Los pasos se filtran con la misma condicion (relacion), no con una lista de ids: con decenas de
+  // miles de abiertas esa lista era un IN gigante que Prisma tenia que partir en varias consultas.
+  const deAbiertas = { tasks: { is: { AND: [where, { status: { notIn: finales } }] } } };
+  const [pasosAgrupados, personas] = await Promise.all([
+    db.task_checklist_items.groupBy({ by: ["task_id", "is_completed"], where: deAbiertas, _count: { _all: true } }),
     db.users.findMany({
       where: { OR: [{ is_active: true, area_id: { in: unidades } }, { id: { in: [...new Set(abiertas.map((t) => t.assignee_id))] } }] },
       select: { id: true, username: true, weekly_capacity: true },
     }),
   ]);
-  const pasos = new Map(total.map((f) => [f.task_id, f._count._all]));
-  const pasosHechos = new Map(hechos.map((f) => [f.task_id, f._count._all]));
+  const pasos = new Map<number, number>();
+  const pasosHechos = new Map<number, number>();
+  for (const f of pasosAgrupados) {
+    pasos.set(f.task_id, (pasos.get(f.task_id) ?? 0) + f._count._all);
+    if (f.is_completed) pasosHechos.set(f.task_id, f._count._all);
+  }
 
   const tareas: TareaDeCarga[] = abiertas.map((t) => ({
     estado: "en_curso",
