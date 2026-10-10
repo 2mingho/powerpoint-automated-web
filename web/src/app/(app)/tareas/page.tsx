@@ -5,7 +5,7 @@ import { hoyNegocio } from "@/lib/reloj";
 import { Esqueleto, Panel, Vacio } from "@/components/ui/panel";
 import { catalogo } from "@/lib/tareas/base";
 import { asegurarAvisosDeVencimiento } from "@/lib/tareas/avisos";
-import { contarSalidas, leerFiltros, listarTareas } from "@/lib/tareas/consultas";
+import { contarSalidas, leerFiltros, listarVentana } from "@/lib/tareas/consultas";
 import { etiquetasVisibles } from "@/lib/tareas/etiquetas";
 import { puedeImportar } from "@/lib/tareas/importar";
 import { clientesInactivos, clientesVisibles, personasDelAmbito, unidadesParaFiltro } from "@/lib/tareas/personas";
@@ -34,7 +34,7 @@ async function Datos({ searchParams }: { searchParams: PageProps<"/tareas">["sea
 
   const [cat, personas, clientes, etiquetas, unidades, importar, lista, contadores, lidera] = await Promise.all([
     catalogo(), personasDelAmbito(u), clientesVisibles(u), etiquetasVisibles(u), unidadesParaFiltro(u), puedeImportar(u),
-    listarTareas(u, filtros), contarSalidas(u, filtros.alcance), puedeVerEquipo(u),
+    listarVentana(u, filtros), contarSalidas(u, filtros.alcance), puedeVerEquipo(u),
   ]);
 
   const inactivos = await clientesInactivos(clientes);
@@ -47,7 +47,7 @@ async function Datos({ searchParams }: { searchParams: PageProps<"/tareas">["sea
       prioridades: cat.prioridades,
       personas, clientes, clientesInactivos: inactivos, etiquetas, unidades, puedeImportar: importar,
       filtros, vista, tarea,
-      tareas: lista.tareas, truncada: lista.truncada, contadores,
+      tareas: lista.tareas, hayAntes: lista.hayAntes, hayDespues: lista.hayDespues, contadores,
     }} />
   );
 }

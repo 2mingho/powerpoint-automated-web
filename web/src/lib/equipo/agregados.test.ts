@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cargaPorPersona, clasificar, contadores, generarCsv, lunesDe, mmddyyyy, sumarDias, tendencia, vencidasPorUnidad, type TareaPanel,
+  cargaDesdeConteos, cargaPorPersona, clasificar, contadores, diaNegocio, generarCsv, lunesDe, mmddyyyy, sumarDias, tendencia, tendenciaDesdeSemanas, vencidasPorUnidad, vencidasPorUnidadDesdeConteos, type TareaPanel,
 } from "./agregados";
 
 const HOY = "2026-10-08"; // jueves
@@ -91,5 +91,56 @@ describe("CSV", () => {
     expect(lineas[0].startsWith("Fecha De inicio,Fecha De finalizacion,Fecha De entrega")).toBe(true);
     expect(lineas[1]).toBe(`,,10/08/2026,,'=HYPERLINK(),"Con ""comillas"", y coma",,Ana,,,Media,No`);
     expect(mmddyyyy(null)).toBe("");
+  });
+});
+
+describe("agregados desde conteos de la base = agregados desde cada tarea", () => {
+  const tareas = [
+    t({ asignadoId: 1, estado: "Pendiente", vence: "2026-10-01", unidadId: 10 }), // vencida
+    t({ asignadoId: 1, estado: "En Progreso", vence: "2026-10-20", unidadId: 10 }),
+    t({ asignadoId: 2, estado: "Pendiente", vence: "2026-10-02", unidadId: 11 }), // vencida
+    t({ asignadoId: 2, estado: "Pendiente", vence: "2026-10-09", unidadId: 11 }),
+    t({ asignadoId: 3, estado: "Completado", vence: "2026-09-01", unidadId: 10, actualizada: new Date("2026-10-06T15:00:00Z") }),
+    t({ asignadoId: 1, estado: "Completado", vence: "2026-09-01", unidadId: 10, creada: new Date("2026-08-20T15:00:00Z"), actualizada: new Date("2026-09-20T15:00:00Z") }),
+  ];
+  const orden = ["Pendiente", "En Progreso", "Completado"];
+  const nombres = new Map([[1, "ana"], [2, "beto"]]);
+
+  it("la carga por persona sale igual", () => {
+    const abiertas = new Map<string, number>();
+    const vencidas = new Map<number, number>();
+    for (const x of tareas) {
+      const k = clasificar(x, finales, HOY);
+      if (!k.abierta) continue;
+      abiertas.set(`${x.asignadoId}|${x.estado}`, (abiertas.get(`${x.asignadoId}|${x.estado}`) ?? 0) + 1);
+      if (k.vencida) vencidas.set(x.asignadoId, (vencidas.get(x.asignadoId) ?? 0) + 1);
+    }
+    const conteos = [...abiertas].map(([k, n]) => { const [p, estado] = k.split("|"); return { personaId: Number(p), estado, n }; });
+    expect(cargaDesdeConteos(conteos, vencidas, orden, nombres)).toEqual(cargaPorPersona(tareas, finales, HOY, orden, nombres));
+  });
+
+  it("vencidas por unidad sale igual, e ignora unidades fuera de las elegidas", () => {
+    const unidades = [{ id: 10, nombre: "Datos" }, { id: 11, nombre: "Campo" }, { id: 12, nombre: "Vacia" }];
+    const por = new Map<number, { abiertas: number; vencidas: number }>();
+    for (const x of tareas) {
+      const k = clasificar(x, finales, HOY);
+      const f = por.get(x.unidadId!) ?? { abiertas: 0, vencidas: 0 };
+      if (k.abierta) f.abiertas++;
+      if (k.vencida) f.vencidas++;
+      por.set(x.unidadId!, f);
+    }
+    const conteos = [...por].map(([unidadId, f]) => ({ unidadId, ...f })).concat([{ unidadId: 99, abiertas: 5, vencidas: 5 }]);
+    expect(vencidasPorUnidadDesdeConteos(conteos, unidades)).toEqual(vencidasPorUnidad(tareas, finales, HOY, unidades));
+  });
+
+  it("la tendencia sale igual con los conteos por semana", () => {
+    const porSemana = (fechas: (Date | null)[]) => {
+      const m = new Map<string, number>();
+      for (const f of fechas) { const d = diaNegocio(f); if (!d) continue; const l = lunesDe(d); m.set(l, (m.get(l) ?? 0) + 1); }
+      return m;
+    };
+    const creadas = porSemana(tareas.map((x) => x.creada));
+    const cerradas = porSemana(tareas.filter((x) => finales.has(x.estado)).map((x) => x.actualizada));
+    expect(tendenciaDesdeSemanas(creadas, cerradas, HOY, 8)).toEqual(tendencia(tareas, finales, HOY, 8));
   });
 });

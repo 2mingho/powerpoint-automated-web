@@ -63,6 +63,8 @@ export async function asegurarAvisosDeVencimiento(userId: number): Promise<numbe
   const tareas = await db.tasks.findMany({
     where: { assignee_id: userId, deleted_at: null, status: { notIn: await estadosFinales() }, due_date: { lte: diaDb(manana) } },
     select: { id: true, title: true, due_date: true },
+    // Tope: las mas atrasadas ya no cambian el aviso, y una lista sin limite acaba en un IN de miles de parametros.
+    orderBy: { due_date: "desc" }, take: 2000,
   });
   if (!tareas.length) return 0;
 

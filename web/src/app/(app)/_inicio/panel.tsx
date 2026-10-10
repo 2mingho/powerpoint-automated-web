@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clock, TriangleAlert, X } from "lucide-react";
@@ -11,13 +11,14 @@ import { cx } from "@/components/ui/cx";
 import { Panel, Vacio } from "@/components/ui/panel";
 import { NombreCliente } from "@/components/clientes/ficha";
 import { opcionesDe, resumen } from "@/lib/panel/agregados";
-import { GRUPOS_ESTADO, type EstadoPanel, type FilaPanel, type Metrica } from "@/lib/panel/tipos";
-import { alternar, pasaFiltros, SIN_FILTROS, type FiltrosCruzados } from "@/lib/seguimiento/filtros";
+import { decodificarCeldas, type CeldasWire } from "@/lib/panel/celdas";
+import { GRUPOS_ESTADO, type EstadoPanel, type FilaDetalle, type Metrica } from "@/lib/panel/tipos";
+import { alternar, SIN_FILTROS, type FiltrosCruzados } from "@/lib/seguimiento/filtros";
 import { PERIODOS, ROTULO_PERIODO, type Periodo } from "@/lib/seguimiento/periodo";
 import { riesgoDe } from "@/lib/seguimiento/riesgo";
-import { fechaCorta, relativo } from "../tareas/_componentes/cliente";
 import { ColumnaOrdenable, SelectorOrden } from "@/components/ui/orden";
-import { alternarOrden, ordenarPor, type Orden } from "@/lib/orden";
+import { alternarOrden, type Orden } from "@/lib/orden";
+import { ErrorPeticion, fechaCorta, pedir, relativo } from "../tareas/_componentes/cliente";
 import { GraficosPanel } from "./graficos-panel";
 import { BloqueIngresos } from "./ingresos-panel";
 import type { IngresosPanel } from "@/lib/panel/datos";
@@ -31,9 +32,6 @@ const COLUMNAS_DETALLE: { col: ColDetalle; etiqueta: string }[] = [
   { col: "entrega", etiqueta: "Entrega" }, { col: "tarea", etiqueta: "Tarea" }, { col: "persona", etiqueta: "Persona" },
   { col: "unidad", etiqueta: "Unidad" }, { col: "estado", etiqueta: "Estado" }, { col: "horas", etiqueta: "Horas" },
 ];
-const CLAVE_DETALLE: Record<ColDetalle, (t: FilaPanel) => string | number | null> = {
-  entrega: (t) => t.entrega, tarea: (t) => t.titulo, persona: (t) => t.personaNombre, unidad: (t) => t.unidad, estado: (t) => t.estadoNombre, horas: (t) => t.horas,
-};
 
 type Seleccion = "unidad" | "cliente" | "persona" | "tipo" | "contrato" | "estado" | "semana";
 
@@ -45,15 +43,20 @@ const ROTULO_ESTADO: Record<string, string> = {
 
 /*
  * Panel de Inicio: filtros cruzados estilo Power BI sobre las tareas que la
- * persona puede ver. El servidor manda las filas del periodo (ya acotadas por
- * visibilidad) y aqui se filtran al instante: cada lista de opciones se
- * calcula sin su propio filtro, para que elegir un cliente no deje la lista de
- * clientes con una sola entrada.
+ * persona puede ver. El servidor manda CELDAS (combinaciones ya agrupadas por la
+ * base, ver lib/panel/celdas.ts) y aqui se filtran al instante: cada lista de
+ * opciones se calcula sin su propio filtro, para que elegir un cliente no deje
+ * la lista de clientes con una sola entrada. Las tareas sueltas del detalle se
+ * piden al servidor por paginas, con los mismos filtros.
  */
 export function PanelInicio({
-  filas, estados, hoy, periodo, desde, hasta, truncado, tope, ingresos,
+  celdas, tareas, detalle, estados, hoy, periodo, desde, hasta, truncado, tope, ingresos,
 }: {
-  filas: FilaPanel[];
+  celdas: CeldasWire;
+  /* Tareas del periodo (todas, no las celdas). */
+  tareas: number;
+  /* Primera pagina del detalle, sin filtros ni orden. */
+  detalle: { filas: FilaDetalle[]; total: number };
   estados: EstadoPanel[];
   hoy: string;
   periodo: Periodo;
@@ -67,8 +70,8 @@ export function PanelInicio({
   const [cambiando, empezar] = useTransition();
   const [filtros, setFiltros] = useState<FiltrosCruzados>(SIN_FILTROS);
   const [metrica, setMetrica] = useState<Metrica>("n");
-  const [limite, setLimite] = useState(PAGINA_INICIAL);
   const [orden, setOrden] = useState<Orden<ColDetalle> | null>(null);
+  const filas = useMemo(() => decodificarCeldas(celdas), [celdas]);
 
   const tono = useMemo(() => new Map(estados.map((e) => [e.nombre, e.tono as Tono])), [estados]);
   const cifras = useMemo(() => resumen(filas, filtros, hoy, metrica), [filas, filtros, hoy, metrica]);
@@ -79,18 +82,58 @@ export function PanelInicio({
     tipo: opcionesDe(filas, filtros, hoy, "tipo"),
     contrato: opcionesDe(filas, filtros, hoy, "contrato"),
   }), [filas, filtros, hoy]);
-  const detalle = useMemo(() => filas.filter((t) => pasaFiltros(t, filtros, hoy)).sort((a, b) => {
-    const cerradaA = a.estado === "hecha", cerradaB = b.estado === "hecha";
-    if (cerradaA !== cerradaB) return cerradaA ? 1 : -1;
-    const x = a.entrega ?? "9999", y = b.entrega ?? "9999";
-    return x === y ? a.id - b.id : cerradaA ? (x < y ? 1 : -1) : x < y ? -1 : 1;
-  }), [filas, filtros, hoy]);
-  // Con una columna elegida manda ella; los empates siguen en el orden "lo urgente primero".
-  const ordenado = useMemo(() => (orden ? ordenarPor(detalle, CLAVE_DETALLE[orden.col], orden.dir) : detalle), [detalle, orden]);
-  const alOrdenar = (col: ColDetalle) => { setOrden((o) => alternarOrden(o, col, col === "horas" ? "desc" : "asc")); setLimite(PAGINA_INICIAL); };
+  /*
+   * Detalle: la pagina que ve la persona. Sin filtros ni orden es la que mando el servidor con la pagina; con
+   * ellos se pide a /api/panel/detalle (filtrado en la base) y "Mostrar mas" agrega la siguiente pagina.
+   * `clave` identifica que consulta es: una respuesta que llega para otra clave se descarta.
+   */
+  const hayFiltros = Object.entries(filtros).some(([k, v]) => k !== "desde" && k !== "hasta" && v);
+  const clave = JSON.stringify([periodo, desde, hasta, filtros, orden]);
+  const sinFiltrar = !hayFiltros && !orden;
+  const [remoto, setRemoto] = useState<{ clave: string; filas: FilaDetalle[]; total: number } | null>(null);
+  const [errorDetalle, setErrorDetalle] = useState("");
+  const [pidiendoMas, setPidiendoMas] = useState(false);
+  const turno = useRef(0);
+  const consulta = useCallback((offset: number, limite: number) => {
+    const q = new URLSearchParams({ periodo, offset: String(offset), limite: String(limite) });
+    if (periodo === "rango") { if (desde) q.set("desde", desde); if (hasta) q.set("hasta", hasta); }
+    for (const dim of ["unidad", "cliente", "persona", "tipo", "contrato", "semana", "estado"] as const) if (filtros[dim]) q.set(dim, filtros[dim]);
+    if (orden) { q.set("orden", orden.col); q.set("dir", orden.dir); }
+    return pedir<{ filas: FilaDetalle[]; total: number }>(`/api/panel/detalle?${q}`);
+  }, [periodo, desde, hasta, filtros, orden]);
+
+  useEffect(() => {
+    if (sinFiltrar) return;
+    const contador = turno;
+    const mio = ++contador.current;
+    consulta(0, PAGINA_INICIAL)
+      .then((d) => { if (mio === contador.current) { setRemoto({ clave, ...d }); setErrorDetalle(""); } })
+      .catch((e) => { if (mio === contador.current) setErrorDetalle(e instanceof ErrorPeticion ? e.message : "No se pudo cargar el detalle."); });
+    return () => { contador.current++; };
+  }, [clave, sinFiltrar, consulta]);
+
+  const propio = remoto && remoto.clave === clave ? remoto : null;
+  // Sin filtros, lo del servidor sirve hasta que se pida mas (entonces `remoto` ya trae todo lo cargado).
+  const mostrada = propio ?? (sinFiltrar ? detalle : null);
+  // Mientras llega la consulta nueva se sigue viendo lo anterior (atenuado) en vez de vaciar la tabla.
+  const visible = mostrada ?? remoto ?? detalle;
+  const desactualizado = !mostrada && !errorDetalle;
+  const filasDetalle = visible.filas;
+  const totalDetalle = visible.total;
+  const mostrarMas = async () => {
+    if (!mostrada) return;
+    setPidiendoMas(true);
+    try {
+      const d = await consulta(mostrada.filas.length, PAGINA);
+      setRemoto({ clave, filas: [...mostrada.filas, ...d.filas], total: d.total });
+    } catch (e) {
+      setErrorDetalle(e instanceof ErrorPeticion ? e.message : "No se pudo cargar más.");
+    } finally { setPidiendoMas(false); }
+  };
+  const alOrdenar = (col: ColDetalle) => { setOrden((o) => alternarOrden(o, col, col === "horas" ? "desc" : "asc")); setErrorDetalle(""); };
   /* Lo urgente primero: lo abierto por entrega ascendente y, al final, lo cerrado por entrega descendente. */
 
-  const cambiar = (f: FiltrosCruzados) => { setFiltros(f); setLimite(PAGINA_INICIAL); };
+  const cambiar = (f: FiltrosCruzados) => { setFiltros(f); setErrorDetalle(""); };
   const poner = (dim: Seleccion, valor: string) => cambiar({ ...filtros, [dim]: valor });
   const alternarEstado = (valor: string) => poner("estado", filtros.estado === valor ? "" : valor);
   /* Un clic en un grafico pone el valor y otro igual lo quita. */
@@ -203,31 +246,34 @@ export function PanelInicio({
 
       {truncado && (
         <p role="status" className="rounded-sm border border-aviso/40 bg-aviso/10 px-3 py-2 text-sm">
-          Hay más de {numero.format(tope)} tareas en este periodo y se muestran las {numero.format(tope)} de entrega más próxima. Acota el periodo para verlas todas.
+          Este periodo tiene más de {numero.format(tope)} combinaciones distintas de unidad, cliente, persona y semana: las cifras y los gráficos usan las {numero.format(tope)} de entrega más próxima a hoy. Acota el periodo para verlo todo.
         </p>
       )}
 
-      <Panel titulo="Detalle" acciones={<span className="font-mono text-sm text-texto-2 cifras">{detalle.length} {detalle.length === 1 ? "tarea" : "tareas"}</span>}>
-        {!filas.length ? (
+      <Panel titulo="Detalle" acciones={<span className="font-mono text-sm text-texto-2 cifras">{numero.format(totalDetalle)} {totalDetalle === 1 ? "tarea" : "tareas"}</span>}>
+        {!tareas ? (
           <Vacio titulo="Sin tareas con entrega en este periodo">Prueba con otro periodo o con «Todo». Solo cuentan las tareas que puedes ver.</Vacio>
-        ) : !detalle.length ? (
+        ) : errorDetalle && !mostrada ? (
+          <Vacio titulo="No se pudo cargar el detalle" accion={<Boton variante="secundario" onClick={() => cambiar({ ...filtros })}>Reintentar</Boton>}>{errorDetalle}</Vacio>
+        ) : !desactualizado && !totalDetalle ? (
           <Vacio titulo="Ninguna tarea con estos filtros" accion={<Boton onClick={() => cambiar(SIN_FILTROS)}>Quitar todos los filtros</Boton>}>
             Los filtros se combinan entre sí; quita alguno para ampliar el resultado.
           </Vacio>
         ) : (
           <>
             <SelectorOrden className="border-b border-hilo px-4 py-2 md:hidden" opciones={COLUMNAS_DETALLE} orden={orden} vacio="Lo urgente primero"
-              onCambiar={(o) => { setOrden(o); setLimite(PAGINA_INICIAL); }} />
-            <div role="table" aria-label="Tareas que cumplen los filtros">
+              onCambiar={(o) => { setOrden(o); setErrorDetalle(""); }} />
+            <div role="table" aria-label="Tareas que cumplen los filtros" aria-busy={desactualizado || undefined} className={cx("transition-opacity duration-[var(--dur)]", desactualizado && "opacity-60")}>
               <div role="row" className="hidden h-9 items-center gap-3 border-b border-hilo px-4 md:grid md:grid-cols-[88px_minmax(0,1fr)_130px_130px_130px_64px]">
                 {COLUMNAS_DETALLE.map((c) => <ColumnaOrdenable key={c.col} etiqueta={c.etiqueta} col={c.col} orden={orden} onOrden={alOrdenar} alinear={c.col === "horas" ? "derecha" : undefined} />)}
               </div>
-              {ordenado.slice(0, limite).map((t) => <FilaDetalle key={t.id} t={t} hoy={hoy} tono={tono.get(t.estadoNombre) ?? "neutro"} />)}
+              {filasDetalle.map((t) => <FilaTabla key={t.id} t={t} hoy={hoy} tono={tono.get(t.estadoNombre) ?? "neutro"} />)}
             </div>
-            {detalle.length > limite && (
+            {errorDetalle && <p role="alert" className="border-t border-hilo px-4 py-2 text-sm text-alerta">{errorDetalle}</p>}
+            {totalDetalle > filasDetalle.length && (
               <div className="flex justify-center border-t border-hilo p-3">
-                <Boton variante="secundario" onClick={() => setLimite((l) => l + PAGINA)}>
-                  Mostrar {Math.min(PAGINA, detalle.length - limite)} más
+                <Boton variante="secundario" onClick={() => void mostrarMas()} disabled={pidiendoMas}>
+                  Mostrar {Math.min(PAGINA, totalDetalle - filasDetalle.length)} más
                 </Boton>
               </div>
             )}
@@ -253,7 +299,7 @@ function FiltroLista({ etiqueta, todas, valor, opciones, onChange }: {
   );
 }
 
-function FilaDetalle({ t, hoy, tono }: { t: FilaPanel; hoy: string; tono: Tono }) {
+function FilaTabla({ t, hoy, tono }: { t: FilaDetalle; hoy: string; tono: Tono }) {
   const riesgo = riesgoDe(t, hoy);
   const vencida = riesgo === "vencida";
   return (

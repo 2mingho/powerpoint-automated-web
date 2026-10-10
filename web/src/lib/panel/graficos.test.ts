@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { SIN_FILTROS } from "@/lib/seguimiento/filtros";
 import { CLAVE_OTRAS, TOPE_PORCIONES, cargaPorPersona, entregasPorSemana, estadoPorCliente, repartoPor, TOPE_BARRAS, TOPE_SEMANAS } from "./graficos";
-import type { FilaPanel } from "./tipos";
+import { acumularCeldas, entradaDeTarea } from "./celdas";
+import type { CeldaPanel } from "./tipos";
 
 const HOY = "2026-10-08"; // jueves; la semana empieza el 2026-10-05
-let n = 0;
-const t = (o: Partial<FilaPanel> = {}): FilaPanel => ({
-  id: ++n, titulo: `t${n}`, estadoNombre: "Pendiente", estimada: true, personaNombre: "Ana", clienteId: 1,
-  estado: "pendiente", entrega: "2026-10-14", horas: 4, unidad: "Insights", cliente: "Altice", persona: "1", tipo: "Fee", contrato: "",
+/* Una tarea suelta convertida en celda, con el mismo camino que usa el servidor (riesgo y puntualidad incluidos). */
+type Suelta = Parameters<typeof entradaDeTarea>[0];
+const t = (o: Partial<Suelta> = {}): CeldaPanel => acumularCeldas([entradaDeTarea({
+  estado: "pendiente", entrega: "2026-10-14", horas: 4, unidad: "Insights", cliente: "Altice", persona: "1", personaNombre: "Ana", tipo: "Fee", contrato: "",
   ...o,
-});
+}, HOY)])[0];
 
 describe("estado por cliente", () => {
   const filas = [

@@ -7,7 +7,7 @@
  * llegan ya pasaron por filtroTareasVisibles en el servidor.
  */
 import { lunesDe } from "@/lib/tareas/fechas";
-import { riesgoDe, type TareaSeg } from "./riesgo";
+import { riesgoDe, type Riesgo, type TareaSeg } from "./riesgo";
 
 export type Dimension = "unidad" | "cliente" | "persona" | "tipo" | "contrato" | "semana" | "estado";
 
@@ -32,7 +32,18 @@ export type TareaFiltrable = TareaSeg & {
   persona: string;
   tipo: string;
   contrato: string;
+  /*
+   * Riesgo ya calculado. Las celdas del panel agrupan muchas tareas con la misma combinacion y el riesgo
+   * (que depende de la fecha exacta y de los pasos) se resuelve antes de agruparlas; sin este campo se
+   * calcula con riesgoDe.
+   */
+  riesgo?: Riesgo;
 };
+
+/* El riesgo de la fila: el precalculado si lo trae y, si no, el que sale de sus datos. */
+export function riesgoEfectivo(t: TareaFiltrable, hoy: string): Riesgo {
+  return t.riesgo ?? riesgoDe(t, hoy);
+}
 
 export const SIN_FILTROS: FiltrosCruzados = { desde: "", hasta: "", unidad: "", cliente: "", persona: "", tipo: "", contrato: "", semana: "", estado: "" };
 
@@ -46,7 +57,7 @@ export function pasaFiltros(t: TareaFiltrable, f: FiltrosCruzados, hoy: string, 
   if (omitir !== "contrato" && f.contrato && t.contrato !== f.contrato) return false;
   if (omitir !== "semana" && f.semana && (!t.entrega || lunesDe(t.entrega) !== f.semana)) return false;
   if (omitir !== "estado" && f.estado) {
-    if (f.estado === "vencida" ? riesgoDe(t, hoy) !== "vencida" : f.estado === "abierta" ? t.estado === "hecha" : t.estado !== f.estado) return false;
+    if (f.estado === "vencida" ? riesgoEfectivo(t, hoy) !== "vencida" : f.estado === "abierta" ? t.estado === "hecha" : t.estado !== f.estado) return false;
   }
   return true;
 }

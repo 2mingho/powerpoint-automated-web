@@ -1,6 +1,6 @@
 import "server-only";
-import { cache } from "react";
 import { db } from "@/lib/db";
+import { conCaducidad } from "@/lib/memo";
 
 /*
  * Estados y prioridades de tarea (services/catalogo.py). Lo que importa no es
@@ -18,7 +18,7 @@ export type Tono = "neutro" | "info" | "aviso" | "alerta" | "bien" | "violeta";
 export type Estado = { nombre: string; orden: number; color: Tono; esInicial: boolean; esFinal: boolean };
 export type Prioridad = { nombre: string; orden: number; color: Tono; esDefecto: boolean };
 
-export const estados = cache(async (): Promise<Estado[]> => {
+async function leerEstados(): Promise<Estado[]> {
   try {
     const filas = await db.task_statuses.findMany({ orderBy: [{ orden: "asc" }, { nombre: "asc" }] });
     if (filas.length) {
@@ -30,9 +30,9 @@ export const estados = cache(async (): Promise<Estado[]> => {
   return ESTADOS_RESPALDO.map((nombre, i) => ({
     nombre, orden: (i + 1) * 10, color: "neutro", esInicial: i === 0, esFinal: FINALES_RESPALDO.includes(nombre),
   }));
-});
+}
 
-export const prioridades = cache(async (): Promise<Prioridad[]> => {
+async function leerPrioridades(): Promise<Prioridad[]> {
   try {
     const filas = await db.task_priorities.findMany({ orderBy: [{ orden: "desc" }, { nombre: "asc" }] });
     if (filas.length) {
@@ -42,7 +42,19 @@ export const prioridades = cache(async (): Promise<Prioridad[]> => {
   return PRIORIDADES_RESPALDO.map((nombre, i) => ({
     nombre, orden: (3 - i) * 10, color: "neutro", esDefecto: nombre === "Media",
   }));
-});
+}
+
+/*
+ * Se leen en casi cada peticion y casi nunca cambian. Memoria de unos segundos: quien los edita
+ * (lib/admin/catalogo.ts) llama a invalidarCatalogo() y el cambio se ve al instante en este
+ * proceso; otro proceso lo vera en cuanto caduque.
+ */
+const CADUCIDAD_MS = 3000;
+const memoEstados = conCaducidad(leerEstados, CADUCIDAD_MS);
+const memoPrioridades = conCaducidad(leerPrioridades, CADUCIDAD_MS);
+export const estados = (): Promise<Estado[]> => memoEstados.leer();
+export const prioridades = (): Promise<Prioridad[]> => memoPrioridades.leer();
+export function invalidarCatalogo() { memoEstados.invalidar(); memoPrioridades.invalidar(); }
 
 export async function estadosValidos() { return (await estados()).map((e) => e.nombre); }
 export async function estadosFinales() {

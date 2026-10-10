@@ -18,12 +18,15 @@ export async function personasDelAmbito(u: UsuarioActual, soloActivos = true): P
   return filas.map((p) => ({ id: p.id, nombre: p.username, unidad: p.areas?.name || p.role || "Sin unidad", unidadId: p.area_id }));
 }
 
-/* Clientes distintos de las tareas visibles, para el filtro y el autocompletado. */
+/*
+ * Clientes distintos de las tareas visibles, para el filtro y el autocompletado. groupBy y no
+ * `distinct`: Prisma resuelve `distinct` en memoria (traia las 60.000 filas para quedarse con 300
+ * nombres); groupBy lo hace la base y solo viajan los nombres.
+ */
 export async function clientesVisibles(u: UsuarioActual): Promise<string[]> {
-  const filas = await db.tasks.findMany({
+  const filas = await db.tasks.groupBy({
+    by: ["client"],
     where: { AND: [await filtroTareasVisibles(u), { client: { not: null } }, { NOT: { client: "" } }] },
-    distinct: ["client"],
-    select: { client: true },
     orderBy: { client: "asc" },
     take: 300,
   });

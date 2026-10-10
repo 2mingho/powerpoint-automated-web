@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { cx } from "@/components/ui/cx";
 import { Panel } from "@/components/ui/panel";
 import { CLAVE_OTRAS, cargaPorPersona, entregasPorSemana, estadoPorCliente, repartoPor, type BarraEstado, type Porcion, type Semana } from "@/lib/panel/graficos";
-import { GRUPOS_ESTADO, type FilaPanel, type Metrica } from "@/lib/panel/tipos";
+import { GRUPOS_ESTADO, type CeldaPanel, type Metrica } from "@/lib/panel/tipos";
 import type { FiltrosCruzados } from "@/lib/seguimiento/filtros";
 import { lunesDe } from "@/lib/tareas/fechas";
 import { fechaCorta } from "../tareas/_componentes/cliente";
@@ -27,7 +27,7 @@ const FONDO_GRUPO: Record<string, string> = {
 
 type Elegir = (dim: "cliente" | "persona" | "tipo" | "unidad" | "semana" | "estado", valor: string) => void;
 
-type Comun = { filas: FilaPanel[]; filtros: FiltrosCruzados; hoy: string; metrica: Metrica; elegir: Elegir };
+type Comun = { filas: CeldaPanel[]; filtros: FiltrosCruzados; hoy: string; metrica: Metrica; elegir: Elegir };
 
 export function GraficosPanel({ filas, filtros, hoy, metrica, elegir }: Comun) {
   const clientes = useMemo(() => estadoPorCliente(filas, filtros, hoy, metrica), [filas, filtros, hoy, metrica]);

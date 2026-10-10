@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { ErrorApi } from "@/lib/api";
+import { invalidarCatalogo } from "@/lib/catalogo";
 import { esDuplicado, texto, tono } from "./api";
 
 /*
@@ -20,7 +21,7 @@ export const MAX_NOMBRE_PRIORIDAD = 10;
 
 type DatosEstado = { nombre?: unknown; color?: unknown; esInicial?: unknown; esFinal?: unknown };
 
-export async function crearEstado(d: DatosEstado) {
+async function crearEstadoInterno(d: DatosEstado) {
   const nombre = texto(d.nombre, MAX_NOMBRE_ESTADO);
   if (!nombre) throw new ErrorApi(400, "El nombre es obligatorio.");
   const esInicial = d.esInicial === true;
@@ -43,7 +44,7 @@ export async function crearEstado(d: DatosEstado) {
   }
 }
 
-export async function editarEstado(id: number, d: DatosEstado) {
+async function editarEstadoInterno(id: number, d: DatosEstado) {
   return db.$transaction(async (tx) => {
     const e = await tx.task_statuses.findUnique({ where: { id } });
     if (!e) throw new ErrorApi(404, "Estado no encontrado.");
@@ -75,7 +76,7 @@ export async function editarEstado(id: number, d: DatosEstado) {
   });
 }
 
-export async function eliminarEstado(id: number) {
+async function eliminarEstadoInterno(id: number) {
   return db.$transaction(async (tx) => {
     const e = await tx.task_statuses.findUnique({ where: { id } });
     if (!e) throw new ErrorApi(404, "Estado no encontrado.");
@@ -92,7 +93,7 @@ export async function eliminarEstado(id: number) {
 }
 
 /* Orden visual = orden de la lista; se guarda en pasos de 10 para dejar hueco. */
-export async function reordenar(tabla: "estados" | "prioridades", ids: unknown) {
+async function reordenarInterno(tabla: "estados" | "prioridades", ids: unknown) {
   if (!Array.isArray(ids) || !ids.every((x) => Number.isInteger(x))) throw new ErrorApi(400, "Orden inválido.");
   const lista = ids as number[];
   return db.$transaction(async (tx) => {
@@ -115,7 +116,7 @@ export async function reordenar(tabla: "estados" | "prioridades", ids: unknown) 
 
 type DatosPrioridad = { nombre?: unknown; color?: unknown; esDefecto?: unknown };
 
-export async function crearPrioridad(d: DatosPrioridad) {
+async function crearPrioridadInterno(d: DatosPrioridad) {
   const nombre = texto(d.nombre, MAX_NOMBRE_PRIORIDAD);
   if (!nombre) throw new ErrorApi(400, "El nombre es obligatorio.");
   const esDefecto = d.esDefecto === true;
@@ -137,7 +138,7 @@ export async function crearPrioridad(d: DatosPrioridad) {
   }
 }
 
-export async function editarPrioridad(id: number, d: DatosPrioridad) {
+async function editarPrioridadInterno(id: number, d: DatosPrioridad) {
   return db.$transaction(async (tx) => {
     const p = await tx.task_priorities.findUnique({ where: { id } });
     if (!p) throw new ErrorApi(404, "Prioridad no encontrada.");
@@ -159,7 +160,7 @@ export async function editarPrioridad(id: number, d: DatosPrioridad) {
   });
 }
 
-export async function eliminarPrioridad(id: number) {
+async function eliminarPrioridadInterno(id: number) {
   return db.$transaction(async (tx) => {
     const p = await tx.task_priorities.findUnique({ where: { id } });
     if (!p) throw new ErrorApi(404, "Prioridad no encontrada.");
@@ -170,4 +171,67 @@ export async function eliminarPrioridad(id: number) {
     await tx.task_priorities.delete({ where: { id } });
     return p.nombre;
   });
+}
+
+/* crearEstado: tras cualquier cambio del catalogo, se descarta la memoria de lib/catalogo.ts. */
+export async function crearEstado(d: DatosEstado) {
+  try {
+    return await crearEstadoInterno(d);
+  } finally {
+    invalidarCatalogo();
+  }
+}
+
+/* editarEstado: tras cualquier cambio del catalogo, se descarta la memoria de lib/catalogo.ts. */
+export async function editarEstado(id: number, d: DatosEstado) {
+  try {
+    return await editarEstadoInterno(id, d);
+  } finally {
+    invalidarCatalogo();
+  }
+}
+
+/* eliminarEstado: tras cualquier cambio del catalogo, se descarta la memoria de lib/catalogo.ts. */
+export async function eliminarEstado(id: number) {
+  try {
+    return await eliminarEstadoInterno(id);
+  } finally {
+    invalidarCatalogo();
+  }
+}
+
+/* reordenar: tras cualquier cambio del catalogo, se descarta la memoria de lib/catalogo.ts. */
+export async function reordenar(tabla: "estados" | "prioridades", ids: unknown) {
+  try {
+    return await reordenarInterno(tabla, ids);
+  } finally {
+    invalidarCatalogo();
+  }
+}
+
+/* crearPrioridad: tras cualquier cambio del catalogo, se descarta la memoria de lib/catalogo.ts. */
+export async function crearPrioridad(d: DatosPrioridad) {
+  try {
+    return await crearPrioridadInterno(d);
+  } finally {
+    invalidarCatalogo();
+  }
+}
+
+/* editarPrioridad: tras cualquier cambio del catalogo, se descarta la memoria de lib/catalogo.ts. */
+export async function editarPrioridad(id: number, d: DatosPrioridad) {
+  try {
+    return await editarPrioridadInterno(id, d);
+  } finally {
+    invalidarCatalogo();
+  }
+}
+
+/* eliminarPrioridad: tras cualquier cambio del catalogo, se descarta la memoria de lib/catalogo.ts. */
+export async function eliminarPrioridad(id: number) {
+  try {
+    return await eliminarPrioridadInterno(id);
+  } finally {
+    invalidarCatalogo();
+  }
 }

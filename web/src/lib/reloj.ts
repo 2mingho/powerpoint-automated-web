@@ -8,8 +8,11 @@
  */
 export const ZONA_NEGOCIO = "America/Santo_Domingo";
 
+/* Un solo formateador: construirlo cuesta decenas de microsegundos y hoyNegocio(fecha) se llama una vez por tarea. */
+const formatoDia = new Intl.DateTimeFormat("en-CA", { timeZone: ZONA_NEGOCIO });
+
 export function hoyNegocio(ahora = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: ZONA_NEGOCIO }).format(ahora);
+  return formatoDia.format(ahora);
 }
 
 /* Fecha ISO (YYYY-MM-DD) desde un Date de columna @db.Date, sin desplazarla de dia. */

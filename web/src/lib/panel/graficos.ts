@@ -4,11 +4,10 @@
  * un cliente deja el grafico de clientes entero, con el elegido resaltado.
  * El valor de cada tarea es 1 o sus horas segun la metrica.
  */
-import { pasaFiltros, type FiltrosCruzados } from "@/lib/seguimiento/filtros";
-import { riesgoDe } from "@/lib/seguimiento/riesgo";
+import { pasaFiltros, riesgoEfectivo, type FiltrosCruzados } from "@/lib/seguimiento/filtros";
 import { lunesDe, sumarDias } from "@/lib/tareas/fechas";
 import { valorDe } from "./agregados";
-import { GRUPOS_ESTADO, type FilaPanel, type Metrica } from "./tipos";
+import { GRUPOS_ESTADO, type CeldaPanel, type Metrica } from "./tipos";
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
@@ -26,7 +25,7 @@ export type BarraEstado = { clave: string; etiqueta: string; total: number; porG
  * cliente elegido aunque no entre. Las tareas sin cliente no se pueden elegir
  * como filtro y no salen.
  */
-export function estadoPorCliente(filas: FilaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica): { barras: BarraEstado[]; omitidos: number } {
+export function estadoPorCliente(filas: CeldaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica): { barras: BarraEstado[]; omitidos: number } {
   const mapa = new Map<string, BarraEstado>();
   for (const t of filas) {
     if (!t.cliente || !pasaFiltros(t, f, hoy, "cliente")) continue;
@@ -34,7 +33,7 @@ export function estadoPorCliente(filas: FilaPanel[], f: FiltrosCruzados, hoy: st
     const v = valorDe(t, m);
     b.total += v;
     b.porGrupo[t.estado] += v;
-    if (riesgoDe(t, hoy) === "vencida") b.vencidas += v;
+    if (riesgoEfectivo(t, hoy) === "vencida") b.vencidas += v;
     mapa.set(t.cliente, b);
   }
   return recortar([...mapa.values()], f.cliente);
@@ -44,7 +43,7 @@ export function estadoPorCliente(filas: FilaPanel[], f: FiltrosCruzados, hoy: st
  * Carga por persona: sin filtro de estado cuenta solo lo abierto (lo que pesa
  * hoy); con uno, lo que ese filtro deje pasar.
  */
-export function cargaPorPersona(filas: FilaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica): { barras: BarraEstado[]; omitidos: number } {
+export function cargaPorPersona(filas: CeldaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica): { barras: BarraEstado[]; omitidos: number } {
   const mapa = new Map<string, BarraEstado>();
   for (const t of filas) {
     if (!pasaFiltros(t, f, hoy, "persona")) continue;
@@ -53,7 +52,7 @@ export function cargaPorPersona(filas: FilaPanel[], f: FiltrosCruzados, hoy: str
     const v = valorDe(t, m);
     b.total += v;
     b.porGrupo[t.estado] += v;
-    if (riesgoDe(t, hoy) === "vencida") b.vencidas += v;
+    if (riesgoEfectivo(t, hoy) === "vencida") b.vencidas += v;
     mapa.set(t.persona, b);
   }
   return recortar([...mapa.values()], f.persona);
@@ -82,7 +81,7 @@ export const TOPE_SEMANAS = 26;
  * y vencidas. Rellena las semanas vacias entre la primera y la ultima para que
  * el eje no mienta; si son demasiadas, deja las TOPE_SEMANAS mas cercanas a hoy.
  */
-export function entregasPorSemana(filas: FilaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica): { semanas: Semana[]; omitidas: number } {
+export function entregasPorSemana(filas: CeldaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica): { semanas: Semana[]; omitidas: number } {
   const mapa = new Map<string, Semana>();
   for (const t of filas) {
     if (!t.entrega || !pasaFiltros(t, f, hoy, "semana")) continue;
@@ -90,7 +89,7 @@ export function entregasPorSemana(filas: FilaPanel[], f: FiltrosCruzados, hoy: s
     const s = mapa.get(lunes) ?? { lunes, hechas: 0, abiertas: 0, vencidas: 0, total: 0 };
     const v = valorDe(t, m);
     if (t.estado === "hecha") s.hechas += v;
-    else if (riesgoDe(t, hoy) === "vencida") s.vencidas += v;
+    else if (riesgoEfectivo(t, hoy) === "vencida") s.vencidas += v;
     else s.abiertas += v;
     mapa.set(lunes, s);
   }
@@ -127,7 +126,7 @@ export const TOPE_PORCIONES = 6;
 export const CLAVE_OTRAS = "__otras__";
 
 /* Reparto por tipo de cliente o por unidad. "" (sin tipo) cuenta pero no se puede elegir como filtro. */
-export function repartoPor(filas: FilaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica, dim: "tipo" | "unidad", sinValor: string): Porcion[] {
+export function repartoPor(filas: CeldaPanel[], f: FiltrosCruzados, hoy: string, m: Metrica, dim: "tipo" | "unidad", sinValor: string): Porcion[] {
   const mapa = new Map<string, Porcion>();
   for (const t of filas) {
     if (!pasaFiltros(t, f, hoy, dim)) continue;

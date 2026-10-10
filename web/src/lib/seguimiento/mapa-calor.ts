@@ -6,7 +6,7 @@
  */
 import { sumarDias, lunesDe } from "@/lib/tareas/fechas";
 import { CAPACIDAD_ESTANDAR, HORAS_POR_DEFECTO } from "./estado";
-import { nivelDeCarga, repartoSemanal, type TareaSeg } from "./riesgo";
+import { avance, nivelDeCarga, repartoSemanal, type TareaSeg } from "./riesgo";
 
 export type PersonaCarga = { id: number; nombre: string; capacidad: number | null };
 export type TareaDeCarga = TareaSeg & { personaId: number; estimada: boolean };
@@ -34,7 +34,35 @@ export function semanasDesde(hoy: string, n = 4): string[] {
  * se pinta), de la mas cargada a la menos. Las tareas de personas que no estan
  * en `personas` se ignoran: quien llama decide a quien se muestra.
  */
-export function mapaDeCalor(personas: PersonaCarga[], tareas: TareaDeCarga[], semanas: string[], hoy: string): FilaCalor[] {
+/*
+ * Lo que aportan a la semana de hoy las tareas VENCIDAS de una persona ya sumado por otro lado (la base). Una vencida
+ * carga todo su resto en hoy (ver repartoSemanal), asi que no hace falta traerla: basta cuantas son, cuantas
+ * sin estimar y sus horas pendientes. Solo cuentan las que aun tienen horas pendientes (las demas no aportan).
+ */
+export type VencidasDePersona = { tareas: number; sinEstimar: number; horas: number };
+
+/* El mismo agregado calculado desde las tareas sueltas (lo usan las pruebas para comprobar el de la base). */
+export function resumirVencidas(tareas: TareaDeCarga[], hoy: string): Map<number, VencidasDePersona> {
+  const out = new Map<number, VencidasDePersona>();
+  for (const t of tareas) {
+    if (t.estado === "hecha" || !t.entrega || t.entrega >= hoy) continue;
+    const horas = t.estimada ? t.horas : HORAS_POR_DEFECTO;
+    const resto = horas * (1 - avance(t));
+    if (resto <= 0) continue;
+    const v = out.get(t.personaId) ?? { tareas: 0, sinEstimar: 0, horas: 0 };
+    v.tareas++;
+    if (!t.estimada) v.sinEstimar++;
+    v.horas += resto;
+    out.set(t.personaId, v);
+  }
+  return out;
+}
+
+export function mapaDeCalor(
+  personas: PersonaCarga[], tareas: TareaDeCarga[], semanas: string[], hoy: string,
+  vencidas: ReadonlyMap<number, VencidasDePersona> = new Map(),
+): FilaCalor[] {
+  const semanaDeHoy = semanas.findIndex((w) => hoy >= w && hoy <= sumarDias(w, 6));
   const porPersona = new Map<number, TareaDeCarga[]>();
   for (const t of tareas) porPersona.set(t.personaId, [...(porPersona.get(t.personaId) ?? []), t]);
 
@@ -52,6 +80,12 @@ export function mapaDeCalor(personas: PersonaCarga[], tareas: TareaDeCarga[], se
         celdas[i].tareas++;
         if (!t.estimada) celdas[i].sinEstimar++;
       });
+    }
+    const v = vencidas.get(p.id);
+    if (v && semanaDeHoy >= 0) {
+      acumulado[semanaDeHoy] += v.horas;
+      celdas[semanaDeHoy].tareas += v.tareas;
+      celdas[semanaDeHoy].sinEstimar += v.sinEstimar;
     }
     celdas.forEach((c, i) => {
       c.horas = Math.round(acumulado[i]);

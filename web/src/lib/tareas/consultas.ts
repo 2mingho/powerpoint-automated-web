@@ -122,6 +122,48 @@ export async function listarTareas(u: UsuarioActual, f: Filtros, rango?: { desde
   return { tareas: await aDTOs(filas.slice(0, maximo), u.id), truncada };
 }
 
+/*
+ * Ventana alrededor de hoy para el panel de salidas: las `antes` mas cercanas que vencieron antes de hoy
+ * (de hoy hacia atras) y las `despues` mas cercanas que vencen hoy o despues (de hoy hacia adelante), juntas y
+ * por entrega. Con 60.000 tareas, la lista de 500 ordenada por entrega arrancaba en lo mas antiguo que hubiera
+ * y mandaba ~2 MB; asi arranca en lo que importa ahora (~100 filas) y quien quiera mas lo pide por lados.
+ * Sin estado: quien pide mas sube `antes` o `despues` y repite la consulta, de modo que el refresco periodico
+ * conserva lo que ya se habia desplegado. Mismas reglas de visibilidad y filtros que listarTareas.
+ */
+export const VENTANA = 50;
+export const VENTANA_MAX = 500;
+
+export function limiteDeVentana(v: unknown, defecto = VENTANA): number {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, VENTANA_MAX) : defecto;
+}
+
+export async function listarVentana(u: UsuarioActual, f: Filtros, antes = VENTANA, despues = VENTANA) {
+  const finales = await estadosFinales();
+  const hoy = hoyNegocio();
+  const cerradasDesde = new Date(Date.now() - DIAS_DE_CERRADAS * 86_400_000);
+  const y: Prisma.tasksWhereInput[] = [
+    await visibleSegun(u, f.alcance),
+    ...(await condicionesFiltro(u, f, hoy, finales)),
+    { OR: [{ status: { notIn: finales } }, { updated_at: { gte: cerradasDesde } }] },
+  ];
+  // Con 0 no viaja ninguna, pero sigue diciendo si habia (la fila de mas es el "hay mas").
+  const lado = (due: Prisma.tasksWhereInput, sentido: "asc" | "desc", n: number) => db.tasks.findMany({
+    where: { AND: [...y, due] },
+    include: INCLUIR_TAREA,
+    orderBy: [{ due_date: sentido }, { id: sentido }],
+    take: n + 1,
+  });
+  const [previas, proximas] = await Promise.all([
+    lado({ due_date: { lt: diaDb(hoy) } }, "desc", antes),
+    lado({ due_date: { gte: diaDb(hoy) } }, "asc", despues),
+  ]);
+  const hayAntes = previas.length > antes;
+  const hayDespues = proximas.length > despues;
+  const filas = [...previas.slice(0, antes).reverse(), ...proximas.slice(0, despues)];
+  return { tareas: await aDTOs(filas, u.id), hayAntes, hayDespues, antes, despues };
+}
+
 /* Los cuatro contadores, dentro del alcance visible y del chip elegido. */
 export async function contarSalidas(u: UsuarioActual, alcance: Alcance): Promise<Contadores> {
   const finales = await estadosFinales();

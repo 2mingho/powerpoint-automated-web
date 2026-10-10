@@ -87,17 +87,17 @@ test.describe("tablas ordenables: el detalle del Panel", () => {
 
     await th(/tarea/i).getByRole("button").click();
     await expect(th(/tarea/i)).toHaveAttribute("aria-sort", "ascending");
-    expect(soloEstas(await titulos(page))).toEqual(["Alfa tarea", "Beta tarea", "Gama tarea"]);
+    await expect.poll(async () => soloEstas(await titulos(page))).toEqual(["Alfa tarea", "Beta tarea", "Gama tarea"]);
     await th(/tarea/i).getByRole("button").click();
     await expect(th(/tarea/i)).toHaveAttribute("aria-sort", "descending");
-    expect(soloEstas(await titulos(page))).toEqual(["Gama tarea", "Beta tarea", "Alfa tarea"]);
+    await expect.poll(async () => soloEstas(await titulos(page))).toEqual(["Gama tarea", "Beta tarea", "Alfa tarea"]);
     await th(/tarea/i).getByRole("button").click();
     await expect(th(/tarea/i)).toHaveAttribute("aria-sort", "none");
-    expect(soloEstas(await titulos(page))).toEqual(["Gama tarea", "Beta tarea", "Alfa tarea"]); // de vuelta a lo urgente
+    await expect.poll(async () => soloEstas(await titulos(page))).toEqual(["Gama tarea", "Beta tarea", "Alfa tarea"]); // de vuelta a lo urgente
 
     // Horas empieza de mayor a menor: es lo que casi siempre se busca.
     await th(/horas/i).getByRole("button").click();
-    expect(soloEstas(await titulos(page))).toEqual(["Alfa tarea", "Gama tarea", "Beta tarea"]);
+    await expect.poll(async () => soloEstas(await titulos(page))).toEqual(["Alfa tarea", "Gama tarea", "Beta tarea"]);
     await expect(th(/horas/i)).toHaveAttribute("aria-sort", "descending");
     // Cambiar de columna deja una sola activa.
     await th(/persona/i).getByRole("button").click();

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { idDeCorreo } from "../comun";
-import { BASE, entrarComo, escenario, HOY, sql } from "./apoyo";
+import { BASE, entrarComo, escenario, HOY, sql, sumarDias } from "./apoyo";
 
 /*
  * Mapa de calor de carga en Equipo y capacidad semanal. Cada prueba crea su
@@ -46,6 +46,34 @@ test.describe("mapa de calor", () => {
     expect(comp.celdas[0]).toMatchObject({ horas: 4, tareas: 1, sinEstimar: 1 });
     // El mas cargado va primero.
     expect(calor.filas[0].personaId).toBe(e.empleado);
+  });
+
+  test("las vencidas cargan su resto en la semana de hoy (sumadas en la base), con avance de pasos y sin estimar; lo lejano no cuenta", async ({ context }) => {
+    const { e, lider } = await conLider();
+    const vencida = async (quien: number, dias: number, horas: number | null, pasos: [number, number] = [0, 0]) => {
+      const id = await e.tarea(`Vencida ${Math.random()}`, e.alfa, quien, quien, "En Progreso", sumarDias(HOY, -dias));
+      await sql("UPDATE tasks SET estimated_hours = $2 WHERE id = $1", [id, horas]);
+      for (let i = 0; i < pasos[1]; i++) await sql("INSERT INTO task_checklist_items (task_id, body, position, is_completed, created_at) VALUES ($1, 'p', $2, $3, now())", [id, i, i < pasos[0]]);
+      return id;
+    };
+    await vencida(e.empleado, 3, 8); // 8 h enteras
+    await vencida(e.empleado, 20, 4, [1, 4]); // 4 h con 1 de 4 pasos hechos: 3 h
+    await vencida(e.empleado, 9, 6, [2, 2]); // pasos completos: no aporta
+    await vencida(e.companero, 1, null); // sin estimar: 4 h y marca
+    // Una tarea que empieza y vence lejos de la ventana (y no vencida) no carga nada.
+    const lejos = await e.tarea("Lejos", e.alfa, e.empleado, e.empleado, "En Progreso", sumarDias(HOY, 120));
+    await sql("UPDATE tasks SET estimated_hours = 20, start_date = $2 WHERE id = $1", [lejos, sumarDias(HOY, 118)]);
+    // Una larga sin fecha de inicio que vence tras la ventana pero empieza dentro de ella por sus horas.
+    const larga = await e.tarea("Larga", e.alfa, e.empleado, e.empleado, "En Progreso", sumarDias(HOY, 32));
+    await sql("UPDATE tasks SET estimated_hours = 120 WHERE id = $1", [larga]);
+    await entrarComo(context, lider);
+    const { calor } = (await (await context.request.get(`${BASE}/api/equipo`)).json()) as { calor: { filas: Fila[] } };
+    const emp = calor.filas.find((f) => f.personaId === e.empleado)!;
+    const comp = calor.filas.find((f) => f.personaId === e.companero)!;
+    // La larga (120 h = 20 dias habiles hacia atras desde hoy+32) aporta algo a la ultima semana; las vencidas, a la primera.
+    expect(emp.celdas[0]).toMatchObject({ horas: 11, tareas: 2, sinEstimar: 0 });
+    expect(emp.celdas[3].horas).toBeGreaterThan(0);
+    expect(comp.celdas[0]).toMatchObject({ horas: 4, tareas: 1, sinEstimar: 1 });
   });
 
   test("capacidad 0 saca a la persona del mapa; otra capacidad cambia la razon", async ({ context }) => {
@@ -115,5 +143,56 @@ test.describe("capacidad semanal en Admin", () => {
     await entrarComo(context, e.empleado);
     const res = await context.request.patch(`${BASE}/api/admin/usuarios/${e.companero}`, { data: { capacidad: 1 } });
     expect(res.status()).toBe(403);
+  });
+});
+
+/*
+ * Cifras del panel de Equipo: contadores, carga por persona, vencidas por unidad y tendencia salen de consultas
+ * agregadas en la base (no de cada tarea). Aqui se comparan con lo que se sembro, tarea por tarea.
+ */
+test.describe("cifras de Equipo desde la base", () => {
+  type Panel = {
+    contadores: { abiertas: number; vencidas: number; completadasSemana: number; enRiesgo: number };
+    carga: { personaId: number; total: number; vencidas: number; segmentos: { estado: string; n: number }[] }[];
+    porUnidad: { nombre: string; abiertas: number; vencidas: number }[];
+    tendencia: { semana: string; creadas: number; completadas: number }[];
+  };
+
+  test("contadores, carga, unidades y tendencia coinciden con las tareas sembradas", async ({ context }) => {
+    const { e, lider } = await conLider();
+    const t = async (quien: number, estado: string, entrega: string, creadaHace: number, tocadaHace = creadaHace) => {
+      const id = await e.tarea(`Eq ${Math.random()}`, e.alfa, quien, quien, estado, entrega);
+      await sql("UPDATE tasks SET created_at = now() - make_interval(days => $2::int), updated_at = now() - make_interval(days => $3::int) WHERE id = $1", [id, creadaHace, tocadaHace]);
+      return id;
+    };
+    await t(e.empleado, "Pendiente", sumarDias(HOY, -4), 30); // vencida
+    await t(e.empleado, "En Progreso", sumarDias(HOY, -1), 30); // vencida
+    await t(e.companero, "Pendiente", sumarDias(HOY, 1), 12); // en riesgo (mañana)
+    await t(e.companero, "Bloqueado", sumarDias(HOY, 45), 2); // abierta lejana
+    await t(e.empleado, "Completado", sumarDias(HOY, -2), 20, 0); // cerrada ahora: esta semana
+    await t(e.companero, "Completado", sumarDias(HOY, -30), 40, 22); // cerrada hace 22 dias: otra semana
+    await t(e.companero, "Completado", sumarDias(HOY, -100), 200, 90); // cerrada hace mucho: fuera de las 8 semanas
+    await entrarComo(context, lider);
+    const res = await context.request.get(`${BASE}/api/equipo?unidad=${e.alfa}`);
+    expect(res.status(), await res.text()).toBe(200);
+    const panel = (await res.json()) as Panel;
+
+    expect(panel.contadores).toEqual({ abiertas: 4, vencidas: 2, enRiesgo: 1, completadasSemana: 1 });
+    const emp = panel.carga.find((f) => f.personaId === e.empleado)!;
+    const comp = panel.carga.find((f) => f.personaId === e.companero)!;
+    expect(emp).toMatchObject({ total: 2, vencidas: 2 });
+    expect(comp).toMatchObject({ total: 2, vencidas: 0 });
+    expect(comp.segmentos.map((s) => s.estado).sort()).toEqual(["Bloqueado", "Pendiente"]);
+    expect(panel.porUnidad.find((u) => u.nombre.startsWith("Alfa"))).toMatchObject({ abiertas: 4, vencidas: 2 });
+
+    // Tendencia: 8 semanas, la ultima es la actual; los cierres y las altas caen en la semana de su fecha.
+    expect(panel.tendencia).toHaveLength(8);
+    const semanaDe = (haceDias: number) => { const d = new Date(Date.now() - haceDias * 86_400_000 - 4 * 3_600_000); return sumarDias(d.toISOString().slice(0, 10), -((d.getUTCDay() + 6) % 7)); };
+    const cierres = (s: string) => panel.tendencia.find((p) => p.semana === s)!.completadas;
+    expect(cierres(semanaDe(0))).toBe(1);
+    expect(cierres(semanaDe(22))).toBe(1);
+    expect(panel.tendencia.reduce((n, p) => n + p.completadas, 0)).toBe(2); // la de hace 90 dias no entra
+    // Altas en las 8 semanas: las de hace 30, 30, 12, 2, 20 y 40 dias; las de 200 no.
+    expect(panel.tendencia.reduce((n, p) => n + p.creadas, 0)).toBe(6);
   });
 });

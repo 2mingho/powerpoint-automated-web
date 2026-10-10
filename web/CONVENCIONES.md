@@ -51,6 +51,27 @@ Producto y diseño: `../PRODUCT.md` (quién lo usa y qué no se puede romper) y 
 - La meta de la dirección (`goals.area_id` NULL) la fija solo el administrador y la ve quien ve todas las unidades.
 - Un cliente o unidad con contratos no se borra; unir clientes mueve sus contratos.
 
+## Volumen: qué se trae de la base
+
+Probado con 60.000 tareas (34.000 abiertas). Reglas para no volver a pedir de más:
+
+- **Nunca una fila por tarea para contar.** Se cuenta en la base (`groupBy`, `count` o SQL agregado). Un `IN (...)` con ids de
+  tareas no puede pasar de ~32.000 parámetros (P2029): se filtra por relación (`tasks: { is: where }`), no por lista de ids.
+  `distinct` de Prisma se resuelve en memoria: usar `groupBy`.
+- **Mis tareas es una ventana alrededor de hoy** (`listarVentana`): las 50 más cercanas hacia atrás y las 50 hacia adelante,
+  con «Ver más» por lado (hasta 500). Quien pide más sube `antes` o `despues` y repite la consulta, así el refresco de 60 s
+  conserva lo desplegado. `GET /api/tareas` sin `antes`/`despues` sigue devolviendo hasta 500 por entrega.
+- **El Panel de Inicio manda celdas, no tareas** (`lib/panel/celdas.ts`): combinaciones de unidad, cliente, persona, tipo,
+  contrato, semana, estado, riesgo y puntualidad con su cuenta y sus horas, agrupadas por la base y codificadas con
+  diccionarios. Los filtros cruzados siguen siendo instantáneos en el navegador. Lo que necesita la fila real (las abiertas que
+  vencen en 4 días, para el riesgo; las cerradas en 30 días, para la puntualidad) entra una a una. El detalle se pide a
+  `/api/panel/detalle` con los mismos filtros aplicados en la base; `e2e/tareas/panel.spec.ts` los compara con lo sembrado.
+- **Equipo** agrega con SQL (`visibilidadSql`, la misma regla que `filtroTareasVisibles`: si cambia una, cambia la otra) y el
+  mapa de calor suma las vencidas en la base y reparte solo las abiertas que pueden tocar sus 4 semanas.
+- **Memoria por petición**: `lib/memo.ts` (`porObjeto` por el objeto del usuario; `conCaducidad` para catálogos, que se
+  invalidan al editarse). El alcance de unidades se resuelve en una consulta recursiva.
+- `hoyNegocio(fecha)` reutiliza un solo `Intl.DateTimeFormat`: construirlo por llamada costaba ~0,7 s por cada 13.000 tareas.
+
 ## Diseño: mundo "Puerta de embarque"
 
 - Solo tokens de `src/app/globals.css` (clases `bg-superficie`, `text-texto-2`, `border-hilo`, `text-alerta`…). **Ningún color suelto.** Funciona en tema claro y en oscuro (`data-theme`), compruébalo en los dos.
