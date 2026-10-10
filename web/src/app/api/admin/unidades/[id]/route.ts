@@ -31,16 +31,17 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/unidades/[id]">>(async 
  */
 export const DELETE = conUsuario<RouteContext<"/api/admin/unidades/[id]">>(async (_req, u, ctx) => {
   const a = await unidad(await idDeRuta(ctx));
-  const [personas, tareas, plantillas, solicitudes, etiquetas] = await Promise.all([
+  const [personas, tareas, plantillas, solicitudes, etiquetas, contratos] = await Promise.all([
     db.users.count({ where: { area_id: a.id } }),
     db.tasks.count({ where: { area_id: a.id } }),
     db.task_templates.count({ where: { area_id: a.id } }),
     db.task_requests.count({ where: { OR: [{ to_area_id: a.id }, { from_area_id: a.id }] } }),
     db.task_tags.count({ where: { area_id: a.id } }),
+    db.contracts.count({ where: { area_id: a.id } }),
   ]);
   const usos = [
     personas && `${personas} persona(s)`, tareas && `${tareas} tarea(s)`, plantillas && `${plantillas} plantilla(s) de tarea`,
-    solicitudes && `${solicitudes} solicitud(es)`, etiquetas && `${etiquetas} etiqueta(s)`,
+    solicitudes && `${solicitudes} solicitud(es)`, etiquetas && `${etiquetas} etiqueta(s)`, contratos && `${contratos} contrato(s)`,
   ].filter(Boolean);
   if (usos.length) throw new ErrorApi(409, `No se puede eliminar: la usan ${usos.join(", ")}. Muévelas a otra unidad antes.`);
   await db.areas.delete({ where: { id: a.id } }); // unit_leads cae en cascada

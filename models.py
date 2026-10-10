@@ -39,6 +39,57 @@ class Area(db.Model):
         return f"<Area {self.name}>"
 
 
+class Contract(db.Model):
+    """Contrato de un cliente con una unidad (ver 0018_contratos_metas).
+
+    El monto es el TOTAL en USD y se reparte en partes iguales entre los meses
+    naturales de start_date a end_date. Un cliente o unidad con contratos no se
+    puede borrar. Quien lo ve o edita lo decide la app (finance_grants).
+    """
+    __tablename__ = 'contracts'
+    __table_args__ = (
+        db.CheckConstraint('amount > 0', name='ck_contracts_amount'),
+        db.CheckConstraint('end_date > start_date', name='ck_contracts_dates'),
+        db.CheckConstraint("contract_type IN ('Fee', 'Proyecto', 'Asignación')", name='ck_contracts_type'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False, index=True)
+    contract_type = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    from_area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='SET NULL'), nullable=True)
+    note = db.Column(db.String(500), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    client = db.relationship('Client', foreign_keys=[client_id])
+    unidad = db.relationship('Area', foreign_keys=[area_id])
+
+
+class Goal(db.Model):
+    """Meta anual de ingresos. area_id NULL es la meta de la direccion."""
+    __tablename__ = 'goals'
+    __table_args__ = (
+        db.CheckConstraint('amount >= 0', name='ck_goals_amount'),
+        db.CheckConstraint('year BETWEEN 2000 AND 2100', name='ck_goals_year'),
+        db.Index('uq_goals_year_area', 'year', 'area_id', unique=True,
+                 postgresql_where=db.text('area_id IS NOT NULL'), sqlite_where=db.text('area_id IS NOT NULL')),
+        db.Index('uq_goals_year_direction', 'year', unique=True,
+                 postgresql_where=db.text('area_id IS NULL'), sqlite_where=db.text('area_id IS NULL')),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='CASCADE'), nullable=True)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class FinanceGrant(db.Model):
     """Permiso de EDITAR los ingresos de una unidad (ver 0017_finanzas_permisos).
 

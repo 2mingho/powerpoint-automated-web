@@ -153,6 +153,8 @@ export async function unirClientes(adminId: number, origenId: number, destinoId:
   if (!origen || !destino) throw new ErrorApi(404, "El cliente no existe.");
   const movidas = await db.$transaction(async (tx) => {
     const n = await tx.$executeRaw`UPDATE tasks SET client_id = ${destino.id}, client = ${destino.name} WHERE client_id = ${origen.id}`;
+    // Los contratos viajan con el cliente: borrar el origen con contratos esta prohibido.
+    await tx.$executeRaw`UPDATE contracts SET client_id = ${destino.id} WHERE client_id = ${origen.id}`;
     // El destino conserva lo suyo; lo que le falte lo hereda del origen.
     const herencia: Prisma.clientsUncheckedUpdateInput = {};
     if (!destino.client_type && origen.client_type) herencia.client_type = origen.client_type;
@@ -170,6 +172,8 @@ export async function borrarCliente(adminId: number, id: number) {
   if (!c) throw new ErrorApi(404, "El cliente no existe.");
   const tareas = await db.tasks.count({ where: { client_id: id } });
   if (tareas) throw new ErrorApi(409, `«${c.name}» tiene ${tareas} tarea${tareas === 1 ? "" : "s"}. Únelo a otro cliente o márcalo como inactivo.`);
+  const contratos = await db.contracts.count({ where: { client_id: id } });
+  if (contratos) throw new ErrorApi(409, `«${c.name}» tiene ${contratos} contrato${contratos === 1 ? "" : "s"}. Un cliente con contratos no se puede eliminar: márcalo como inactivo.`);
   await db.clients.delete({ where: { id } });
   await registrarActividad(adminId, "admin_client_delete", `Eliminó el cliente «${c.name}»`, { tipo: "client", id });
 }

@@ -30,6 +30,14 @@ Producto y diseño: `../PRODUCT.md` (quién lo usa y qué no se puede romper) y 
 - Cada ruta de API usa `conUsuario(handler, { herramienta, soloAdmin })`. Los errores salen como `{ error: "mensaje en español" }` con el código HTTP correcto (400, 403, 404, 409).
 - Registro de actividad: `registrarActividad()` de `@/lib/actividad`, con los mismos `action` que Flask (`task_update`, `task_delete`…). Notificaciones: `notificar` / `notificarVarios` de `@/lib/notificaciones`. Nunca se avisa a quien hizo el cambio.
 
+## Ingresos (contratos y metas)
+
+- Todo en USD. El monto de un contrato es el **total** y se prorratea por meses naturales (`lib/seguimiento/finanzas.ts`).
+- **Ver** una unidad = supervisarla (`alcanceUnidades`) o poder editarla. **Editar** = concesión de un administrador por persona, unidad y tipo (`finance_grants`, `kind` = `contracts` o `goals`, permisos independientes). El administrador edita todo. Todo en `lib/finanzas/permisos.ts`; nunca resuelvas esto por tu cuenta.
+- Las escrituras llaman a `exigirEditarFinanzas`: **404** si no ves la unidad (misma respuesta que si no existiera), **403** si la ves y no la editas. Mover un contrato de unidad exige poder editar las dos.
+- La meta de la dirección (`goals.area_id` NULL) la fija solo el administrador y la ve quien ve todas las unidades.
+- Un cliente o unidad con contratos no se borra; unir clientes mueve sus contratos.
+
 ## Diseño: mundo "Puerta de embarque"
 
 - Solo tokens de `src/app/globals.css` (clases `bg-superficie`, `text-texto-2`, `border-hilo`, `text-alerta`…). **Ningún color suelto.** Funciona en tema claro y en oscuro (`data-theme`), compruébalo en los dos.
