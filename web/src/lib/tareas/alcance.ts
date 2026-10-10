@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { ambitoUnidades } from "@/lib/alcance";
 import { porObjeto } from "@/lib/memo";
@@ -43,6 +43,23 @@ async function calcularIdsDelAmbito(u: UsuarioActual, soloActivos: boolean): Pro
  */
 export async function filtroTareasVisibles(u: UsuarioActual): Promise<Prisma.tasksWhereInput> {
   return alcanceDeTipo(u, { task_type: { not: "estudio" } });
+}
+
+/*
+ * La MISMA regla de filtroTareasVisibles escrita como fragmento SQL, para las consultas crudas que agregan en la
+ * base lo que no se puede expresar con Prisma (e2e/tareas/visibilidad-sql.spec.ts comprueba que ambas dan las
+ * mismas tareas para admin, quien lidera y quien no). Si cambia una, cambia la otra. `t` es el alias de tasks.
+ * Un array vacio en IN (...) cierra en falso, igual que `in: []` en Prisma.
+ */
+export async function visibilidadSql(u: UsuarioActual, t = Prisma.raw("t")): Promise<Prisma.Sql> {
+  const base = Prisma.sql`${t}.deleted_at IS NULL AND ${t}.task_type <> 'estudio'`;
+  if (u.isAdmin) return base;
+  const unidades = await ambitoUnidades(u);
+  const usuarios = await idsUsuariosDelAmbito(u);
+  const porPersona = Prisma.sql`${t}.assignee_id = ANY(${usuarios === "todos" ? [] : usuarios}::int[])`;
+  return unidades.length
+    ? Prisma.sql`${base} AND (${t}.area_id = ANY(${unidades}::int[]) OR ${porPersona})`
+    : Prisma.sql`${base} AND ${porPersona}`;
 }
 
 /* Los estudios que la persona puede ver: mismo ambito que las tareas, solo el tipo estudio. */

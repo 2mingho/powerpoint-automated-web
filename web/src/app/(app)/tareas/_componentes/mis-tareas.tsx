@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, SquareCheckBig, X } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, SquareCheckBig, X } from "lucide-react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Boton } from "@/components/ui/boton";
 import { Entrada, Selector } from "@/components/ui/campo";
@@ -9,7 +9,7 @@ import { cx } from "@/components/ui/cx";
 import { AltaRapida, BarraFiltros, Franja, Segmentos, VISTAS } from "./barra";
 import { Calendario } from "./calendario";
 import { pedir } from "./cliente";
-import { ProveedorTareas, useTareas, type Inicial } from "./estado";
+import { ProveedorTareas, useTareas, VENTANA, VENTANA_MAX, type Inicial, type LadoVentana } from "./estado";
 import { Herramientas } from "./herramientas";
 import { NuevaTarea } from "./nueva-tarea";
 import { PanelSalidas } from "./panel-salidas";
@@ -26,7 +26,7 @@ export function MisTareas({ inicial }: { inicial: Inicial }) {
 
 function Pantalla() {
   const ctx = useTareas();
-  const { vista, seleccionada, seleccionar, cargando, truncada } = ctx;
+  const { vista, seleccionada, seleccionar, cargando } = ctx;
   const [seleccionando, setSeleccionando] = useState(false);
   const [marcadas, setMarcadas] = useState<Set<number>>(() => new Set());
   const alMarcar = (id: number) => setMarcadas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -77,9 +77,10 @@ function Pantalla() {
             <AltaRapida />
             <BarraFiltros />
             <div className="overflow-clip rounded-md border border-hilo bg-superficie shadow-1">
+              <VerMas lado="antes" />
               <PanelSalidas seleccionando={seleccionando} marcadas={marcadas} alMarcar={alMarcar} />
+              <VerMas lado="despues" />
             </div>
-            {truncada && <p className="text-sm text-texto-3">Se muestran las primeras 500 tareas. Usa los filtros para acotar.</p>}
           </section>
           <ContenedorPase alCerrar={cerrarPase} />
         </div>
@@ -92,6 +93,30 @@ function Pantalla() {
       )}
 
       {seleccionando && <BarraMasiva marcadas={[...marcadas]} alTerminar={salirSeleccion} />}
+    </div>
+  );
+}
+
+/*
+ * La lista es una ventana alrededor de hoy: arriba lo que vencio antes de lo mostrado, abajo lo que vence
+ * despues. Cada pulsacion suma VENTANA tareas por ese lado; al llegar al tope se pide acotar con filtros.
+ */
+function VerMas({ lado }: { lado: LadoVentana }) {
+  const { hayAntes, hayDespues, ventana, verMas, cargando, tareas } = useTareas();
+  if (!tareas.length || !(lado === "antes" ? hayAntes : hayDespues)) return null;
+  const tope = ventana[lado] >= VENTANA_MAX;
+  const Icono = lado === "antes" ? ChevronUp : ChevronDown;
+  const texto = tope
+    ? `Ya se muestran ${VENTANA_MAX} ${lado === "antes" ? "tareas anteriores" : "tareas posteriores"}. Usa los filtros para acotar.`
+    : lado === "antes" ? `Ver ${VENTANA} más antiguas` : `Ver ${VENTANA} más lejanas`;
+  return (
+    <div className={cx("flex justify-center bg-superficie-2 px-3 py-1", lado === "antes" ? "border-b border-hilo" : "border-t border-hilo")}>
+      {tope ? <p className="py-2 text-sm text-texto-3">{texto}</p> : (
+        <button type="button" onClick={() => verMas(lado)} disabled={cargando} data-ver-mas={lado}
+          className="inline-flex h-10 items-center gap-1.5 rounded-sm px-3 font-rotulo text-xs font-semibold uppercase tracking-[0.1em] text-texto-2 hover:bg-superficie hover:text-texto disabled:opacity-60">
+          <Icono aria-hidden className="size-3.5" />{texto}
+        </button>
+      )}
     </div>
   );
 }

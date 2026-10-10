@@ -111,21 +111,16 @@ export function vencidasPorUnidadDesdeConteos(conteos: ConteoUnidad[], unidades:
   return [...filas.values()].sort((a, b) => b.vencidas - a.vencidas || b.abiertas - a.abiertas || a.nombre.localeCompare(b.nombre, "es"));
 }
 
-/* Tendencia a partir de las marcas de alta y de cierre (no de todas las tareas): solo las de las ultimas semanas. */
-export function tendenciaDesdeMarcas(creadas: (Date | null)[], completadas: (Date | null)[], hoy: string, semanas = 8): PuntoTendencia[] {
+/*
+ * Tendencia a partir de los conteos por semana que ya hizo la base (lunes -> cuantas): se queda con las
+ * `semanas` ultimas, la actual incluida, de la mas antigua a la actual; lo que cae fuera se ignora.
+ */
+export function tendenciaDesdeSemanas(creadas: ReadonlyMap<string, number>, completadas: ReadonlyMap<string, number>, hoy: string, semanas = 8): PuntoTendencia[] {
   const actual = lunesDe(hoy);
   const puntos: PuntoTendencia[] = [];
-  for (let i = semanas - 1; i >= 0; i--) puntos.push({ semana: sumarDias(actual, -7 * i), creadas: 0, completadas: 0 });
-  const indice = new Map(puntos.map((p, i) => [p.semana, i]));
-  for (const c of creadas) {
-    const d = diaNegocio(c);
-    const i = d ? indice.get(lunesDe(d)) : undefined;
-    if (i != null) puntos[i].creadas++;
-  }
-  for (const c of completadas) {
-    const d = diaNegocio(c);
-    const i = d ? indice.get(lunesDe(d)) : undefined;
-    if (i != null) puntos[i].completadas++;
+  for (let i = semanas - 1; i >= 0; i--) {
+    const semana = sumarDias(actual, -7 * i);
+    puntos.push({ semana, creadas: creadas.get(semana) ?? 0, completadas: completadas.get(semana) ?? 0 });
   }
   return puntos;
 }

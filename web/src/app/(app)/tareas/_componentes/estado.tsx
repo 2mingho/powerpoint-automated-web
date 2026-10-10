@@ -32,8 +32,15 @@ export type Inicial = {
   tarea: number | null;
   tareas: TareaDTO[];
   contadores: Contadores;
-  truncada: boolean;
+  /* La lista es una ventana alrededor de hoy: hay mas tareas mas antiguas / mas lejanas que las mostradas. */
+  hayAntes: boolean;
+  hayDespues: boolean;
 };
+
+/* Cuantas tareas se piden por lado la primera vez y cuantas se suman con cada "Ver mas". */
+export const VENTANA = 50;
+export const VENTANA_MAX = 500;
+export type LadoVentana = "antes" | "despues";
 
 /* Cuerpo del PUT (nombres de Flask) a campos del DTO, para el cambio optimista. */
 export type Cambios = Partial<{ status: string; due_date: string; priority: string; assignee_id: number; title: string }> & Record<string, string | number | boolean | undefined>;
@@ -55,7 +62,12 @@ function aplicar(t: TareaDTO, c: Cambios, personas: PersonaDTO[]): TareaDTO {
 type Ctx = Inicial & {
   tareas: TareaDTO[];
   contadores: Contadores;
-  truncada: boolean;
+  hayAntes: boolean;
+  hayDespues: boolean;
+  /* Pide VENTANA tareas mas por ese lado (hasta VENTANA_MAX). */
+  verMas: (lado: LadoVentana) => void;
+  /* Cuantas se han pedido por cada lado: al llegar al tope ya no hay "Ver mas". */
+  ventana: { antes: number; despues: number };
   cargando: boolean;
   error: string;
   etiquetas: Inicial["etiquetas"];
@@ -94,7 +106,11 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
   const mapaRef = useRef(mapa);
   useEffect(() => { mapaRef.current = mapa; }, [mapa]);
   const [contadores, setContadores] = useState(inicial.contadores);
-  const [truncada, setTruncada] = useState(inicial.truncada);
+  const [hayAntes, setHayAntes] = useState(inicial.hayAntes);
+  const [hayDespues, setHayDespues] = useState(inicial.hayDespues);
+  const [ventana, setVentana] = useState({ antes: VENTANA, despues: VENTANA });
+  const ventanaRef = useRef(ventana);
+  useEffect(() => { ventanaRef.current = ventana; }, [ventana]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [filtros, setFiltrosEstado] = useState(inicial.filtros);
@@ -114,6 +130,7 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
   const pendientes = useRef(new Map<number, number>());
   const turno = useRef(0);
   const guardarRef = useRef<Ctx["guardar"] | null>(null);
+  const recargarRef = useRef<(() => Promise<void>) | null>(null);
 
   const finales = useMemo(() => new Set(inicial.estados.filter((e) => e.esFinal).map((e) => e.nombre)), [inicial.estados]);
   const esFinal = useCallback((e: string) => finales.has(e), [finales]);
@@ -137,7 +154,10 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
     const mio = ++turno.current;
     setCargando(true);
     try {
-      const d = await pedir<{ tareas: TareaDTO[]; contadores: Contadores; truncada: boolean }>(`/api/tareas?${consultaDeFiltros(filtrosRef.current)}`);
+      const w = ventanaRef.current;
+      const d = await pedir<{ tareas: TareaDTO[]; contadores: Contadores; hayAntes: boolean; hayDespues: boolean }>(
+        `/api/tareas?${consultaDeFiltros(filtrosRef.current, { antes: String(w.antes), despues: String(w.despues) })}`,
+      );
       if (mio !== turno.current) return;
       setMapa((previo) => {
         const nuevo = new Map<number, TareaDTO>();
@@ -152,7 +172,8 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
         return nuevo;
       });
       setContadores(d.contadores);
-      setTruncada(d.truncada);
+      setHayAntes(d.hayAntes);
+      setHayDespues(d.hayDespues);
       setError("");
       setVersion((v) => v + 1);
     } catch (e) {
@@ -162,8 +183,20 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
     }
   }, [completadasSesion]);
 
+  useEffect(() => { recargarRef.current = recargar; }, [recargar]);
+
   const setFiltros = useCallback((f: Partial<Filtros>) => {
+    // Otro filtro es otra lista: vuelve a la ventana inicial (el ref se actualiza ya, antes de la recarga).
+    ventanaRef.current = { antes: VENTANA, despues: VENTANA };
+    setVentana(ventanaRef.current);
     setFiltrosEstado((prev) => ({ ...prev, ...f }));
+  }, []);
+
+  const verMas = useCallback((lado: LadoVentana) => {
+    const w = ventanaRef.current;
+    ventanaRef.current = { ...w, [lado]: Math.min(VENTANA_MAX, w[lado] + VENTANA) };
+    setVentana(ventanaRef.current);
+    void recargarRef.current?.();
   }, []);
 
   /* Recarga al cambiar filtros (la busqueda espera a que se deje de escribir). */
@@ -274,7 +307,7 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
   const tareas = useMemo(() => [...mapa.values()], [mapa]);
 
   const valor: Ctx = {
-    ...inicial, tareas, contadores, truncada, cargando, error, etiquetas, setEtiquetas, filtros, setFiltros, vista, setVista,
+    ...inicial, tareas, contadores, hayAntes, hayDespues, ventana, verMas, cargando, error, etiquetas, setEtiquetas, filtros, setFiltros, vista, setVista,
     seleccionada, seleccionar, recargar, version, guardar, completar, fusionar, quitar, completadasSesion, esFinal, puedeCompletar, estadoFinal, estadoInicial,
   };
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

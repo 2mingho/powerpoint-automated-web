@@ -1,14 +1,14 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { alcanceUnidades } from "@/lib/alcance";
 import { estados, estadosFinales, prioridadPorDefecto, type Estado } from "@/lib/catalogo";
 import { hoyNegocio, isoDeFecha } from "@/lib/reloj";
 import { calorDeEquipo, type CalorEquipo } from "./calor";
-import { filtroTareasVisibles } from "@/lib/tareas/alcance";
+import { filtroTareasVisibles, visibilidadSql } from "@/lib/tareas/alcance";
 import type { UsuarioActual } from "@/lib/auth/session";
 import {
-  cargaDesdeConteos, generarCsv, lunesDe, sumarDias, tendenciaDesdeMarcas, vencidasPorUnidadDesdeConteos, DIAS_RIESGO,
+  cargaDesdeConteos, generarCsv, lunesDe, sumarDias, tendenciaDesdeSemanas, vencidasPorUnidadDesdeConteos, DIAS_RIESGO,
   type Contadores, type FilaCarga, type FilaUnidad, type PuntoTendencia,
 } from "./agregados";
 
@@ -106,29 +106,38 @@ export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<P
     estadosFinales(),
     db.areas.findMany({ where: { id: { in: alcance.todas } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  const desde = inicioDiaUtc(sumarDias(lunesDe(hoy), -7 * 7));
   const base = await whereBase(u, alcance.elegidas);
-  const lunes = inicioDiaUtc(lunesDe(hoy));
   const limiteRiesgo = sumarDias(hoy, DIAS_RIESGO);
+  const lunesActual = lunesDe(hoy);
+  const desde = inicioDiaUtc(sumarDias(lunesActual, -7 * 7)).toISOString().slice(0, 19);
+  const visible = await visibilidadSql(u);
+  const enAlcance = Prisma.sql`${visible} AND t.area_id = ANY(${alcance.elegidas}::int[])`;
 
-  // Tres lecturas, ninguna con una fila por tarea: las abiertas se agrupan en la base por
-  // (persona, unidad, estado, fecha de entrega), que son unas cuantas filas aunque haya decenas de
-  // miles de tareas; las altas y los cierres de las ultimas 8 semanas viajan como una sola columna.
-  // (Antes se traia cada tarea abierta o tocada solo para sumarla aqui; y doce conteos sueltos
-  // eran peor: doce escaneos de la tabla.)
-  const [abiertasAgrupadas, creadas, cerradas] = await Promise.all([
-    db.tasks.groupBy({
-      by: ["assignee_id", "area_id", "status", "due_date"],
-      where: { AND: [base, { status: { notIn: finalesLista } }] },
-      _count: { _all: true },
-    }),
-    db.tasks.findMany({ where: { AND: [base, { created_at: { gte: desde } }] }, select: { created_at: true } }),
-    db.tasks.findMany({ where: { AND: [base, { status: { in: finalesLista }, updated_at: { gte: desde } }] }, select: { updated_at: true } }),
+  // Dos consultas agregadas en la base, ninguna con una fila por tarea. Antes se traia cada tarea abierta o
+  // tocada en 8 semanas solo para sumarla aqui, y con decenas de miles era lo que tardaba (y con mas de
+  // 32.000 abiertas fallaba). Salen unas decenas de filas: una por persona, unidad y estado, y una por semana.
+  // La semana es la de Santo Domingo (UTC-4 todo el ano): se resta 4 h a la marca antes de truncar al lunes.
+  const [abiertasAgrupadas, semanasFilas] = await Promise.all([
+    db.$queryRaw<{ persona: number; unidad: number | null; estado: string; n: number; vencidas: number; en_riesgo: number }[]>`
+      SELECT t.assignee_id AS persona, t.area_id AS unidad, t.status AS estado, count(*)::int AS n,
+             (count(*) FILTER (WHERE t.due_date < ${hoy}::date))::int AS vencidas,
+             (count(*) FILTER (WHERE t.due_date >= ${hoy}::date AND t.due_date <= ${limiteRiesgo}::date))::int AS en_riesgo
+      FROM tasks t
+      WHERE ${enAlcance} AND t.status <> ALL(${finalesLista}::text[])
+      GROUP BY t.assignee_id, t.area_id, t.status`,
+    db.$queryRaw<{ tipo: string; semana: string; n: number }[]>`
+      SELECT 'creadas' AS tipo, to_char(date_trunc('week', t.created_at - interval '4 hours'), 'YYYY-MM-DD') AS semana, count(*)::int AS n
+      FROM tasks t WHERE ${enAlcance} AND t.created_at >= ${desde}::timestamp GROUP BY 2
+      UNION ALL
+      SELECT 'cerradas', to_char(date_trunc('week', t.updated_at - interval '4 hours'), 'YYYY-MM-DD'), count(*)::int
+      FROM tasks t WHERE ${enAlcance} AND t.status = ANY(${finalesLista}::text[]) AND t.updated_at >= ${desde}::timestamp GROUP BY 2`,
   ]);
+  const creadasSemana = new Map<string, number>(), cerradasSemana = new Map<string, number>();
+  for (const f of semanasFilas) (f.tipo === "creadas" ? creadasSemana : cerradasSemana).set(f.semana, f.n);
 
   const nombres = new Map(
     (await db.users.findMany({
-      where: { id: { in: [...new Set(abiertasAgrupadas.map((f) => f.assignee_id))] } },
+      where: { id: { in: [...new Set(abiertasAgrupadas.map((f) => f.persona))] } },
       select: { id: true, username: true },
     })).map((p) => [p.id, p.username]),
   );
@@ -139,26 +148,24 @@ export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<P
   const porUnidadMapa = new Map<number, { unidadId: number; abiertas: number; vencidas: number }>();
   let totalAbiertas = 0, totalVencidas = 0, nEnRiesgo = 0;
   for (const f of abiertasAgrupadas) {
-    const n = f._count._all;
-    const vence = isoDeFecha(f.due_date);
-    const vencida = vence < hoy;
-    totalAbiertas += n;
-    if (vencida) totalVencidas += n;
-    else if (vence <= limiteRiesgo) nEnRiesgo += n;
-    const k = `${f.assignee_id}|${f.status}`;
-    const e = porPersonaEstado.get(k) ?? { personaId: f.assignee_id, estado: f.status, n: 0 };
-    e.n += n;
+    totalAbiertas += f.n;
+    totalVencidas += f.vencidas;
+    nEnRiesgo += f.en_riesgo;
+    const k = `${f.persona}|${f.estado}`;
+    const e = porPersonaEstado.get(k) ?? { personaId: f.persona, estado: f.estado, n: 0 };
+    e.n += f.n;
     porPersonaEstado.set(k, e);
-    if (vencida) vencidasPersona.set(f.assignee_id, (vencidasPersona.get(f.assignee_id) ?? 0) + n);
-    if (f.area_id != null) {
-      const un = porUnidadMapa.get(f.area_id) ?? { unidadId: f.area_id, abiertas: 0, vencidas: 0 };
-      un.abiertas += n;
-      if (vencida) un.vencidas += n;
-      porUnidadMapa.set(f.area_id, un);
+    if (f.vencidas) vencidasPersona.set(f.persona, (vencidasPersona.get(f.persona) ?? 0) + f.vencidas);
+    if (f.unidad != null) {
+      const un = porUnidadMapa.get(f.unidad) ?? { unidadId: f.unidad, abiertas: 0, vencidas: 0 };
+      un.abiertas += f.n;
+      un.vencidas += f.vencidas;
+      porUnidadMapa.set(f.unidad, un);
     }
   }
-  const nSemana = cerradas.filter((t) => t.updated_at && t.updated_at >= lunes).length;
-  const calor = await calorDeEquipo(base, alcance.elegidas, finalesLista, hoy);
+  // Lo cerrado esta semana: los cierres de la semana actual (la ultima del conteo).
+  const nSemana = cerradasSemana.get(lunesActual) ?? 0;
+  const calor = await calorDeEquipo(u, base, alcance.elegidas, finalesLista, hoy, [...new Set(abiertasAgrupadas.map((f) => f.persona))]);
   const elegidas = lista.filter((a) => alcance.elegidas.includes(a.id));
 
   return {
@@ -167,7 +174,7 @@ export async function panelEquipo(u: UsuarioActual, alcance: Alcance): Promise<P
     estados: catalogo,
     contadores: { abiertas: totalAbiertas, vencidas: totalVencidas, completadasSemana: nSemana, enRiesgo: nEnRiesgo },
     carga: cargaDesdeConteos([...porPersonaEstado.values()], vencidasPersona, catalogo.map((e) => e.nombre), nombres),
-    tendencia: tendenciaDesdeMarcas(creadas.map((t) => t.created_at), cerradas.map((t) => t.updated_at), hoy, 8),
+    tendencia: tendenciaDesdeSemanas(creadasSemana, cerradasSemana, hoy, 8),
     porUnidad: vencidasPorUnidadDesdeConteos([...porUnidadMapa.values()], elegidas),
     calor,
   };

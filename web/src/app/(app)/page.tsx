@@ -15,7 +15,7 @@ import type { Tono } from "@/components/ui/estado";
 import { diaSemana } from "@/lib/tareas/fechas";
 import { FranjaInicio, MarcarVisita } from "./_inicio/cliente";
 import { PanelInicio } from "./_inicio/panel";
-import { datosPanel, MAX_FILAS_PANEL } from "@/lib/panel/datos";
+import { datosPanel, MAX_CELDAS_PANEL } from "@/lib/panel/datos";
 import { leerPeriodo, rangoDePeriodo } from "@/lib/seguimiento/periodo";
 import { tieneHerramienta, type UsuarioActual } from "@/lib/auth/session";
 import { fechaCorta, haceCuanto, MESES_LARGOS, relativo } from "./tareas/_componentes/cliente";
@@ -68,7 +68,7 @@ async function ContenidoPanel({ u, q }: { u: UsuarioActual; q: Record<string, st
         <p className="text-texto-2">Todo lo que puedes ver, filtrado entre sí</p>
       </header>
       <Pestanas actual="panel" />
-      <PanelInicio filas={d.filas} estados={d.estados} hoy={hoy} periodo={periodo} desde={rango.desde} hasta={rango.hasta} truncado={d.truncado} tope={MAX_FILAS_PANEL} ingresos={d.ingresos} />
+      <PanelInicio celdas={d.celdas} tareas={d.tareas} detalle={d.detalle} estados={d.estados} hoy={hoy} periodo={periodo} desde={rango.desde} hasta={rango.hasta} truncado={d.truncado} tope={MAX_CELDAS_PANEL} ingresos={d.ingresos} />
     </>
   );
 }

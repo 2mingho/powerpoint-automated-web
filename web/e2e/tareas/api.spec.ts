@@ -298,3 +298,56 @@ test("sin la herramienta de tareas la API responde 403", async ({ context }) => 
   const r = await como(context, e.empleado);
   expect((await r.get(`${BASE}/api/tareas`)).status()).toBe(403);
 });
+
+test("ventana alrededor de hoy: las más cercanas por cada lado, por entrega, y se amplía por lados", async ({ context }) => {
+  const e = await escenario("ventana");
+  // 5 vencidas (de 1 a 5 días atrás), una de hoy y 5 por venir (de 1 a 5 días), todas mías.
+  const atras = [];
+  for (let d = 5; d >= 1; d--) atras.push(await e.tarea(`Atrás ${d}`, e.alfa, e.empleado, e.empleado, "Pendiente", sumarDias(HOY, -d)));
+  const hoy = await e.tarea("Hoy", e.alfa, e.empleado, e.empleado, "Pendiente", HOY);
+  const adelante = [];
+  for (let d = 1; d <= 5; d++) adelante.push(await e.tarea(`Adelante ${d}`, e.alfa, e.empleado, e.empleado, "Pendiente", sumarDias(HOY, d)));
+  const r = await como(context, e.empleado);
+  const pedir = async (q: string) => {
+    const res = await r.get(`${BASE}/api/tareas?alcance=mias&${q}`);
+    expect(res.status(), await res.text()).toBe(200);
+    return (await res.json()) as { tareas: { id: number; entrega: string }[]; hayAntes: boolean; hayDespues: boolean; contadores: { vencidas: number } };
+  };
+
+  const dos = await pedir("antes=2&despues=3");
+  // Las 2 vencidas más cercanas (3 y 4... no: 2 y 1 días atrás) y hoy + 2 próximas; juntas y por entrega.
+  expect(dos.tareas.map((t) => t.id)).toEqual([atras[3], atras[4], hoy, adelante[0], adelante[1]]);
+  expect(dos.tareas.map((t) => t.entrega)).toEqual([...dos.tareas.map((t) => t.entrega)].sort());
+  expect(dos.hayAntes).toBe(true);
+  expect(dos.hayDespues).toBe(true);
+  // Los contadores siguen contando todo, no solo lo que viaja.
+  expect(dos.contadores.vencidas).toBe(5);
+
+  // Ampliar solo un lado no mueve el otro.
+  const masAntes = await pedir("antes=4&despues=3");
+  expect(masAntes.tareas.map((t) => t.id)).toEqual([atras[1], atras[2], atras[3], atras[4], hoy, adelante[0], adelante[1]]);
+
+  // Cuando todo cabe, no hay "ver más" por ningún lado.
+  const todo = await pedir("antes=50&despues=50");
+  expect(todo.tareas).toHaveLength(11);
+  expect(todo.hayAntes || todo.hayDespues).toBe(false);
+
+  // Un lado en cero no viaja, pero avisa de que hay más.
+  const soloFuturo = await pedir("antes=0&despues=1");
+  expect(soloFuturo.tareas.map((t) => t.id)).toEqual([hoy]);
+  expect(soloFuturo.hayAntes).toBe(true);
+
+  // Valores raros caen en el rango válido y no fallan.
+  for (const q of ["antes=-1&despues=abc", "antes=99999&despues=0", "antes=1.5"]) expect((await r.get(`${BASE}/api/tareas?alcance=mias&${q}`)).status()).toBe(200);
+});
+
+test("la ventana respeta la visibilidad: no cuela tareas de otra unidad por estar cerca de hoy", async ({ context }) => {
+  const e = await escenario("ventanavis");
+  const propia = await e.tarea("Propia", e.alfa, e.empleado, e.empleado, "Pendiente", HOY);
+  const ajena = await e.tarea("Ajena", e.beta, e.ajeno, e.ajeno, "Pendiente", HOY);
+  const r = await como(context, e.empleado);
+  const res = await (await r.get(`${BASE}/api/tareas?alcance=unidad&antes=50&despues=50`)).json() as { tareas: { id: number }[] };
+  const vistos = new Set(res.tareas.map((t) => t.id));
+  expect(vistos.has(propia)).toBe(true);
+  expect(vistos.has(ajena)).toBe(false);
+});

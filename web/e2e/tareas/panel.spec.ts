@@ -355,3 +355,118 @@ test.describe("graficos que filtran", () => {
     await expect(page.getByRole("list", { name: "Por unidad", exact: true })).not.toContainText(`Beta ${e.sufijo}`);
   });
 });
+
+/*
+ * El detalle se filtra en la base y las cifras salen de celdas agrupadas por la base: dos caminos que deben
+ * decir lo mismo. Aqui el detalle se compara con lo que dice cada tarea sembrada, con todos los filtros.
+ */
+test.describe("detalle en el servidor", () => {
+  type Fila = { id: number; titulo: string; estadoNombre: string; unidad: string; cliente: string; personaNombre: string; entrega: string };
+
+  test("cada filtro del detalle devuelve exactamente las tareas que cumplen su criterio, y el total coincide con la cifra", async ({ context, page }, info) => {
+    test.skip(info.project.name !== "escritorio", "Una vez, en escritorio.");
+    const { e, cliente, tarea } = await conClientes("pan-detalle");
+    const a = await cliente("Alfa-cli", "Corporativo");
+    const b = await cliente("Beta-cli", "Pyme");
+    await sql("INSERT INTO finance_grants (user_id, area_id, kind, created_at) VALUES ($1, $2, 'contracts', now())", [e.empleado, e.alfa]);
+    // El contrato Proyecto (empieza despues) gana al Fee donde se solapan; fuera de ambos, nada.
+    const contrato = (cli: number, tipo: string, ini: string, fin: string) =>
+      sql("INSERT INTO contracts (client_id, area_id, contract_type, amount, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, 1000, $4, $5, now(), now())", [cli, e.alfa, tipo, ini, fin]);
+    await contrato(a.id, "Fee", sumarDias(HOY, -60), sumarDias(HOY, 60));
+    await contrato(a.id, "Proyecto", sumarDias(HOY, 0), sumarDias(HOY, 10));
+
+    const t = {
+      vencida: await tarea("Vencida A", a, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, -5), 2),
+      vencidaB: await tarea("Vencida B", b, e.alfa, e.companero, "En Progreso", sumarDias(HOY, -20), null as unknown as number),
+      hoyA: await tarea("Hoy A", a, e.alfa, e.empleado, "Pendiente", HOY, 3),
+      pronto: await tarea("Pronto A", a, e.alfa, e.empleado, "Bloqueado", sumarDias(HOY, 3), 1),
+      lejos: await tarea("Lejos A", a, e.alfa, e.empleado, "En Progreso", sumarDias(HOY, 40), 5),
+      revision: await tarea("Revision B", b, e.alfa, e.companero, "En Revisión", sumarDias(HOY, 8), 2),
+      hechaReciente: await tarea("Hecha reciente A", a, e.alfa, e.empleado, "Completado", sumarDias(HOY, -3), 2, 1),
+      hechaVieja: await tarea("Hecha vieja B", b, e.alfa, e.companero, "Completado", sumarDias(HOY, -50), 2, 45),
+      hechaSinFecha: await tarea("Hecha sin fecha A", a, e.alfa, e.empleado, "Completado", sumarDias(HOY, -9), 2),
+    };
+    await sql("UPDATE tasks SET estimated_hours = NULL WHERE id = $1", [t.vencidaB]);
+
+    await entrarComo(context, e.empleado);
+    const pedir = async (q: string) => {
+      const r = await context.request.get(`${BASE}/api/panel/detalle?periodo=todo&${q.includes("limite") ? "" : "limite=100&"}${q}`);
+      expect(r.status(), await r.text()).toBe(200);
+      return (await r.json()) as { filas: Fila[]; total: number };
+    };
+    const ids = async (q: string) => (await pedir(q)).filas.map((f) => f.id).sort((x, y) => x - y);
+    const quienes = (...xs: number[]) => xs.sort((x, y) => x - y);
+    const todas = Object.values(t);
+
+    expect(await ids("")).toEqual(quienes(...todas));
+    expect(await ids(`cliente=${encodeURIComponent(b.nombre)}`)).toEqual(quienes(t.vencidaB, t.revision, t.hechaVieja));
+    expect(await ids(`persona=${e.companero}`)).toEqual(quienes(t.vencidaB, t.revision, t.hechaVieja));
+    expect(await ids("tipo=Pyme")).toEqual(quienes(t.vencidaB, t.revision, t.hechaVieja));
+    expect(await ids("estado=vencida")).toEqual(quienes(t.vencida, t.vencidaB));
+    expect(await ids("estado=abierta")).toEqual(quienes(t.vencida, t.vencidaB, t.hoyA, t.pronto, t.lejos, t.revision));
+    expect(await ids("estado=hecha")).toEqual(quienes(t.hechaReciente, t.hechaVieja, t.hechaSinFecha));
+    expect(await ids("estado=bloqueada")).toEqual(quienes(t.pronto));
+    expect(await ids("estado=revision")).toEqual(quienes(t.revision));
+    expect(await ids("estado=en_curso")).toEqual(quienes(t.vencidaB, t.lejos));
+    expect(await ids(`semana=${HOY_LUNES()}`)).toEqual(quienes(...(await semanaDe(HOY_LUNES(), t))));
+    // Contrato: lo de A que cae en el Puntual es Proyecto, el resto Fee; lo fuera de ambos o de otro cliente, ninguno.
+    expect(await ids("contrato=Proyecto")).toEqual(quienes(t.hoyA, t.pronto));
+    expect(await ids("contrato=Fee")).toEqual(quienes(t.vencida, t.lejos, t.hechaReciente, t.hechaSinFecha));
+    // Filtros que se combinan se estrechan.
+    expect(await ids(`cliente=${encodeURIComponent(a.nombre)}&estado=abierta`)).toEqual(quienes(t.vencida, t.hoyA, t.pronto, t.lejos));
+    // Una unidad ajena o un valor que no existe no devuelven nada (y no fallan).
+    expect(await ids("unidad=NoExiste")).toEqual([]);
+    expect(await ids(`unidad=${encodeURIComponent(`Alfa ${e.sufijo}`)}`)).toEqual(quienes(...todas));
+
+    // Orden: por defecto lo abierto por entrega y luego lo cerrado de mas reciente a mas antiguo.
+    const orden = (await pedir("")).filas.map((f) => f.id);
+    expect(orden).toEqual([t.vencidaB, t.vencida, t.hoyA, t.pronto, t.revision, t.lejos, t.hechaReciente, t.hechaSinFecha, t.hechaVieja]);
+    // Orden pedido: por titulo, ascendente y descendente.
+    const porTitulo = (await pedir("orden=tarea&dir=asc")).filas.map((f) => f.titulo);
+    expect(porTitulo).toEqual([...porTitulo].sort((x, y) => x.localeCompare(y, "es")));
+    expect((await pedir("orden=tarea&dir=desc")).filas.map((f) => f.titulo)).toEqual([...porTitulo].reverse());
+    // Paginas: sin repetir ni saltarse filas.
+    const p1 = (await pedir("limite=4&offset=0")).filas.map((f) => f.id);
+    const p2 = (await pedir("limite=4&offset=4")).filas.map((f) => f.id);
+    const p3 = (await pedir("limite=4&offset=8")).filas.map((f) => f.id);
+    expect([...p1, ...p2, ...p3]).toEqual(orden);
+    expect((await pedir("limite=4&offset=0")).total).toBe(todas.length);
+
+    // Lo mismo en pantalla: la cifra de «Abiertas» (celdas) y el total del detalle (servidor) coinciden con cada filtro.
+    await abrir(page, context, e.empleado);
+    await expect(page.getByText(`${todas.length} tareas`)).toBeVisible();
+    for (const [estado, cuantas] of [["Abiertas", 6], ["Vencidas", 2], ["Completadas", 3]] as const) {
+      await page.getByRole("group", { name: "Cifras del panel" }).getByRole("button", { name: new RegExp(estado) }).click();
+      await expect(filas(page)).toHaveCount(cuantas);
+      expect(await cifra(page, estado)).toBe(String(cuantas));
+      await page.getByRole("group", { name: "Cifras del panel" }).getByRole("button", { name: new RegExp(estado) }).click();
+    }
+  });
+
+  test("sin sesion o sin la herramienta no hay detalle, y otra unidad no se cuela con ningun filtro", async ({ context, request }, info) => {
+    test.skip(info.project.name !== "escritorio", "Una vez, en escritorio.");
+    expect((await request.get(`${BASE}/api/panel/detalle`)).status()).toBe(401);
+    const { e, cliente, tarea } = await conClientes("pan-detalle-aj");
+    const c = await cliente("Ajeno-cli");
+    const propia = await tarea("Propia", c, e.alfa, e.empleado, "Pendiente", HOY, 1);
+    const ajena = await tarea("De Beta", c, e.beta, e.ajeno, "Pendiente", HOY, 1);
+    await entrarComo(context, e.empleado);
+    for (const q of ["", `cliente=${encodeURIComponent(c.nombre)}`, `persona=${e.ajeno}`, `unidad=${encodeURIComponent(`Beta ${e.sufijo}`)}`, `contrato=Fee`, "estado=abierta"]) {
+      const r = await context.request.get(`${BASE}/api/panel/detalle?periodo=todo&${q}`);
+      expect(r.status()).toBe(200);
+      const ids = ((await r.json()) as { filas: { id: number }[] }).filas.map((f) => f.id);
+      expect(ids, q).not.toContain(ajena);
+      if (!q || q.startsWith("cliente") || q === "estado=abierta") expect(ids).toContain(propia);
+    }
+  });
+});
+
+/* Lunes de la semana de hoy y las tareas sembradas que entregan en ella (lo pide la prueba de arriba). */
+function HOY_LUNES() {
+  const d = new Date(`${HOY}T00:00:00Z`);
+  return sumarDias(HOY, -((d.getUTCDay() + 6) % 7));
+}
+async function semanaDe(lunes: string, t: Record<string, number>) {
+  const filas = await sql<{ id: number }>("SELECT id FROM tasks WHERE id = ANY($1) AND due_date BETWEEN $2::date AND $2::date + 6", [Object.values(t), lunes]);
+  return filas.map((f) => f.id);
+}

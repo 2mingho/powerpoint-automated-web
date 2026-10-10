@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapaDeCalor, semanasDesde, type TareaDeCarga } from "./mapa-calor";
+import { mapaDeCalor, resumirVencidas, semanasDesde, type TareaDeCarga } from "./mapa-calor";
 import { leerCapacidad } from "./estado";
 
 // 2026-10-08 es jueves; la semana empieza el lunes 10-05.
@@ -74,5 +74,33 @@ describe("capacidad semanal", () => {
 
   it("rechaza negativos, decimales, mas de 80 y texto", () => {
     for (const v of [-1, 35.5, 81, "abc", "1e3", true, {}]) expect(leerCapacidad(v).ok, String(v)).toBe(false);
+  });
+});
+
+describe("vencidas sumadas aparte (lo que hace la base)", () => {
+  const personas = [{ id: 1, nombre: "Ana", capacidad: 35 }, { id: 2, nombre: "Beto", capacidad: 20 }];
+  const t = (o: Partial<TareaDeCarga>): TareaDeCarga => tarea({ inicio: null, ...o });
+  const lista: TareaDeCarga[] = [
+    t({ entrega: "2026-10-01", horas: 8, personaId: 1 }), // vencida
+    t({ entrega: "2026-09-10", horas: 3, personaId: 1, pasosTotal: 4, pasosHechos: 1 }), // vencida con avance
+    t({ entrega: "2026-09-20", horas: 5, personaId: 1, pasosTotal: 2, pasosHechos: 2 }), // vencida terminada por pasos: no aporta
+    t({ entrega: "2026-10-02", horas: 0, estimada: false, personaId: 2 }), // vencida sin estimar: 4 h
+    t({ entrega: "2026-10-07", horas: 6, personaId: 2, estado: "hecha" }), // hecha: no cuenta
+    t({ entrega: "2026-10-08", horas: 6, personaId: 1 }), // vence hoy: no es vencida
+    t({ entrega: "2026-10-15", horas: 10, inicio: "2026-10-13", personaId: 2 }),
+    t({ entrega: "2026-11-30", horas: 30, personaId: 1 }), // lejos de la ventana
+  ];
+
+  it("da el mismo mapa que repartir cada vencida una a una", () => {
+    const todas = mapaDeCalor(personas, lista, SEMANAS, HOY);
+    const vencidas = resumirVencidas(lista, HOY);
+    const sinVencidas = lista.filter((x) => !(x.estado !== "hecha" && x.entrega && x.entrega < HOY));
+    expect(mapaDeCalor(personas, sinVencidas, SEMANAS, HOY, vencidas)).toEqual(todas);
+  });
+
+  it("solo cuentan las que tienen horas pendientes y las sin estimar llevan 4 h y su marca", () => {
+    const v = resumirVencidas(lista, HOY);
+    expect(v.get(1)).toEqual({ tareas: 2, sinEstimar: 0, horas: 8 + 3 * (1 - 1 / 4) });
+    expect(v.get(2)).toEqual({ tareas: 1, sinEstimar: 1, horas: 4 });
   });
 });

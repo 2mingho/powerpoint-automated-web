@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cargaDesdeConteos, cargaPorPersona, clasificar, contadores, generarCsv, lunesDe, mmddyyyy, sumarDias, tendencia, tendenciaDesdeMarcas, vencidasPorUnidad, vencidasPorUnidadDesdeConteos, type TareaPanel,
+  cargaDesdeConteos, cargaPorPersona, clasificar, contadores, diaNegocio, generarCsv, lunesDe, mmddyyyy, sumarDias, tendencia, tendenciaDesdeSemanas, vencidasPorUnidad, vencidasPorUnidadDesdeConteos, type TareaPanel,
 } from "./agregados";
 
 const HOY = "2026-10-08"; // jueves
@@ -133,9 +133,14 @@ describe("agregados desde conteos de la base = agregados desde cada tarea", () =
     expect(vencidasPorUnidadDesdeConteos(conteos, unidades)).toEqual(vencidasPorUnidad(tareas, finales, HOY, unidades));
   });
 
-  it("la tendencia sale igual con solo las marcas de alta y de cierre", () => {
-    const creadas = tareas.map((x) => x.creada);
-    const cerradas = tareas.filter((x) => finales.has(x.estado)).map((x) => x.actualizada);
-    expect(tendenciaDesdeMarcas(creadas, cerradas, HOY, 8)).toEqual(tendencia(tareas, finales, HOY, 8));
+  it("la tendencia sale igual con los conteos por semana", () => {
+    const porSemana = (fechas: (Date | null)[]) => {
+      const m = new Map<string, number>();
+      for (const f of fechas) { const d = diaNegocio(f); if (!d) continue; const l = lunesDe(d); m.set(l, (m.get(l) ?? 0) + 1); }
+      return m;
+    };
+    const creadas = porSemana(tareas.map((x) => x.creada));
+    const cerradas = porSemana(tareas.filter((x) => finales.has(x.estado)).map((x) => x.actualizada));
+    expect(tendenciaDesdeSemanas(creadas, cerradas, HOY, 8)).toEqual(tendencia(tareas, finales, HOY, 8));
   });
 });
