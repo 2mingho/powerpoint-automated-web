@@ -11,6 +11,8 @@ import { puedeAsignarA } from "@/lib/tareas/alcance";
 import { aDTOs, areaDe, descripcion, diaDb, INCLUIR_TAREA, texto } from "./base";
 import { avisarAsignacion } from "./avisos";
 import { desplazarDiasHabiles, parsearFechaEntrada } from "./fechas";
+import { FASES } from "@/lib/estudios/plan";
+import { leerHoras } from "@/lib/seguimiento/estado";
 import type { PlantillaDTO } from "./tipos";
 
 /* Plantillas por unidad (api_templates_*). El ambito decide cuales se ven y se usan. */
@@ -31,11 +33,12 @@ function dto(p: { id: number; name: string; area_id: number; payload_json: strin
       title: String(d.title ?? ""), description: String(d.description ?? ""), client: String(d.client ?? ""),
       priority: String(d.priority ?? ""), budget_type: String(d.budget_type ?? ""),
       due_offset_days: Number(d.due_offset_days ?? 0) || 0, checklist: Array.isArray(d.checklist) ? d.checklist.map(String) : [],
+      fase: typeof d.fase === "string" ? d.fase : "", horas: typeof d.horas === "number" ? d.horas : null, metodo: typeof d.metodo === "string" ? d.metodo : "",
     },
   };
 }
 
-async function validarDatos(crudo: unknown): Promise<Datos> {
+async function validarDatos(crudo: unknown, unidadId: number | null): Promise<Datos> {
   const p = (crudo && typeof crudo === "object" ? crudo : {}) as Record<string, unknown>;
   const title = texto(p.title);
   if (!title) throw new ErrorApi(400, "El título es obligatorio.");
@@ -47,9 +50,22 @@ async function validarDatos(crudo: unknown): Promise<Datos> {
   const checklist = Array.isArray(p.checklist) ? p.checklist : [];
   if (checklist.length > 30) throw new ErrorApi(400, "Máximo 30 ítems en el checklist.");
   checklist.forEach((it, i) => { if (typeof it !== "string" || !it.trim()) throw new ErrorApi(400, `Checklist ítem #${i + 1} inválido.`); });
+  // Fase, horas y tipo de estudio: solo para pasos de un estudio, y solo en unidades que los hacen.
+  const fase = texto(p.fase);
+  let horas: number | null = null;
+  let metodo = "";
+  if (fase) {
+    if (!(FASES as readonly string[]).includes(fase)) throw new ErrorApi(400, `La fase debe ser una de: ${FASES.join(", ")}.`);
+    if (!unidadId || !(await db.areas.findFirst({ where: { id: unidadId, has_studies: true }, select: { id: true } }))) throw new ErrorApi(400, "Tu unidad no hace estudios: la plantilla no puede tener fase.");
+    const h = leerHoras(p.horas);
+    if (!h.ok) throw new ErrorApi(400, h.error);
+    horas = h.valor;
+    metodo = texto(p.metodo);
+    if (metodo && !(fase === "Campo" && (metodo === "Cuantitativo" || metodo === "Cualitativo"))) throw new ErrorApi(400, "Solo un paso de Campo puede ser cuantitativo o cualitativo.");
+  }
   return {
     title, description: descripcion(p.description), client: texto(p.client), priority, budget_type: texto(p.budget_type),
-    due_offset_days: off, checklist: (checklist as string[]).map((s) => s.trim()),
+    due_offset_days: off, checklist: (checklist as string[]).map((s) => s.trim()), fase, horas, metodo,
   };
 }
 
@@ -65,7 +81,7 @@ export async function crearPlantilla(u: UsuarioActual, d: Record<string, unknown
   if ((await db.task_templates.count({ where: { area_id: u.areaId } })) >= 50) throw new ErrorApi(400, "Máximo 50 plantillas por unidad.");
   const nombre = texto(d.name).slice(0, 100);
   if (!nombre) throw new ErrorApi(400, "El nombre de la plantilla es obligatorio.");
-  const datos = await validarDatos(d.payload);
+  const datos = await validarDatos(d.payload, u.areaId);
   const p = await db.task_templates.create({
     data: { area_id: u.areaId, created_by_id: u.id, name: nombre, payload_json: JSON.stringify(datos), created_at: new Date() },
     select: SELECT,
@@ -88,7 +104,7 @@ export async function editarPlantilla(u: UsuarioActual, id: number, d: Record<st
     if (!nombre) throw new ErrorApi(400, "El nombre es obligatorio.");
     datos.name = nombre;
   }
-  if ("payload" in d) datos.payload_json = JSON.stringify(await validarDatos(d.payload));
+  if ("payload" in d) datos.payload_json = JSON.stringify(await validarDatos(d.payload, p.area_id));
   return dto(await db.task_templates.update({ where: { id: p.id }, data: datos, select: SELECT }));
 }
 

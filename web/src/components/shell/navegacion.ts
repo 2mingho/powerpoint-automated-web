@@ -8,6 +8,8 @@ export type ItemNav = {
   soloEquipo?: boolean;
   /* Solo quien ve los ingresos de alguna unidad (supervisar o poder editar). */
   soloIngresos?: boolean;
+  /* Solo si la persona crea estudios o ve alguno. */
+  soloEstudios?: boolean;
   soloAdmin?: boolean;
   grupo: "trabajo" | "datos" | "sistema";
   movil?: boolean; // aparece en la barra inferior del movil
@@ -23,6 +25,7 @@ export const NAVEGACION: ItemNav[] = [
   { href: "/tareas", rotulo: "Mis tareas", icono: "ListChecks", herramienta: "tasks", grupo: "trabajo", movil: true },
   { href: "/solicitudes", rotulo: "Solicitudes", icono: "ArrowLeftRight", grupo: "trabajo", movil: true },
   { href: "/equipo", rotulo: "Equipo", icono: "Users", herramienta: "tasks", soloEquipo: true, grupo: "trabajo" },
+  { href: "/estudios", rotulo: "Estudios", icono: "Layers", herramienta: "tasks", soloEstudios: true, grupo: "trabajo" },
   { href: "/ingresos", rotulo: "Ingresos", icono: "CircleDollarSign", soloIngresos: true, grupo: "trabajo" },
   { href: "/reportes/nuevo", rotulo: "Generar reporte", icono: "FileChartColumn", herramienta: "reports", grupo: "datos" },
   { href: "/reportes", rotulo: "Mis reportes", icono: "FolderOpen", herramienta: "reports", grupo: "datos" },

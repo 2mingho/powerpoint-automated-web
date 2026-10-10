@@ -154,7 +154,7 @@ export async function opcionesPersonas() {
 
 export async function organizacion() {
   const [areas, usuarios, lideres, tareasPorUnidad] = await Promise.all([
-    db.areas.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, description: true } }),
+    db.areas.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, description: true, has_studies: true } }),
     db.users.findMany({ where: { is_active: true }, orderBy: { username: "asc" }, select: { id: true, username: true, area_id: true, manager_id: true, is_active: true } }),
     db.unit_leads.findMany({ select: { user_id: true, area_id: true } }),
     db.tasks.groupBy({ by: ["area_id"], where: { deleted_at: null }, _count: { _all: true } }),
@@ -169,7 +169,7 @@ export async function organizacion() {
   return {
     arbol: arbolDeMando(personas, unidades, lid),
     unidades: areas.map((a) => ({
-      id: a.id, nombre: a.name, descripcion: a.description ?? "",
+      id: a.id, nombre: a.name, descripcion: a.description ?? "", tieneEstudios: a.has_studies,
       personas: personas.filter((p) => p.unidadId === a.id).length,
       tareas: tareas.get(a.id) ?? 0,
       lideres: lid.filter((l) => l.unidadId === a.id).map((l) => ({ id: l.userId, nombre: personas.find((p) => p.id === l.userId)?.nombre ?? `#${l.userId}` })),

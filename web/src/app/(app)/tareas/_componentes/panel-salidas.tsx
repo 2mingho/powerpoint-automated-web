@@ -171,6 +171,7 @@ function Meta({ t, vencida }: { t: TareaDTO; vencida: boolean }) {
       <span className={cx("font-mono cifras md:hidden", vencida && "text-alerta")}>{fechaCorta(t.entrega)} · {relativo(t.entrega, hoy)}</span>
       <span className="truncate md:hidden">{t.asignado}</span>
       {t.cliente && <NombreCliente id={t.clienteId} nombre={t.cliente} className="hidden md:inline" />}
+      {t.estudio && <span className="min-w-0 truncate" title="Paso de un estudio">Estudio: {t.estudio.titulo} · {t.fase}</span>}
       {t.bloqueadaPorAbiertas > 0 && (
         <span className="inline-flex items-center gap-1 text-alerta" title="Espera a otras tareas abiertas">
           <Lock aria-hidden className="size-3" />Bloqueada

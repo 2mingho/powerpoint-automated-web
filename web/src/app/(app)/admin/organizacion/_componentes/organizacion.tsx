@@ -271,6 +271,7 @@ function ReasignarPersona({ p, datos, onHecho, onError }: { p: Persona; datos: D
 function EditarUnidad({ u, personas, onHecho, onError }: { u: Unidad; personas: Persona[]; onHecho: (m: string, cerrar?: boolean) => Promise<void>; onError: (m: string) => void }) {
   const [nombre, setNombre] = useState(u.nombre);
   const [descripcion, setDescripcion] = useState(u.descripcion);
+  const [estudios, setEstudios] = useState(u.tieneEstudios);
   const [nuevoLider, setNuevoLider] = useState("");
   const [borrar, setBorrar] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -286,8 +287,12 @@ function EditarUnidad({ u, personas, onHecho, onError }: { u: Unidad; personas: 
       {error && <p role="alert" className="rounded-sm border border-alerta/40 px-3 py-2 text-sm text-alerta">{error}</p>}
       <Campo etiqueta="Nombre">{(a) => <Entrada {...a} value={nombre} maxLength={100} onChange={(e) => setNombre(e.target.value)} />}</Campo>
       <Campo etiqueta="Descripción">{(a) => <AreaTexto {...a} value={descripcion} maxLength={500} onChange={(e) => setDescripcion(e.target.value)} className="min-h-16" />}</Campo>
-      <Boton variante="secundario" cargando={guardando} disabled={nombre === u.nombre && descripcion === u.descripcion}
-        onClick={() => accion(() => pedir(`/api/admin/unidades/${u.id}`, { metodo: "PATCH", cuerpo: { nombre, descripcion } }), `Unidad ${nombre} actualizada.`)}>Guardar unidad</Boton>
+      <label className="flex min-h-10 cursor-pointer items-start gap-3 rounded-sm px-1 hover:bg-superficie-2">
+        <input type="checkbox" className="mt-1 size-4 accent-[var(--texto)]" checked={estudios} onChange={(e) => setEstudios(e.target.checked)} />
+        <span><span className="block">Hace estudios</span><span className="block text-sm text-texto-3">Quienes la integran pueden crear estudios con todas sus fases desde Mis tareas.</span></span>
+      </label>
+      <Boton variante="secundario" cargando={guardando} disabled={nombre === u.nombre && descripcion === u.descripcion && estudios === u.tieneEstudios}
+        onClick={() => accion(() => pedir(`/api/admin/unidades/${u.id}`, { metodo: "PATCH", cuerpo: { nombre, descripcion, tieneEstudios: estudios } }), `Unidad ${nombre} actualizada.`)}>Guardar unidad</Boton>
 
       <section aria-label="Líderes" className="border-t border-hilo pt-4">
         <h3 className="rotulo mb-2">Líderes</h3>

@@ -13,6 +13,7 @@ import { esEstadoDeBloqueo, puedeCambiarRevisor, puedeCerrar } from "@/lib/segui
 import type { ActividadDTO, ComentarioDTO, DependenciasDTO, DetalleDTO, ItemChecklistDTO, TareaDTO } from "@/lib/tareas/tipos";
 import { ErrorPeticion, fechaCorta, haceCuanto, momento, pedir, relativo, tonoEstado } from "./cliente";
 import { useTareas, type Cambios } from "./estado";
+import { EstudioEnPase } from "./estudio-en-pase";
 
 /*
  * Pase de la tarea seleccionada: una tarjeta de embarque. Arriba, las cuatro
@@ -98,6 +99,8 @@ export function Pase({ id, alCerrar }: { id: number; alCerrar: () => void }) {
             <span className="rotulo">Cliente</span><NombreCliente id={t.clienteId} nombre={t.cliente} className="font-medium text-texto" />
           </p>
         )}
+
+        <EstudioEnPase t={t} />
 
         {/* Pase segmentado */}
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-hilo bg-hilo">

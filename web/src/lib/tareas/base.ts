@@ -22,6 +22,8 @@ export const INCLUIR_TAREA = {
   asignado: { select: { username: true } },
   creador: { select: { username: true } },
   revisor: { select: { username: true } },
+  // Si es un paso de estudio, el estudio al que pertenece.
+  padre: { select: { id: true, title: true, task_type: true } },
 } satisfies Prisma.tasksInclude;
 
 export type TareaFila = Prisma.tasksGetPayload<{ include: typeof INCLUIR_TAREA }>;
@@ -71,6 +73,8 @@ export function aDTO(t: TareaFila, finales: string[], hoy: string, extras?: Part
     recurrente: !!t.is_recurrent,
     recurrencia: t.recurrence_type ?? "",
     padreId: t.parent_task_id,
+    fase: t.phase ?? "",
+    estudio: t.padre?.task_type === "estudio" ? { id: t.padre.id, titulo: t.padre.title } : null,
     unidad: t.area,
     unidadId: t.area_id,
     visibilidad: t.visibility || "unit",
@@ -146,7 +150,8 @@ export async function aDTOs(tareas: TareaFila[], userId: number): Promise<TareaD
  */
 export async function tareaVisible(u: UsuarioActual, id: number): Promise<TareaFila> {
   if (!Number.isInteger(id) || id <= 0) throw new ErrorApi(404, "La tarea no existe o no la puedes ver.");
-  const t = await db.tasks.findFirst({ where: { id, deleted_at: null }, include: INCLUIR_TAREA });
+  // Un estudio (el contenedor) no es una tarea: se abre por /api/estudios.
+  const t = await db.tasks.findFirst({ where: { id, deleted_at: null, task_type: { not: "estudio" } }, include: INCLUIR_TAREA });
   if (!t || !(await puedeVerTarea(u, t))) throw new ErrorApi(404, "La tarea no existe o no la puedes ver.");
   return t;
 }

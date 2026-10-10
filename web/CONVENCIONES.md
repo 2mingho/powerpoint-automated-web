@@ -30,6 +30,12 @@ Producto y diseño: `../PRODUCT.md` (quién lo usa y qué no se puede romper) y 
 - Cada ruta de API usa `conUsuario(handler, { herramienta, soloAdmin })`. Los errores salen como `{ error: "mensaje en español" }` con el código HTTP correcto (400, 403, 404, 409).
 - Registro de actividad: `registrarActividad()` de `@/lib/actividad`, con los mismos `action` que Flask (`task_update`, `task_delete`…). Notificaciones: `notificar` / `notificarVarios` de `@/lib/notificaciones`. Nunca se avisa a quien hizo el cambio.
 
+## Estudios
+
+- Un estudio es una tarea con `task_type = 'estudio'` (el contenedor); sus pasos son tareas **normales** hijas (`parent_task_id`) con `phase`. Solo existen en unidades con `areas.has_studies` (Admin → Organización).
+- **El contenedor no es una tarea para nadie:** `filtroTareasVisibles` lo excluye (si no, duplicaría carga, entregas y cifras) y `tareaVisible` lo responde 404. Los estudios se leen con `filtroEstudiosVisibles` y `lib/estudios/servicio.ts`; mismo ámbito que las tareas.
+- El plan de una unidad son sus plantillas con `fase` (payload: `fase`, `horas`, `metodo`); sin ellas, `PLAN_BASE` de `lib/estudios/plan.ts`. Las fechas de los pasos las reparte `repartirFechas` (días hábiles, en secuencia, proporcional a las horas).
+
 ## Ingresos (contratos y metas)
 
 - Todo en USD. El monto de un contrato es el **total** y se prorratea por meses naturales (`lib/seguimiento/finanzas.ts`).

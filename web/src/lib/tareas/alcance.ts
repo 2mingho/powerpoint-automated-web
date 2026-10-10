@@ -28,9 +28,23 @@ export async function idsUsuariosDelAmbito(u: UsuarioActual, soloActivos = false
   return ids.length ? ids : [u.id];
 }
 
-/* Filtro Prisma de las tareas visibles por ambito (sin borradas). Combinar con AND. */
+/*
+ * Filtro Prisma de las tareas visibles por ambito (sin borradas). Combinar con AND.
+ * Deja fuera los ESTUDIOS (task_type 'estudio'): son el contenedor de sus pasos, que
+ * si son tareas, y contarlos tambien duplicaria carga, entregas y cifras. Los estudios
+ * se leen con filtroEstudiosVisibles.
+ */
 export async function filtroTareasVisibles(u: UsuarioActual): Promise<Prisma.tasksWhereInput> {
-  const base: Prisma.tasksWhereInput = { deleted_at: null };
+  return alcanceDeTipo(u, { task_type: { not: "estudio" } });
+}
+
+/* Los estudios que la persona puede ver: mismo ambito que las tareas, solo el tipo estudio. */
+export async function filtroEstudiosVisibles(u: UsuarioActual): Promise<Prisma.tasksWhereInput> {
+  return alcanceDeTipo(u, { task_type: "estudio" });
+}
+
+async function alcanceDeTipo(u: UsuarioActual, tipo: Prisma.tasksWhereInput): Promise<Prisma.tasksWhereInput> {
+  const base: Prisma.tasksWhereInput = { deleted_at: null, ...tipo };
   if (u.isAdmin) return base;
   const unidades = await ambitoUnidades(u);
   const usuarios = await idsUsuariosDelAmbito(u);

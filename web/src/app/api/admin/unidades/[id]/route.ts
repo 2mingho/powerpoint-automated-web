@@ -19,8 +19,13 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/unidades/[id]">>(async 
     throw new ErrorApi(409, `La unidad "${nombre}" ya existe.`);
   }
   const descripcion = "descripcion" in d ? texto(d.descripcion, 500) : a.description;
-  await db.areas.update({ where: { id: a.id }, data: { name: nombre, description: descripcion } });
-  await registrarActividad(u.id, "area_edit", `Unidad editada: ${nombre}`, { tipo: "area", id: a.id });
+  let tieneEstudios = a.has_studies;
+  if ("tieneEstudios" in d) {
+    if (typeof d.tieneEstudios !== "boolean") throw new ErrorApi(400, "«Hace estudios» debe ser verdadero o falso.");
+    tieneEstudios = d.tieneEstudios;
+  }
+  await db.areas.update({ where: { id: a.id }, data: { name: nombre, description: descripcion, has_studies: tieneEstudios } });
+  await registrarActividad(u.id, "area_edit", `Unidad editada: ${nombre}${tieneEstudios !== a.has_studies ? ` (estudios: ${tieneEstudios ? "sí" : "no"})` : ""}`, { tipo: "area", id: a.id });
   return ok({ id: a.id });
 }, SOLO_ADMIN);
 

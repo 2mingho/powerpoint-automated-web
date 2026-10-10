@@ -26,6 +26,9 @@ export type TareaDTO = {
   recurrente: boolean;
   recurrencia: string;
   padreId: number | null;
+  /* Paso de un estudio: su fase ("" si no lo es) y el estudio al que pertenece. */
+  fase: string;
+  estudio: { id: number; titulo: string } | null;
   unidad: string;
   unidadId: number | null;
   visibilidad: string;
@@ -107,5 +110,9 @@ export type PlantillaDTO = {
     budget_type: string;
     due_offset_days: number;
     checklist: string[];
+    /* Solo en unidades con estudios: la fase del estudio a la que pertenece el paso, sus horas y, en Campo, el tipo de estudio que lo incluye. */
+    fase: string;
+    horas: number | null;
+    metodo: string;
   };
 };
