@@ -105,6 +105,33 @@ export function generarFechasRecurrencia(inicio: string, tipo: string, fin: stri
   return fechas;
 }
 
+/*
+ * Entrega de la SIGUIENTE tarea de una serie, calculada desde la entrega de la que
+ * se cierra (no desde el dia en que se cierra): una semanal que vencia el lunes 7 y
+ * se cierra el martes 8 genera la del lunes 14.
+ *  - Semanal: el mismo dia de la semana que la primera (`ancla`), la semana siguiente.
+ *  - Mensual: el mismo dia del mes que la primera, el mes siguiente; si ese dia no existe
+ *    (31 en febrero) cae en el ultimo, y el mes que sigue vuelve al dia de la primera.
+ *  - Diaria: el siguiente dia laborable.
+ * Fechas invalidas devuelven null.
+ */
+export function siguienteEntrega(tipo: string, actual: string, ancla: string): string | null {
+  if (!esIsoValida(actual) || !esIsoValida(ancla)) return null;
+  if (tipo === "Mensual") {
+    const [a, m] = actual.split("-").map(Number);
+    const mes = m === 12 ? 1 : m + 1;
+    const anio = m === 12 ? a + 1 : a;
+    return fechaValida(anio, mes, Math.min(Number(ancla.slice(8, 10)), ultimoDiaDelMes(anio, mes)));
+  }
+  if (tipo === "Diaria") {
+    let d = sumarDias(actual, 1);
+    while (esFinDeSemana(d)) d = sumarDias(d, 1);
+    return d;
+  }
+  // Semanal (y cualquier otro valor, como en Flask): semanas de lunes a domingo.
+  return sumarDias(lunesDe(actual), 7 + ((diaSemana(ancla) + 6) % 7));
+}
+
 /* Suma `dias` dias laborables (lunes a viernes) a partir de `inicio`. */
 export function desplazarDiasHabiles(inicio: string, dias: number): string {
   let actual = inicio;

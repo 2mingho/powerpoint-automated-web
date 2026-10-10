@@ -111,7 +111,7 @@ export function Tablero() {
     if (estado === inicio.estado && i === inicio.columnas[estado].findIndex((t) => t.id === active.id)) { setColumnas(inicio.columnas); return; }
     setColumnas({ ...columnas, [estado]: lista });
     try {
-      const r = await pedir<{ tarea: TareaDTO; aviso: string }>(`/api/tareas/${tarea.id}/mover`, {
+      const r = await pedir<{ tarea: TareaDTO; aviso: string; siguiente?: { id: number; entrega: string } | null }>(`/api/tareas/${tarea.id}/mover`, {
         cuerpo: { status: estado, anterior_id: lista[i - 1]?.id ?? null, siguiente_id: lista[i + 1]?.id ?? null, expected_updated_at: tarea.actualizada },
       });
       setColumnas((c) => (c ? { ...c, [estado]: c[estado].map((t) => (t.id === r.tarea.id ? r.tarea : t)) } : c));
@@ -122,6 +122,10 @@ export function Tablero() {
           deshacer: () => void pedir(`/api/tareas/${tarea.id}/mover`, { cuerpo: { status: inicio.estado, expected_updated_at: r.tarea.actualizada } }).then(() => { void cargar(); void ctx.recargar(); }),
         });
         void ctx.recargar();
+        if (r.siguiente) {
+          avisar(`Se creó la siguiente de la serie, para el ${fechaCorta(r.siguiente.entrega)}.`, { tipo: "exito" });
+          void cargar();
+        }
       }
     } catch (e) {
       setColumnas(inicio.columnas);

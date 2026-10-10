@@ -52,6 +52,8 @@ export type TareaDTO = {
   etiquetas: EtiquetaDTO[];
   bloqueadaPorAbiertas: number;
   bloqueaA: number;
+  /* Solo en la respuesta de cerrar una tarea de una serie: la siguiente que se creo. */
+  siguiente?: { id: number; entrega: string } | null;
 };
 
 export type EstadoCatalogo = { nombre: string; color: Tono; esInicial: boolean; esFinal: boolean };

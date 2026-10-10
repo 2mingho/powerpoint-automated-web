@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useAvisos } from "@/components/ui/avisos";
 import type { Contadores, EstadoCatalogo, EtiquetaDTO, Filtros, PersonaDTO, PrioridadCatalogo, TareaDTO } from "@/lib/tareas/tipos";
 import { puedeCerrar } from "@/lib/seguimiento/estado";
-import { consultaDeFiltros, ErrorPeticion, pedir } from "./cliente";
+import { consultaDeFiltros, ErrorPeticion, fechaCorta, pedir } from "./cliente";
 
 /*
  * Estado de Mis tareas: la lista, los contadores, los filtros y la tarea
@@ -36,7 +36,7 @@ export type Inicial = {
 };
 
 /* Cuerpo del PUT (nombres de Flask) a campos del DTO, para el cambio optimista. */
-export type Cambios = Partial<{ status: string; due_date: string; priority: string; assignee_id: number; title: string }> & Record<string, string | number | undefined>;
+export type Cambios = Partial<{ status: string; due_date: string; priority: string; assignee_id: number; title: string }> & Record<string, string | number | boolean | undefined>;
 
 function aplicar(t: TareaDTO, c: Cambios, personas: PersonaDTO[]): TareaDTO {
   const n = { ...t };
@@ -44,6 +44,7 @@ function aplicar(t: TareaDTO, c: Cambios, personas: PersonaDTO[]): TareaDTO {
   if (c.due_date !== undefined) n.entrega = c.due_date;
   if (c.priority !== undefined) n.prioridad = c.priority;
   if (c.title !== undefined) n.titulo = c.title;
+  if (c.is_recurrent === false) { n.recurrente = false; n.recurrencia = ""; }
   if (c.assignee_id !== undefined) {
     n.asignadoId = c.assignee_id;
     n.asignado = personas.find((p) => p.id === c.assignee_id)?.nombre ?? n.asignado;
@@ -222,6 +223,11 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
         });
         fusionar(r.tarea);
         void recontar();
+        // Cerrar una tarea de una serie crea la siguiente: se dice y entra a la lista.
+        if (r.tarea.siguiente) {
+          avisar(`Se creó la siguiente de la serie, para el ${fechaCorta(r.tarea.siguiente.entrega)}.`, { tipo: "exito" });
+          void recargar();
+        }
         if (opts.mensaje) {
           avisar(opts.mensaje, opts.deshacer === false ? { tipo: "exito" } : {
             tipo: "exito",
@@ -245,7 +251,7 @@ export function ProveedorTareas({ inicial, children }: { inicial: Inicial; child
     });
     colas.current.set(id, siguiente);
     return siguiente;
-  }, [avisar, finales, fusionar, inicial.personas, recontar]);
+  }, [avisar, finales, fusionar, inicial.personas, recargar, recontar]);
 
   useEffect(() => { guardarRef.current = guardar; }, [guardar]);
 

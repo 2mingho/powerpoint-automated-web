@@ -667,8 +667,15 @@ function MasCampos({ t, editable, alGuardar }: { t: TareaDTO; editable: boolean;
           </label>
         ))}
         <div className="flex flex-col gap-1">
-          <span className="rotulo">Recurrencia</span>
-          <span className="text-sm text-texto-2">{t.recurrente ? `${t.recurrencia}${t.padreId ? " (parte de una serie)" : " (inicio de la serie)"}` : "No se repite"}</span>
+          <span className="rotulo">Repetición</span>
+          <span className="text-sm text-texto-2">
+            {t.recurrente
+              ? `${t.recurrencia}: al cerrarla se crea la siguiente${t.fin ? `, hasta el ${fechaCorta(t.fin)}` : ""}`
+              : t.padreId ? "Esta serie ya no se repite" : "No se repite"}
+          </span>
+          {editable && t.recurrente && (
+            <Boton tamano="sm" variante="fantasma" className="self-start" onClick={() => alGuardar({ is_recurrent: false })}>Dejar de repetir</Boton>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <span className="rotulo">Creada por</span>

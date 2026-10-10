@@ -9,7 +9,8 @@ import { filtroTareasVisibles, puedeAsignarA } from "@/lib/tareas/alcance";
 import { notificarVarios } from "@/lib/notificaciones";
 import { aDTOs, areaDe, descripcion, diaDb, enlaceTarea, filtroVisiblesYObservadas, INCLUIR_TAREA, MAX_FILAS, tareaEditable, texto, type TareaFila } from "./base";
 import { avisarAsignacion, avisarCambioDeEstado, avisarRevision } from "./avisos";
-import { esFinDeSemana, generarFechasRecurrencia, parsearFechaEntrada, TIPOS_RECURRENCIA } from "./fechas";
+import { crearSiguientes, type SiguienteCreada } from "./recurrencia";
+import { esFinDeSemana, parsearFechaEntrada, TIPOS_RECURRENCIA } from "./fechas";
 import { colocar, compararColumna } from "./posiciones";
 import { resolverCliente } from "@/lib/clientes/resolver";
 import { esEstadoDeRevision } from "@/lib/seguimiento/estado";
@@ -67,18 +68,16 @@ export async function crearTarea(u: UsuarioActual, d: Record<string, unknown>) {
   const tipo = texto(d.recurrence_type);
   const finSerieCrudo = texto(d.recurrence_end) || texto(d.end_date);
 
-  let fechas = [entrega];
+  // Una serie nace con su primera tarea; la siguiente se crea al cerrar esta (lib/tareas/recurrencia.ts).
   if (recurrente) {
     if (!(TIPOS_RECURRENCIA as readonly string[]).includes(tipo)) throw new ErrorApi(400, "Selecciona una frecuencia de recurrencia válida.");
     if (esFinDeSemana(entrega)) throw new ErrorApi(400, "Las tareas recurrentes no pueden iniciar en sábado o domingo.");
-    if (!finSerieCrudo) throw new ErrorApi(400, "Debes indicar la fecha de finalización para la recurrencia.");
-    const finSerie = parsearFechaEntrada(finSerieCrudo);
-    if (!finSerie) throw new ErrorApi(400, "Fecha fin de recurrencia inválida.");
-    if (finSerie < entrega) throw new ErrorApi(400, "La fecha final de recurrencia no puede ser menor que la fecha de entrega.");
-    fin = finSerie;
-    fechas = generarFechasRecurrencia(entrega, tipo, finSerie);
-    if (!fechas.length) throw new ErrorApi(400, "No se pudieron generar fechas laborables para la recurrencia.");
-    if (fechas.length > 365) throw new ErrorApi(400, "La recurrencia genera demasiadas tareas (máx. 365).");
+    if (finSerieCrudo) {
+      const finSerie = parsearFechaEntrada(finSerieCrudo);
+      if (!finSerie) throw new ErrorApi(400, "Fecha fin de recurrencia inválida.");
+      if (finSerie < entrega) throw new ErrorApi(400, "La fecha final de recurrencia no puede ser menor que la fecha de entrega.");
+      fin = finSerie;
+    }
   }
 
   const ahora = new Date();
@@ -105,17 +104,14 @@ export async function crearTarea(u: UsuarioActual, d: Record<string, unknown>) {
   };
 
   const primera = await db.$transaction(async (tx) => {
-    const padre = await tx.tasks.create({ data: { ...comun, due_date: diaDb(fechas[0]) }, include: INCLUIR_TAREA });
-    if (fechas.length > 1) {
-      await tx.tasks.createMany({ data: fechas.slice(1).map((f) => ({ ...comun, due_date: diaDb(f), parent_task_id: padre.id })) });
-    }
+    const padre = await tx.tasks.create({ data: { ...comun, due_date: diaDb(entrega) }, include: INCLUIR_TAREA });
     // Flask notificaba con link '/tasks?task=None' antes de tener id; aqui ya lo tiene.
     await avisarAsignacion("task_assigned", asignado.id, padre, u.id, tx);
     return padre;
   });
 
-  await registrarActividad(u.id, "task_create", `Tarea creada: ${titulo} (${fechas.length} instancia(s))`, { tipo: "task", id: primera.id });
-  return { tarea: (await aDTOs([primera], u.id))[0], cuantas: fechas.length };
+  await registrarActividad(u.id, "task_create", `Tarea creada: ${titulo}${recurrente ? ` (serie ${tipo.toLowerCase()})` : ""}`, { tipo: "task", id: primera.id });
+  return { tarea: (await aDTOs([primera], u.id))[0], cuantas: 1 };
 }
 
 /* ─── Cambio de una tarea (PUT) ─── */
@@ -126,6 +122,8 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
   if ("title" in d) datos.title = texto(d.title).slice(0, 255) || previa.title;
   if ("description" in d) datos.description = descripcion(d.description);
   if ("client" in d) Object.assign(datos, await resolverCliente(db, d.client));
+  // Dejar de repetir: la tarea sigue, pero cerrarla ya no crea otra. Volver a activar la serie no existe: se crea una nueva.
+  if (d.is_recurrent === false && previa.is_recurrent) { datos.is_recurrent = false; datos.recurrence_type = null; }
   if ("directorate" in d) datos.directorate = texto(d.directorate).slice(0, 255);
   if ("requested_by" in d) datos.requested_by = texto(d.requested_by).slice(0, 255);
   if ("budget_type" in d) datos.budget_type = texto(d.budget_type).slice(0, 255);
@@ -161,10 +159,12 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
 
   const seguimiento = await camposDeSeguimiento(u, d, previa, (datos.assignee_id as number | undefined) ?? previa.assignee_id);
   Object.assign(datos, seguimiento);
+  let cierra = false;
   if (cambiaEstado) {
     const finales = await estadosFinales();
     const previoFinal = finales.includes(previa.status);
     const nuevoFinal = finales.includes(String(datos.status));
+    cierra = !previoFinal && nuevoFinal;
     if (!previoFinal && nuevoFinal) {
       const revisorFinal = "reviewer_id" in seguimiento ? seguimiento.reviewer_id ?? null : previa.reviewer_id;
       await exigirPuedeCerrar(u, [{ reviewer_id: revisorFinal }], revisorFinal === previa.reviewer_id ? previa.revisor?.username : undefined);
@@ -174,6 +174,7 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
   }
 
   const esperado = texto(d.expected_updated_at);
+  let siguientes: SiguienteCreada[] = [];
   const tarea = await db.$transaction(async (tx) => {
     // Bloquea la fila: entre leer la version y escribir nadie mas la toca.
     const filas = await tx.$queryRaw<Array<{ updated_at: Date | null }>>`SELECT updated_at FROM tasks WHERE id = ${id} FOR UPDATE`;
@@ -186,6 +187,8 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
     if (reasignada) await avisarAsignacion("task_reassigned", reasignada, t, u.id, tx);
     if (cambiaEstado) await avisarCambioDeEstado(t, u.id, tx);
     if (cambiaEstado && esEstadoDeRevision(t.status)) await avisarRevision(t, u.id, tx);
+    // Cerrar una tarea de una serie crea la siguiente, en la misma transaccion.
+    if (cierra) siguientes = await crearSiguientes(tx, [t.id], u.id, new Date());
     return t;
   }).catch(async (e) => {
     if (e instanceof ConflictoTarea) throw new ErrorApi(409, MENSAJE_CONFLICTO, { tarea: (await aDTOs([e.tarea], u.id))[0] });
@@ -193,7 +196,13 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
   });
 
   await registrarActividad(u.id, "task_update", `Tarea actualizada: ${tarea.title} (id=${tarea.id})`, { tipo: "task", id: tarea.id });
-  return (await aDTOs([tarea], u.id))[0];
+  await registrarSiguientes(u.id, tarea.title, siguientes);
+  return { ...(await aDTOs([tarea], u.id))[0], siguiente: siguientes[0] ?? null };
+}
+
+/* Deja en la actividad la tarea que se creo al cerrar una de una serie. */
+async function registrarSiguientes(userId: number, titulo: string, creadas: SiguienteCreada[]) {
+  for (const c of creadas) await registrarActividad(userId, "task_create", `Siguiente de la serie creada al cerrar: ${titulo} (entrega ${c.entrega}, id=${c.id})`, { tipo: "task", id: c.id });
 }
 
 class ConflictoTarea extends Error {
@@ -279,6 +288,7 @@ export async function operacionMasiva(u: UsuarioActual, d: Record<string, unknow
   const reabren = estado && !finales.includes(estado) ? visibles.filter((t) => finales.includes(t.status)) : [];
   if (cierran.length) await exigirPuedeCerrar(u, cierran);
 
+  let siguientes: SiguienteCreada[] = [];
   await db.$transaction(async (tx) => {
     if (estado || prioridad) {
       await tx.tasks.updateMany({ where: { id: { in: encontradas } }, data: { ...(estado ? { status: estado } : {}), ...(prioridad ? { priority: prioridad } : {}), updated_at: ahora } });
@@ -292,6 +302,8 @@ export async function operacionMasiva(u: UsuarioActual, d: Record<string, unknow
     for (const [f, lista] of porFecha) {
       await tx.tasks.updateMany({ where: { id: { in: lista } }, data: { due_date: diaDb(f), updated_at: ahora } });
     }
+    // Las series de las que se cierran siguen con su siguiente tarea (con las fechas ya movidas).
+    siguientes = await crearSiguientes(tx, cierran.map((t) => t.id), u.id, ahora);
     // Flask no avisaba a los observadores en el cambio masivo; el formulario y el tablero si.
     if (estado) {
       const cambian = visibles.filter((t) => t.status !== estado);
@@ -311,7 +323,8 @@ export async function operacionMasiva(u: UsuarioActual, d: Record<string, unknow
     }
   });
   await registrarActividad(u.id, "task_bulk_update_user", `Actualización masiva (usuario) de ${encontradas.length} tarea(s). ids=[${encontradas.join(", ")}]`);
-  return { afectadas: encontradas.length };
+  await registrarSiguientes(u.id, "serie", siguientes);
+  return { afectadas: encontradas.length, siguientes: siguientes.length };
 }
 
 /* ─── Tablero: cambiar de columna y/o de sitio ─── */
@@ -336,6 +349,7 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
   const { posicion, otras } = colocar(columna, t.id, aId(d.anterior_id), aId(d.siguiente_id));
 
   let aviso = "";
+  let siguientes: SiguienteCreada[] = [];
   const finales = await estadosFinales();
   const movida = await db.$transaction(async (tx) => {
     if (cambiaEstado) {
@@ -363,6 +377,7 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
       }
       await avisarCambioDeEstado({ id: t.id, title: t.title, status: estado }, u.id, tx);
       if (esEstadoDeRevision(estado)) await avisarRevision({ id: t.id, title: t.title, reviewer_id: t.reviewer_id }, u.id, tx);
+      if (!previoFinal && nuevoFinal) siguientes = await crearSiguientes(tx, [t.id], u.id, new Date());
     } else {
       // UPDATE directo: reordenar no es editar y no toca updated_at.
       await tx.$executeRaw`UPDATE tasks SET board_position = ${posicion} WHERE id = ${t.id}`;
@@ -381,5 +396,6 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
   if (cambiaEstado) {
     await registrarActividad(u.id, "task_update", `Tarea movida en el tablero: ${t.title} (${t.status} → ${estado}) (id=${t.id})`, { tipo: "task", id: t.id });
   }
-  return { tarea: (await aDTOs([movida], u.id))[0], aviso };
+  await registrarSiguientes(u.id, t.title, siguientes);
+  return { tarea: (await aDTOs([movida], u.id))[0], aviso, siguiente: siguientes[0] ?? null };
 }

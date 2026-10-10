@@ -4,6 +4,7 @@ import { registrarActividad } from "@/lib/actividad";
 import { notificar } from "@/lib/notificaciones";
 import { estadosFinales, estadosValidos, prioridadesValidas } from "@/lib/catalogo";
 import { fechaDeIso } from "@/lib/reloj";
+import { crearSiguientes } from "@/lib/tareas/recurrencia";
 import { enteroONulo, idsDeLote, MAX_LOTE, SOLO_ADMIN } from "@/lib/admin/api";
 
 /* Edicion masiva (api_admin_tasks_bulk_update). Solo admin, como en Flask. */
@@ -45,6 +46,7 @@ export const POST = conUsuario(async (req, u) => {
   const finales = await estadosFinales();
   const reasignadas = asignado ? tareas.filter((t) => t.assignee_id !== asignado.id).length : 0;
 
+  let siguientes = 0;
   await db.$transaction(async (tx) => {
     const ahora = new Date();
     await tx.tasks.updateMany({ where: { id: { in: encontradas } }, data: { ...datos, updated_at: ahora } });
@@ -53,6 +55,8 @@ export const POST = conUsuario(async (req, u) => {
       const nuevoFinal = finales.includes(datos.status);
       const cruzan = tareas.filter((t) => finales.includes(t.status) !== nuevoFinal).map((t) => t.id);
       if (cruzan.length) await tx.tasks.updateMany({ where: { id: { in: cruzan } }, data: nuevoFinal ? { done_at: ahora, block_reason: null } : { done_at: null } });
+      // El administrador tambien cierra series: sus siguientes tareas se crean igual.
+      if (nuevoFinal && cruzan.length) siguientes = (await crearSiguientes(tx, cruzan, u.id, ahora)).length;
     }
     if (asignado && reasignadas) {
       await notificar(asignado.id, {
@@ -62,5 +66,5 @@ export const POST = conUsuario(async (req, u) => {
     }
   });
   await registrarActividad(u.id, "task_bulk_update", `Actualización masiva de ${encontradas.length} tarea(s). ids=${JSON.stringify(encontradas)}`, { tipo: "task_bulk", id: encontradas[0] });
-  return ok({ actualizadas: encontradas.length });
+  return ok({ actualizadas: encontradas.length, siguientes });
 }, SOLO_ADMIN);

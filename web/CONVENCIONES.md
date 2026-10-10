@@ -30,6 +30,13 @@ Producto y diseño: `../PRODUCT.md` (quién lo usa y qué no se puede romper) y 
 - Cada ruta de API usa `conUsuario(handler, { herramienta, soloAdmin })`. Los errores salen como `{ error: "mensaje en español" }` con el código HTTP correcto (400, 403, 404, 409).
 - Registro de actividad: `registrarActividad()` de `@/lib/actividad`, con los mismos `action` que Flask (`task_update`, `task_delete`…). Notificaciones: `notificar` / `notificarVarios` de `@/lib/notificaciones`. Nunca se avisa a quien hizo el cambio.
 
+## Recurrencia
+
+- Una serie nace con **una sola tarea**; la siguiente se crea **al cerrar** la anterior (`lib/tareas/recurrencia.ts`, llamado desde todos los caminos de cierre: formulario, tablero, edición masiva y lote de administración). Nunca se precalcula.
+- La fecha sale de la **entrega** de la que se cierra, no del día del cierre (`siguienteEntrega`): semanal = mismo día de la semana que la primera, la semana siguiente; mensual = mismo día del mes de la primera (si no existe, el último del mes corto y luego vuelve); diaria = siguiente día laborable.
+- Todas cuelgan de la primera (`parent_task_id`). No se crea si pasaría de la fecha de fin de la serie (`end_date` de la primera) ni si la serie ya tiene una tarea de esa fecha en adelante (series precalculadas antiguas; lo borrado no resucita). «Dejar de repetir» pone `is_recurrent = false` en la abierta.
+- Flask no crea la siguiente al cerrar: mientras convivan, cerrar desde Flask una serie creada aquí la deja sin continuación.
+
 ## Estudios
 
 - Un estudio es una tarea con `task_type = 'estudio'` (el contenedor); sus pasos son tareas **normales** hijas (`parent_task_id`) con `phase`. Solo existen en unidades con `areas.has_studies` (Admin → Organización).

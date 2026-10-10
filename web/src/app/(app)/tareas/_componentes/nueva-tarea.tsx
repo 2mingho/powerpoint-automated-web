@@ -7,7 +7,7 @@ import { useAvisos } from "@/components/ui/avisos";
 import { Boton } from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Selector } from "@/components/ui/campo";
 import { Dialogo } from "@/components/ui/dialogo";
-import { esFinDeSemana, generarFechasRecurrencia } from "@/lib/tareas/fechas";
+import { esFinDeSemana, siguienteEntrega } from "@/lib/tareas/fechas";
 import type { TareaDTO } from "@/lib/tareas/tipos";
 import { pedir } from "./cliente";
 import { useTareas } from "./estado";
@@ -50,7 +50,8 @@ export function NuevaTarea() {
     return () => window.removeEventListener(EVENTO_NUEVA_TAREA, abrir);
   }, []);
 
-  const serie = f.is_recurrent && f.recurrence_end && f.due_date ? generarFechasRecurrencia(f.due_date, f.recurrence_type, f.recurrence_end).length : 0;
+  // La siguiente se crea al cerrar esta: se dice para cuando saldria, con la misma regla del servidor.
+  const proxima = f.is_recurrent && f.due_date ? siguienteEntrega(f.recurrence_type, f.due_date, f.due_date) : null;
 
   const validar = () => {
     const e: Record<string, string> = {};
@@ -61,9 +62,7 @@ export function NuevaTarea() {
     if (f.reviewer_id && f.reviewer_id === f.assignee_id) e.reviewer_id = "No puede revisar quien hace la tarea.";
     if (f.is_recurrent) {
       if (esFinDeSemana(f.due_date)) e.due_date = "Una serie no puede empezar en sábado o domingo.";
-      if (!f.recurrence_end) e.recurrence_end = "Indica hasta cuándo se repite.";
-      else if (f.recurrence_end < f.due_date) e.recurrence_end = "Debe ser posterior a la primera entrega.";
-      else if (serie > 365) e.recurrence_end = `Generaría ${serie} tareas; el máximo es 365.`;
+      if (f.recurrence_end && f.recurrence_end < f.due_date) e.recurrence_end = "Debe ser posterior a la primera entrega.";
     }
     setErrores(e);
     return !Object.keys(e).length;
@@ -95,7 +94,7 @@ export function NuevaTarea() {
       <Dialogo abierto={abierto} onCerrar={() => setAbierto(false)} titulo="Nueva tarea" pie={
         <>
           <Boton variante="fantasma" onClick={() => setAbierto(false)}>Cancelar</Boton>
-          <Boton variante="primario" cargando={enviando} onClick={() => void crear()}>{f.is_recurrent && serie > 1 ? `Crear ${serie} tareas` : "Crear tarea"}</Boton>
+          <Boton variante="primario" cargando={enviando} onClick={() => void crear()}>Crear tarea</Boton>
         </>
       }>
         <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void crear(); }}>
@@ -153,7 +152,7 @@ export function NuevaTarea() {
             <div className="mt-3 flex flex-col gap-3">
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={f.is_recurrent} onChange={(e) => set("is_recurrent", e.target.checked)} className="size-4 accent-[var(--texto)]" />
-                Crear una serie (solo días laborables)
+                Repetir esta tarea: al cerrarla se crea la siguiente
               </label>
               {f.is_recurrent && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -164,9 +163,15 @@ export function NuevaTarea() {
                       </Selector>
                     )}
                   </Campo>
-                  <Campo etiqueta="Hasta" error={errores.recurrence_end} ayuda={serie ? `${serie} tarea${serie === 1 ? "" : "s"} en la serie.` : undefined}>
+                  <Campo etiqueta="Hasta (opcional)" error={errores.recurrence_end} ayuda={f.recurrence_end ? "No se crean tareas después de esta fecha." : "Sin fecha, se repite mientras la vayas cerrando."}>
                     {(a) => <Entrada {...a} type="date" value={f.recurrence_end} onChange={(e) => set("recurrence_end", e.target.value)} />}
                   </Campo>
+                  {proxima && (
+                    <p className="text-sm text-texto-2 sm:col-span-2" aria-live="polite">
+                      Al cerrar la primera, la siguiente sale para el <span className="font-mono cifras">{proxima}</span>
+                      {f.recurrence_type === "Semanal" ? ", el mismo día de la semana" : f.recurrence_type === "Mensual" ? ", el mismo día del mes" : ", el siguiente día laborable"}. Cuenta desde la fecha de entrega, no desde el día del cierre.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

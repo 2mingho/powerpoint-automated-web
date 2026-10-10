@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { interpretarAlta } from "./alta-rapida";
-import { desplazarDiasHabiles, generarFechasRecurrencia, parsearFechaCsv, parsearFechaEntrada, sumarDias } from "./fechas";
+import { desplazarDiasHabiles, generarFechasRecurrencia, siguienteEntrega, parsearFechaCsv, parsearFechaEntrada, sumarDias } from "./fechas";
 import { colocar, compararColumna, posicionEntre, hayHueco, posicionesRenumeradas, PASO_DE_POSICION } from "./posiciones";
 import { extraerFilasCsv, validarFilaCsv, decodificarCsv, escribirCsv, COLUMNAS_CSV, type PersonaCsv } from "./csv";
 
@@ -199,5 +199,52 @@ describe("CSV", () => {
 
   it("escribe con comillas solo cuando hace falta", () => {
     expect(escribirCsv([["a", "b,c", 'd"e']])).toBe('a,"b,c","d""e"\r\n');
+  });
+});
+
+describe("siguienteEntrega: la siguiente tarea de una serie", () => {
+  it("semanal: el mismo dia de la semana de la primera, desde la entrega y no desde el cierre", () => {
+    expect(siguienteEntrega("Semanal", "2026-10-05", "2026-10-05")).toBe("2026-10-12"); // lunes -> lunes
+    // Aunque la entrega se haya movido a martes, vuelve al dia de la primera.
+    expect(siguienteEntrega("Semanal", "2026-10-06", "2026-10-05")).toBe("2026-10-12");
+    // Una primera de miercoles se mantiene en miercoles.
+    expect(siguienteEntrega("Semanal", "2026-10-07", "2026-10-07")).toBe("2026-10-14");
+    expect(siguienteEntrega("Semanal", "2026-10-14", "2026-10-07")).toBe("2026-10-21");
+    // De viernes a viernes, tambien a traves del fin de ano.
+    expect(siguienteEntrega("Semanal", "2026-12-25", "2026-10-09")).toBe("2027-01-01");
+  });
+
+  it("mensual: el mismo dia del mes de la primera, el mes siguiente", () => {
+    expect(siguienteEntrega("Mensual", "2026-10-07", "2026-10-07")).toBe("2026-11-07");
+    expect(siguienteEntrega("Mensual", "2026-12-07", "2026-10-07")).toBe("2027-01-07");
+    // Cae en sabado y se respeta: es el dia 7.
+    expect(siguienteEntrega("Mensual", "2026-10-07", "2026-10-07")).toBe("2026-11-07");
+    expect(new Date("2026-11-07T12:00:00Z").getUTCDay()).toBe(6);
+  });
+
+  it("mensual con dia 31: cae en el ultimo del mes corto y despues vuelve al 31", () => {
+    expect(siguienteEntrega("Mensual", "2026-01-30", "2026-01-30")).toBe("2026-02-28");
+    expect(siguienteEntrega("Mensual", "2026-02-28", "2026-01-30")).toBe("2026-03-30");
+    expect(siguienteEntrega("Mensual", "2026-03-31", "2026-03-31")).toBe("2026-04-30");
+    expect(siguienteEntrega("Mensual", "2026-04-30", "2026-03-31")).toBe("2026-05-31");
+    expect(siguienteEntrega("Mensual", "2027-12-31", "2026-03-31")).toBe("2028-01-31");
+    expect(siguienteEntrega("Mensual", "2027-01-31", "2026-03-31")).toBe("2027-02-28");
+    expect(siguienteEntrega("Mensual", "2027-01-31", "2024-01-31")).toBe("2027-02-28");
+    expect(siguienteEntrega("Mensual", "2027-02-28", "2026-03-31")).toBe("2027-03-31");
+  });
+
+  it("mensual en febrero bisiesto", () => {
+    expect(siguienteEntrega("Mensual", "2028-01-31", "2028-01-31")).toBe("2028-02-29");
+  });
+
+  it("diaria: el siguiente dia laborable", () => {
+    expect(siguienteEntrega("Diaria", "2026-10-08", "2026-10-08")).toBe("2026-10-09"); // jueves -> viernes
+    expect(siguienteEntrega("Diaria", "2026-10-09", "2026-10-08")).toBe("2026-10-12"); // viernes -> lunes
+  });
+
+  it("un tipo desconocido se trata como semanal y una fecha invalida no da nada", () => {
+    expect(siguienteEntrega("Quincenal", "2026-10-05", "2026-10-05")).toBe("2026-10-12");
+    expect(siguienteEntrega("Semanal", "2026-02-31", "2026-10-05")).toBeNull();
+    expect(siguienteEntrega("Semanal", "2026-10-05", "")).toBeNull();
   });
 });
