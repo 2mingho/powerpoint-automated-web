@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { efectosDeEstado, esEstadoDeBloqueo, grupoDeEstado, leerHoras, puedeCambiarRevisor, puedeCerrar } from "./estado";
+import { efectosDeEstado, esEstadoDeBloqueo, esEstadoDeRevision, grupoDeEstado, leerHoras, puedeCambiarRevisor, puedeCerrar } from "./estado";
 
 const AHORA = new Date("2026-10-09T15:00:00Z");
 
@@ -75,5 +75,12 @@ describe("grupoDeEstado", () => {
   });
   it("final manda sobre el nombre", () => {
     expect(grupoDeEstado(e("Bloqueado y cerrado", false, true))).toBe("hecha");
+  });
+});
+
+describe("esEstadoDeRevision", () => {
+  it("reconoce el estado de revision por el nombre", () => {
+    for (const n of ["En Revisión", "En revision", "Revisión", "revisar"]) expect(esEstadoDeRevision(n), n).toBe(true);
+    for (const n of ["Pendiente", "En Progreso", "Completado", ""]) expect(esEstadoDeRevision(n), n).toBe(false);
   });
 });

@@ -16,6 +16,8 @@ import { alternar, pasaFiltros, SIN_FILTROS, type FiltrosCruzados } from "@/lib/
 import { PERIODOS, ROTULO_PERIODO, type Periodo } from "@/lib/seguimiento/periodo";
 import { riesgoDe } from "@/lib/seguimiento/riesgo";
 import { fechaCorta, relativo } from "../tareas/_componentes/cliente";
+import { ColumnaOrdenable, SelectorOrden } from "@/components/ui/orden";
+import { alternarOrden, ordenarPor, type Orden } from "@/lib/orden";
 import { GraficosPanel } from "./graficos-panel";
 import { BloqueIngresos } from "./ingresos-panel";
 import type { IngresosPanel } from "@/lib/panel/datos";
@@ -23,6 +25,15 @@ import type { IngresosPanel } from "@/lib/panel/datos";
 const PAGINA_INICIAL = 40;
 const PAGINA = 60;
 const numero = new Intl.NumberFormat("es-DO", { maximumFractionDigits: 1 });
+
+type ColDetalle = "entrega" | "tarea" | "persona" | "unidad" | "estado" | "horas";
+const COLUMNAS_DETALLE: { col: ColDetalle; etiqueta: string }[] = [
+  { col: "entrega", etiqueta: "Entrega" }, { col: "tarea", etiqueta: "Tarea" }, { col: "persona", etiqueta: "Persona" },
+  { col: "unidad", etiqueta: "Unidad" }, { col: "estado", etiqueta: "Estado" }, { col: "horas", etiqueta: "Horas" },
+];
+const CLAVE_DETALLE: Record<ColDetalle, (t: FilaPanel) => string | number | null> = {
+  entrega: (t) => t.entrega, tarea: (t) => t.titulo, persona: (t) => t.personaNombre, unidad: (t) => t.unidad, estado: (t) => t.estadoNombre, horas: (t) => t.horas,
+};
 
 type Seleccion = "unidad" | "cliente" | "persona" | "tipo" | "contrato" | "estado" | "semana";
 
@@ -57,6 +68,7 @@ export function PanelInicio({
   const [filtros, setFiltros] = useState<FiltrosCruzados>(SIN_FILTROS);
   const [metrica, setMetrica] = useState<Metrica>("n");
   const [limite, setLimite] = useState(PAGINA_INICIAL);
+  const [orden, setOrden] = useState<Orden<ColDetalle> | null>(null);
 
   const tono = useMemo(() => new Map(estados.map((e) => [e.nombre, e.tono as Tono])), [estados]);
   const cifras = useMemo(() => resumen(filas, filtros, hoy, metrica), [filas, filtros, hoy, metrica]);
@@ -67,13 +79,16 @@ export function PanelInicio({
     tipo: opcionesDe(filas, filtros, hoy, "tipo"),
     contrato: opcionesDe(filas, filtros, hoy, "contrato"),
   }), [filas, filtros, hoy]);
-  /* Lo urgente primero: lo abierto por entrega ascendente y, al final, lo cerrado por entrega descendente. */
   const detalle = useMemo(() => filas.filter((t) => pasaFiltros(t, filtros, hoy)).sort((a, b) => {
     const cerradaA = a.estado === "hecha", cerradaB = b.estado === "hecha";
     if (cerradaA !== cerradaB) return cerradaA ? 1 : -1;
     const x = a.entrega ?? "9999", y = b.entrega ?? "9999";
     return x === y ? a.id - b.id : cerradaA ? (x < y ? 1 : -1) : x < y ? -1 : 1;
   }), [filas, filtros, hoy]);
+  // Con una columna elegida manda ella; los empates siguen en el orden "lo urgente primero".
+  const ordenado = useMemo(() => (orden ? ordenarPor(detalle, CLAVE_DETALLE[orden.col], orden.dir) : detalle), [detalle, orden]);
+  const alOrdenar = (col: ColDetalle) => { setOrden((o) => alternarOrden(o, col, col === "horas" ? "desc" : "asc")); setLimite(PAGINA_INICIAL); };
+  /* Lo urgente primero: lo abierto por entrega ascendente y, al final, lo cerrado por entrega descendente. */
 
   const cambiar = (f: FiltrosCruzados) => { setFiltros(f); setLimite(PAGINA_INICIAL); };
   const poner = (dim: Seleccion, valor: string) => cambiar({ ...filtros, [dim]: valor });
@@ -201,16 +216,13 @@ export function PanelInicio({
           </Vacio>
         ) : (
           <>
+            <SelectorOrden className="border-b border-hilo px-4 py-2 md:hidden" opciones={COLUMNAS_DETALLE} orden={orden} vacio="Lo urgente primero"
+              onCambiar={(o) => { setOrden(o); setLimite(PAGINA_INICIAL); }} />
             <div role="table" aria-label="Tareas que cumplen los filtros">
               <div role="row" className="hidden h-9 items-center gap-3 border-b border-hilo px-4 md:grid md:grid-cols-[88px_minmax(0,1fr)_130px_130px_130px_64px]">
-                <span role="columnheader" className="rotulo">Entrega</span>
-                <span role="columnheader" className="rotulo">Tarea</span>
-                <span role="columnheader" className="rotulo">Persona</span>
-                <span role="columnheader" className="rotulo">Unidad</span>
-                <span role="columnheader" className="rotulo">Estado</span>
-                <span role="columnheader" className="rotulo text-right">Horas</span>
+                {COLUMNAS_DETALLE.map((c) => <ColumnaOrdenable key={c.col} etiqueta={c.etiqueta} col={c.col} orden={orden} onOrden={alOrdenar} alinear={c.col === "horas" ? "derecha" : undefined} />)}
               </div>
-              {detalle.slice(0, limite).map((t) => <FilaDetalle key={t.id} t={t} hoy={hoy} tono={tono.get(t.estadoNombre) ?? "neutro"} />)}
+              {ordenado.slice(0, limite).map((t) => <FilaDetalle key={t.id} t={t} hoy={hoy} tono={tono.get(t.estadoNombre) ?? "neutro"} />)}
             </div>
             {detalle.length > limite && (
               <div className="flex justify-center border-t border-hilo p-3">

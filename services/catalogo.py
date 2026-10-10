@@ -14,6 +14,8 @@ es leer dos tablas: es que el resto del codigo deje de razonar con nombres.
 como abierta, si esta vencida y si entra en la carga de alguien. Mientras el
 codigo compare contra el texto, renombrarlo rompe todo eso en silencio.
 """
+from datetime import datetime
+
 from flask import g, has_request_context
 
 from extensions import db
@@ -91,6 +93,24 @@ def estados_finales():
 
 def es_estado_final(nombre):
     return nombre in estados_finales()
+
+
+def aplicar_estado(task, nuevo):
+    """Cambia el estado de una tarea y mantiene sus marcas de cierre, igual que la app web.
+
+    Cerrar fija done_at (la fecha real de cierre, base de la puntualidad) y borra
+    el motivo de bloqueo; reabrir quita done_at. Moverse entre estados abiertos, o
+    entre cerrados, no toca nada: no se pierde la fecha de cierre.
+    """
+    finales = estados_finales()
+    previo_final = task.status in finales
+    nuevo_final = nuevo in finales
+    task.status = nuevo
+    if not previo_final and nuevo_final:
+        task.done_at = datetime.utcnow()
+        task.block_reason = None
+    elif previo_final and not nuevo_final:
+        task.done_at = None
 
 
 def estado_inicial():

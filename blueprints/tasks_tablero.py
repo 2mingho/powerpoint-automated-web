@@ -27,7 +27,7 @@ from models import Task, TaskTag, TaskDependency, task_tag_links
 from services.alcance import ambito_unidades
 from services.clock import today_local
 from services.catalogo import (estados, estados_validos, estados_finales,
-                               prioridades_validas, es_estado_final)
+                               prioridades_validas, es_estado_final, aplicar_estado)
 from services.tablero import (etiquetas_visibles, puede_gestionar_etiqueta,
                               extras_de_tablero, crearia_ciclo, bloqueadoras_abiertas,
                               posicion_entre, hay_hueco, posiciones_renumeradas)
@@ -249,7 +249,7 @@ def api_mover(task_id):
     aviso = ''
     if cambia_estado:
         previo = task.status
-        task.status = estado
+        aplicar_estado(task, estado)
         task.board_position = posicion
         if es_estado_final(estado):
             pendientes = bloqueadoras_abiertas(task.id)

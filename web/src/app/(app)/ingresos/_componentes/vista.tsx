@@ -20,7 +20,17 @@ import type { ContratoDTO } from "@/lib/finanzas/servicio";
 import { Acumulado, BarraMeta, ColumnasMes, LeyendaUnidades, TablaMensual } from "./graficos";
 import { FormularioContrato } from "./contrato-form";
 import { MetaEditable } from "./meta-editable";
+import { SelectorOrden } from "@/components/ui/orden";
+import { ordenarPor, type Orden } from "@/lib/orden";
 
+type ColContrato = "cliente" | "unidad" | "tipo" | "inicio" | "monto" | "anio";
+const ORDEN_CONTRATOS: { col: ColContrato; etiqueta: string }[] = [
+  { col: "cliente", etiqueta: "Cliente" }, { col: "unidad", etiqueta: "Unidad" }, { col: "tipo", etiqueta: "Tipo" },
+  { col: "inicio", etiqueta: "Inicio" }, { col: "monto", etiqueta: "Monto" }, { col: "anio", etiqueta: "Aporte del año" },
+];
+const CLAVE_CONTRATO: Record<ColContrato, (c: ContratoDTO) => string | number> = {
+  cliente: (c) => c.cliente.nombre, unidad: (c) => c.unidad.nombre, tipo: (c) => c.tipo, inicio: (c) => c.inicio, monto: (c) => c.monto, anio: (c) => c.anio?.total ?? 0,
+};
 const pct = (n: number) => `${(n * 100).toFixed(n >= 1 ? 0 : 1)}%`;
 const fecha = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
@@ -38,6 +48,7 @@ export function VistaIngresos({ datos }: { datos: DatosIngresos }) {
   const [formulario, setFormulario] = useState<{ contrato: ContratoDTO | null } | null>(null);
   const [borrando, setBorrando] = useState<ContratoDTO | null>(null);
   const [trabajando, setTrabajando] = useState(false);
+  const [orden, setOrden] = useState<Orden<ColContrato> | null>(null);
   const { anio, hoy } = datos;
 
   const contratos: ContratoIng[] = useMemo(() => datos.contratos.map((c) => ({
@@ -59,7 +70,8 @@ export function VistaIngresos({ datos }: { datos: DatosIngresos }) {
   const tabla = useMemo(() => tablaMensual(r.filas, por, porContrato), [r.filas, por, porContrato]);
   const dtoPorId = useMemo(() => new Map(datos.contratos.map((c) => [c.id, c])), [datos.contratos]);
   const visibles = useMemo(() => new Set(filtrarContratos(contratos, filtro).map((c) => c.id)), [contratos, filtro]);
-  const lista = datos.contratos.filter((c) => visibles.has(c.id));
+  const filtrada = datos.contratos.filter((c) => visibles.has(c.id));
+  const lista = useMemo(() => (orden ? ordenarPor(filtrada, CLAVE_CONTRATO[orden.col], orden.dir) : filtrada), [filtrada, orden]);
   const puedeCrear = datos.puedeCrearEn.length > 0;
   const hayFiltros = !!(filtro.unidadId || filtro.clienteId || filtro.tipo);
 
@@ -250,6 +262,7 @@ export function VistaIngresos({ datos }: { datos: DatosIngresos }) {
           </Panel>
 
           <Panel titulo="Contratos" acciones={<span className="font-mono text-sm text-texto-2 cifras">{lista.length}</span>}>
+            {lista.length > 1 && <SelectorOrden className="border-b border-hilo px-4 py-2" opciones={ORDEN_CONTRATOS} orden={orden} onCambiar={setOrden} vacio="Más recientes primero" />}
             {!lista.length ? <Vacio titulo="Ningún contrato con estos filtros" accion={<Boton onClick={() => setFiltro(SIN_FILTRO_ING)}>Quitar todos los filtros</Boton>} /> : (
               <ul>
                 {lista.map((c) => (

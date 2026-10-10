@@ -68,6 +68,11 @@ export function puedeCambiarRevisor(revisorActual: number | null, quienId: numbe
   return revisorActual == null || revisorActual === quienId || esLider;
 }
 
+/* "En revisión", "Revisión": como el bloqueo, el catalogo es editable y se reconoce por el nombre. */
+export function esEstadoDeRevision(nombre: string): boolean {
+  return /revis/i.test(nombre);
+}
+
 /*
  * En cual de los cinco grupos de seguimiento cae un estado del catalogo (que es
  * editable). Final = hecha; inicial = pendiente; el nombre decide bloqueo y
@@ -76,7 +81,7 @@ export function puedeCambiarRevisor(revisorActual: number | null, quienId: numbe
 export function grupoDeEstado(e: { nombre: string; esInicial: boolean; esFinal: boolean }): "pendiente" | "en_curso" | "bloqueada" | "revision" | "hecha" {
   if (e.esFinal) return "hecha";
   if (esEstadoDeBloqueo(e.nombre)) return "bloqueada";
-  if (/revis/i.test(e.nombre)) return "revision";
+  if (esEstadoDeRevision(e.nombre)) return "revision";
   if (e.esInicial) return "pendiente";
   return "en_curso";
 }

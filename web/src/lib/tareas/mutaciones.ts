@@ -8,10 +8,11 @@ import type { UsuarioActual } from "@/lib/auth/session";
 import { filtroTareasVisibles, puedeAsignarA } from "@/lib/tareas/alcance";
 import { notificarVarios } from "@/lib/notificaciones";
 import { aDTOs, areaDe, descripcion, diaDb, enlaceTarea, filtroVisiblesYObservadas, INCLUIR_TAREA, MAX_FILAS, tareaEditable, texto, type TareaFila } from "./base";
-import { avisarAsignacion, avisarCambioDeEstado } from "./avisos";
+import { avisarAsignacion, avisarCambioDeEstado, avisarRevision } from "./avisos";
 import { esFinDeSemana, generarFechasRecurrencia, parsearFechaEntrada, TIPOS_RECURRENCIA } from "./fechas";
 import { colocar, compararColumna } from "./posiciones";
 import { resolverCliente } from "@/lib/clientes/resolver";
+import { esEstadoDeRevision } from "@/lib/seguimiento/estado";
 import { camposDeSeguimiento, efectosDeCambio, exigirPuedeCerrar } from "./seguimiento";
 
 /*
@@ -184,6 +185,7 @@ export async function actualizarTarea(u: UsuarioActual, id: number, d: Record<st
     const t = await tx.tasks.update({ where: { id }, data: datos, include: INCLUIR_TAREA });
     if (reasignada) await avisarAsignacion("task_reassigned", reasignada, t, u.id, tx);
     if (cambiaEstado) await avisarCambioDeEstado(t, u.id, tx);
+    if (cambiaEstado && esEstadoDeRevision(t.status)) await avisarRevision(t, u.id, tx);
     return t;
   }).catch(async (e) => {
     if (e instanceof ConflictoTarea) throw new ErrorApi(409, MENSAJE_CONFLICTO, { tarea: (await aDTOs([e.tarea], u.id))[0] });
@@ -293,6 +295,12 @@ export async function operacionMasiva(u: UsuarioActual, d: Record<string, unknow
     // Flask no avisaba a los observadores en el cambio masivo; el formulario y el tablero si.
     if (estado) {
       const cambian = visibles.filter((t) => t.status !== estado);
+      // Cada tarea que llega a revision avisa a su revisor.
+      if (esEstadoDeRevision(estado) && cambian.length) {
+        for (const r of await tx.tasks.findMany({ where: { id: { in: cambian.map((t) => t.id) }, reviewer_id: { not: null } }, select: { id: true, title: true, reviewer_id: true } })) {
+          await avisarRevision(r, u.id, tx);
+        }
+      }
       const obs = await tx.task_watchers.findMany({ where: { task_id: { in: cambian.map((t) => t.id) } }, select: { task_id: true, user_id: true } });
       for (const t of cambian) {
         await notificarVarios(obs.filter((o) => o.task_id === t.id).map((o) => o.user_id), {
@@ -354,6 +362,7 @@ export async function moverTarea(u: UsuarioActual, id: number, d: Record<string,
         }
       }
       await avisarCambioDeEstado({ id: t.id, title: t.title, status: estado }, u.id, tx);
+      if (esEstadoDeRevision(estado)) await avisarRevision({ id: t.id, title: t.title, reviewer_id: t.reviewer_id }, u.id, tx);
     } else {
       // UPDATE directo: reordenar no es editar y no toca updated_at.
       await tx.$executeRaw`UPDATE tasks SET board_position = ${posicion} WHERE id = ${t.id}`;

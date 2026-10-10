@@ -16,7 +16,7 @@ from services.clock import today_local, current_year
 from services.alcance import alcance_unidades, ambito_unidades, puede_ver_equipo
 from services.catalogo import (estados_validos, prioridades_validas,
                                estado_inicial, prioridad_por_defecto,
-                               estados_finales, es_estado_final)
+                               estados_finales, es_estado_final, aplicar_estado)
 from services.tablero import extras_de_tablero
 
 tasks_bp = Blueprint('tasks', __name__)
@@ -1858,7 +1858,7 @@ def api_tasks_bulk_update():
 
     for task in tasks:
         if updates_status:
-            task.status = updates_status
+            aplicar_estado(task, updates_status)
         if updates_priority:
             task.priority = updates_priority
         if due_date_map:
@@ -1968,7 +1968,7 @@ def api_tasks_update(task_id):
     status_changed = False
     if 'status' in data and data['status'] in estados_validos():
         status_changed = task.status != data['status']
-        task.status = data['status']
+        aplicar_estado(task, data['status'])
     if 'priority' in data:
         if data['priority'] not in prioridades_validas():
             return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
@@ -2855,7 +2855,7 @@ def api_admin_tasks_bulk_update():
 
     for task in tasks:
         if 'status' in updates:
-            task.status = updates['status']
+            aplicar_estado(task, updates['status'])
         if 'priority' in updates:
             task.priority = updates['priority']
         if assignee:

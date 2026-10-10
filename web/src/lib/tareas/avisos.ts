@@ -27,6 +27,18 @@ export async function avisarCambioDeEstado(t: { id: number; title: string; statu
   }, cliente);
 }
 
+/* A quien revisa, cuando una tarea suya pasa a revision: es su turno de aprobarla o devolverla. */
+export async function avisarRevision(t: { id: number; title: string; reviewer_id: number | null }, actorId: number, cliente: Cliente = db) {
+  if (!t.reviewer_id) return;
+  await notificar(t.reviewer_id, {
+    tipo: "task_review",
+    titulo: `Lista para tu revisión: ${t.title}`,
+    enlace: enlaceTarea(t.id),
+    entidad: { tipo: "task", id: t.id },
+    actorId,
+  }, cliente);
+}
+
 export async function avisarAsignacion(tipo: "task_assigned" | "task_reassigned", asignadoId: number, t: { id: number; title: string }, actorId: number, cliente: Cliente = db) {
   await notificar(asignadoId, {
     tipo,

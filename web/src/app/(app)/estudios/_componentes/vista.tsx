@@ -18,12 +18,30 @@ import { usd, usdS } from "@/lib/finanzas/contratos";
 import type { EstadoCatalogo, PersonaDTO } from "@/lib/tareas/tipos";
 import { tonoEstado } from "../../tareas/_componentes/cliente";
 import { FormularioEstudio } from "./formulario";
+import { ColumnaOrdenable, SelectorOrden } from "@/components/ui/orden";
+import { alternarOrden, ordenarPor, type Orden } from "@/lib/orden";
+import { FASES } from "@/lib/estudios/plan";
 
 const ESTADOS: { valor: FiltroEstudios["estado"]; rotulo: string }[] = [
   { valor: "abiertos", rotulo: "Abiertos" },
   { valor: "cerrados", rotulo: "Cerrados" },
   { valor: "todos", rotulo: "Todos" },
 ];
+
+type Col = "estudio" | "responsable" | "avance" | "fase" | "siguiente" | "contrato";
+const COLUMNAS: { col: Col; etiqueta: string }[] = [
+  { col: "estudio", etiqueta: "Estudio" }, { col: "responsable", etiqueta: "Tipo · Responsable" }, { col: "avance", etiqueta: "Avance" },
+  { col: "fase", etiqueta: "Fase" }, { col: "siguiente", etiqueta: "Siguiente entrega" }, { col: "contrato", etiqueta: "Contrato" },
+];
+const CLAVE: Record<Col, (e: EstudioDTO) => string | number | null> = {
+  estudio: (e) => e.titulo,
+  responsable: (e) => e.responsable,
+  avance: (e) => e.avance,
+  // Por el orden de las fases; uno completo va al final de las fases.
+  fase: (e) => (e.faseActual ? FASES.indexOf(e.faseActual as (typeof FASES)[number]) : FASES.length),
+  siguiente: (e) => e.siguiente?.entrega ?? null,
+  contrato: (e) => (e.contrato.visible ? e.contrato.monto : null),
+};
 
 const sinTildes = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
@@ -45,6 +63,7 @@ export function VistaEstudios({ estudios, puedeCrear, estado, abierto, estados, 
   const [formulario, setFormulario] = useState<{ estudio: EstudioDTO | null } | null>(null);
   const [borrando, setBorrando] = useState<EstudioDTO | null>(null);
   const [trabajando, setTrabajando] = useState(false);
+  const [orden, setOrden] = useState<Orden<Col> | null>(null);
   const enfocado = useRef<HTMLLIElement | null>(null);
 
   // Llegar con ?estudio=ID (desde un aviso o desde el pase) lo abre y lo trae a la vista.
@@ -52,8 +71,10 @@ export function VistaEstudios({ estudios, puedeCrear, estado, abierto, estados, 
 
   const visibles = useMemo(() => {
     const q = sinTildes(busqueda.trim());
-    return q ? estudios.filter((e) => sinTildes(`${e.titulo} ${e.cliente} ${e.responsable}`).includes(q)) : estudios;
-  }, [estudios, busqueda]);
+    const filtrados = q ? estudios.filter((e) => sinTildes(`${e.titulo} ${e.cliente} ${e.responsable}`).includes(q)) : estudios;
+    return orden ? ordenarPor(filtrados, CLAVE[orden.col], orden.dir) : filtrados;
+  }, [estudios, busqueda, orden]);
+  const alOrdenar = (col: Col) => setOrden((o) => alternarOrden(o, col, col === "avance" || col === "contrato" ? "desc" : "asc"));
 
   const alternar = (id: number) => setDesplegado((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const tonoDe = (n: string) => tonoEstado(estados, n);
@@ -105,9 +126,10 @@ export function VistaEstudios({ estudios, puedeCrear, estado, abierto, estados, 
         </Panel>
       ) : (
         <div className="overflow-clip rounded-md border border-hilo bg-superficie shadow-1">
-          <div role="row" className="hidden h-9 items-center gap-4 border-b border-hilo px-4 lg:grid lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)_150px_minmax(0,0.9fr)_minmax(0,1fr)_110px]" aria-hidden>
-            <span className="rotulo">Estudio</span><span className="rotulo">Tipo · Responsable</span><span className="rotulo">Avance</span><span className="rotulo">Fase</span><span className="rotulo">Siguiente entrega</span><span className="rotulo text-right">Contrato</span>
+          <div role="row" className="hidden h-9 items-center gap-4 border-b border-hilo px-4 lg:grid lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)_150px_minmax(0,0.9fr)_minmax(0,1fr)_110px]">
+            {COLUMNAS.map((c) => <ColumnaOrdenable key={c.col} etiqueta={c.etiqueta} col={c.col} orden={orden} onOrden={alOrdenar} alinear={c.col === "contrato" ? "derecha" : undefined} />)}
           </div>
+          <SelectorOrden className="border-b border-hilo px-4 py-2 lg:hidden" opciones={COLUMNAS} orden={orden} onCambiar={setOrden} vacio="Por entrega final" />
           <ul>
             {visibles.map((s) => {
               const abiertoAhora = desplegado.has(s.id);
