@@ -12,16 +12,17 @@ import { Panel, Vacio } from "@/components/ui/panel";
 import { NombreCliente } from "@/components/clientes/ficha";
 import { opcionesDe, resumen } from "@/lib/panel/agregados";
 import { GRUPOS_ESTADO, type EstadoPanel, type FilaPanel, type Metrica } from "@/lib/panel/tipos";
-import { pasaFiltros, SIN_FILTROS, type FiltrosCruzados } from "@/lib/seguimiento/filtros";
+import { alternar, pasaFiltros, SIN_FILTROS, type FiltrosCruzados } from "@/lib/seguimiento/filtros";
 import { PERIODOS, ROTULO_PERIODO, type Periodo } from "@/lib/seguimiento/periodo";
 import { riesgoDe } from "@/lib/seguimiento/riesgo";
 import { fechaCorta, relativo } from "../tareas/_componentes/cliente";
+import { GraficosPanel } from "./graficos-panel";
 
 const PAGINA_INICIAL = 40;
 const PAGINA = 60;
 const numero = new Intl.NumberFormat("es-DO", { maximumFractionDigits: 1 });
 
-type Seleccion = "unidad" | "cliente" | "persona" | "tipo" | "estado";
+type Seleccion = "unidad" | "cliente" | "persona" | "tipo" | "estado" | "semana";
 
 const ROTULO_ESTADO: Record<string, string> = {
   ...Object.fromEntries(GRUPOS_ESTADO.map((g) => [g.valor, g.rotulo])),
@@ -73,6 +74,8 @@ export function PanelInicio({
   const cambiar = (f: FiltrosCruzados) => { setFiltros(f); setLimite(PAGINA_INICIAL); };
   const poner = (dim: Seleccion, valor: string) => cambiar({ ...filtros, [dim]: valor });
   const alternarEstado = (valor: string) => poner("estado", filtros.estado === valor ? "" : valor);
+  /* Un clic en un grafico pone el valor y otro igual lo quita. */
+  const elegir = (dim: Seleccion, valor: string) => cambiar(alternar(filtros, dim, valor));
 
   /* El periodo vive en la URL: cambiarlo pide otras filas al servidor. */
   const ir = (p: Periodo, d = desde, h = hasta) => {
@@ -88,6 +91,7 @@ export function PanelInicio({
   if (filtros.cliente) activos.push({ dim: "cliente", rotulo: "Cliente", texto: nombreDe("cliente") });
   if (filtros.persona) activos.push({ dim: "persona", rotulo: "Persona", texto: nombreDe("persona") });
   if (filtros.tipo) activos.push({ dim: "tipo", rotulo: "Tipo de cliente", texto: nombreDe("tipo") });
+  if (filtros.semana) activos.push({ dim: "semana", rotulo: "Semana", texto: `del ${fechaCorta(filtros.semana)}` });
   if (filtros.estado) activos.push({ dim: "estado", rotulo: "Estado", texto: ROTULO_ESTADO[filtros.estado] ?? filtros.estado });
 
   const enHoras = metrica === "h";
@@ -169,6 +173,8 @@ export function PanelInicio({
             detalle={cifras.aTiempo == null ? "sin cierres en 30 días" : "cierres de 30 días"} />
         </div>
       </div>
+
+      {filas.length > 0 && <GraficosPanel filas={filas} filtros={filtros} hoy={hoy} metrica={metrica} elegir={elegir} />}
 
       {truncado && (
         <p role="status" className="rounded-sm border border-aviso/40 bg-aviso/10 px-3 py-2 text-sm">

@@ -242,3 +242,116 @@ test.describe("el panel en pantalla", () => {
     await expect(page.getByText("Sin tareas con entrega en este periodo")).toBeVisible();
   });
 });
+
+test.describe("graficos que filtran", () => {
+  const barra = (page: Page, lista: string, nombre: string | RegExp) => page.getByRole("list", { name: lista, exact: true }).getByRole("button", { name: nombre });
+
+  test("estado por cliente: pulsar una barra filtra, atenua a las demas y otro clic lo quita", async ({ context, page }) => {
+    const { e, cliente, tarea } = await conClientes("pan-g-cliente");
+    const a = await cliente("Altice");
+    const b = await cliente("Arajet");
+    await tarea("A1", a, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 2));
+    await tarea("A2", a, e.alfa, e.empleado, "En Progreso", sumarDias(HOY, 3));
+    await tarea("B1", b, e.alfa, e.companero, "Pendiente", sumarDias(HOY, 4));
+    await abrir(page, context, e.empleado);
+
+    const barraA = barra(page, "Estado por cliente", new RegExp(`^${a.nombre}: 2`));
+    const barraB = barra(page, "Estado por cliente", new RegExp(`^${b.nombre}: 1`));
+    await expect(barraA).toBeVisible();
+    await barraA.click();
+    await expect(barraA).toHaveAttribute("aria-pressed", "true");
+    await expect(filas(page)).toHaveCount(2);
+    await expect(page.getByRole("list", { name: "Filtros activos" })).toContainText(a.nombre);
+    // El grafico no se filtra a si mismo: la otra barra sigue ahi, atenuada.
+    await expect(barraB).toBeVisible();
+    await expect(barraB).toHaveAttribute("aria-pressed", "false");
+    // Y los demas graficos si cambian: la carga por persona se reduce a quien tiene tareas de A.
+    await expect(page.getByRole("list", { name: "Estado por persona" }).getByRole("button")).toHaveCount(1);
+
+    await barraA.click();
+    await expect(filas(page)).toHaveCount(3);
+    await expect(page.getByRole("list", { name: "Estado por persona" }).getByRole("button")).toHaveCount(2);
+  });
+
+  test("la leyenda filtra por estado y la carga por persona solo cuenta lo abierto", async ({ context, page }) => {
+    const { e, cliente, tarea } = await conClientes("pan-g-estado");
+    const c = await cliente("Claro");
+    await tarea("Abierta", c, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 2));
+    await tarea("Bloqueada", c, e.alfa, e.empleado, "Bloqueado", sumarDias(HOY, 3));
+    await tarea("Cerrada", c, e.alfa, e.companero, "Completado", sumarDias(HOY, 1), undefined, 0);
+    await abrir(page, context, e.empleado);
+
+    const personas = page.getByRole("list", { name: "Estado por persona" });
+    await expect(personas.getByRole("button")).toHaveCount(1); // la persona con solo lo cerrado no sale
+    await expect(page.getByRole("heading", { name: "Carga por persona" })).toBeVisible();
+
+    await page.getByRole("list", { name: "Leyenda y filtro de estados" }).getByRole("button", { name: "Bloqueada" }).click();
+    await expect(filas(page)).toHaveCount(1);
+    await expect(tabla(page).getByText("Bloqueada", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tareas por persona" })).toBeVisible();
+  });
+
+  test("entregas por semana: pulsar una semana deja solo sus entregas", async ({ context, page }) => {
+    const { e, cliente, tarea } = await conClientes("pan-g-semana");
+    const c = await cliente("Tigo");
+    await tarea("Esta semana", c, e.alfa, e.empleado, "Pendiente", HOY);
+    await tarea("En tres semanas", c, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 21));
+    await abrir(page, context, e.empleado);
+
+    const semanas = page.getByRole("list", { name: "Entregas por semana", exact: true }).getByRole("button");
+    await expect(semanas).toHaveCount(4); // las dos vacias del medio tambien se dibujan
+    await semanas.last().click();
+    await expect(filas(page)).toHaveCount(1);
+    await expect(tabla(page).getByText("En tres semanas")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Filtros activos" })).toContainText("Semana");
+    await semanas.last().click();
+    await expect(filas(page)).toHaveCount(2);
+  });
+
+  test("donas: tipo de cliente y unidad filtran desde su leyenda", async ({ context, page }) => {
+    const { e, cliente, tarea } = await conClientes("pan-g-dona");
+    const a = await cliente("Altice", "Corporativo");
+    const b = await cliente("Arajet", "Aerolinea");
+    await tarea("Corp 1", a, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 2));
+    await tarea("Corp 2", a, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 3));
+    await tarea("Aero 1", b, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 4));
+    await abrir(page, context, e.empleado);
+
+    const tipos = page.getByRole("list", { name: "Por tipo de cliente", exact: true });
+    await expect(tipos.getByRole("button")).toHaveCount(2);
+    await tipos.getByRole("button", { name: /^Aerolinea/ }).click();
+    await expect(filas(page)).toHaveCount(1);
+    await expect(tabla(page).getByText("Aero 1")).toBeVisible();
+    await expect(tipos.getByRole("button")).toHaveCount(2); // sigue entera
+    await tipos.getByRole("button", { name: /^Aerolinea/ }).click();
+    await expect(filas(page)).toHaveCount(3);
+
+    const unidades = page.getByRole("list", { name: "Por unidad", exact: true });
+    await expect(unidades.getByRole("button")).toHaveCount(1);
+  });
+
+  test("las barras siguen la metrica: en horas suman horas", async ({ context, page }) => {
+    const { e, cliente, tarea } = await conClientes("pan-g-horas");
+    const c = await cliente("Viva");
+    await tarea("H1", c, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 2), 10);
+    await tarea("H2", c, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 3), 2.5);
+    await abrir(page, context, e.empleado);
+    await expect(barra(page, "Estado por cliente", new RegExp(`^${c.nombre}: 2 tareas`))).toBeVisible();
+    await page.getByRole("group", { name: "Qué se cuenta" }).getByRole("button", { name: "Horas" }).click();
+    await expect(barra(page, "Estado por cliente", new RegExp(`^${c.nombre}: 12[.,]5 h`))).toBeVisible();
+  });
+
+  test("los graficos no muestran nada de otras unidades", async ({ context, page }, info) => {
+    test.skip(info.project.name !== "escritorio", "Una vez, en escritorio.");
+    const { e, cliente, tarea } = await conClientes("pan-g-alcance");
+    const propio = await cliente("Propio");
+    const ajeno = await cliente("Ajeno");
+    await tarea("Mia", propio, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 2));
+    await tarea("De Beta", ajeno, e.beta, e.ajeno, "Pendiente", sumarDias(HOY, 2));
+    await abrir(page, context, e.empleado);
+    await expect(barra(page, "Estado por cliente", new RegExp(`^${propio.nombre}`))).toBeVisible();
+    await expect(barra(page, "Estado por cliente", new RegExp(`^${ajeno.nombre}`))).toHaveCount(0);
+    await expect(page.getByRole("list", { name: "Estado por persona" })).not.toContainText("ajeno.");
+    await expect(page.getByRole("list", { name: "Por unidad", exact: true })).not.toContainText(`Beta ${e.sufijo}`);
+  });
+});
