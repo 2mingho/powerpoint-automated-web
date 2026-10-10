@@ -29,14 +29,17 @@ from blueprints.auth import auth
 from blueprints.admin import admin_bp, log_activity
 from blueprints.notifications import notifications_bp
 from blueprints.tasks import tasks_bp
+from blueprints.tasks_tablero import tablero_bp
 from blueprints.task_requests import task_requests_bp
 from blueprints.tour import tour_bp
+from blueprints.interno import interno_bp, preparar as preparar_interno
 
 
 from extensions import db, login_manager, csrf, limiter, migrate
 from models import User, Report, ActivityLog, ClassificationPreset, Task, TempArtifact
 from services import calculation as report
 from services import meltwater_ingest
+from services import reportes as reportes_svc
 from services.groq_analysis import construir_prompt, llamar_groq, extraer_json, formatear_analisis_social_listening
 # El reporte se renderiza en la web y se exporta a PDF desde el navegador.
 from services.csv_analysis import analyze_csv, generate_summary_csv
@@ -169,6 +172,28 @@ if _is_production_mode():
     app.config['SESSION_COOKIE_SECURE'] = True
 
 # ─────────────────────────────────────────────────────────────
+# Corte gradual hacia la app Next.js
+# ─────────────────────────────────────────────────────────────
+# La interfaz web ya vive en Next.js; esta aplicacion debe quedar solo con la API interna
+# (/api/interno, que usa el analisis de datos), /healthz y las migraciones. FLASK_SOLO_INTERNO=1
+# apaga todo lo demas SIN tocar el codigo ni redesplegar: es el interruptor del corte, y quitarlo
+# devuelve las pantallas viejas si algo fallara. Se evalua en cada peticion (app.config) para
+# poder probarlo. Va ANTES de las extensiones a proposito: los filtros de Flask corren en el orden en
+# que se registran, y Talisman (force_https) redirigiria a HTTPS cualquier ruta vieja antes de que este
+# filtro pudiera responder 404.
+app.config['SOLO_INTERNO'] = _env_bool('FLASK_SOLO_INTERNO', False)
+
+@app.before_request
+def solo_interno():
+    if not app.config.get('SOLO_INTERNO'):
+        return None
+    ruta = request.path
+    if ruta == '/healthz' or ruta.startswith('/api/interno/'):
+        return None
+    return jsonify({'error': 'Esta aplicación ya no sirve la interfaz web: usa la app principal.'}), 404
+
+
+# ─────────────────────────────────────────────────────────────
 # Initialize extensions
 # ─────────────────────────────────────────────────────────────
 db.init_app(app)
@@ -256,8 +281,12 @@ app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(tasks_bp)
+app.register_blueprint(tablero_bp)
 app.register_blueprint(task_requests_bp)
 app.register_blueprint(tour_bp)
+# API JSON interna para la app Next.js (servicio a servicio, con token).
+app.register_blueprint(interno_bp)
+preparar_interno(app)
 
 # ─────────────────────────────────────────────────────────────
 # Force-logout check (session kick feature)
@@ -333,6 +362,9 @@ def auto_log_request(response):
             and request.endpoint
             and not request.endpoint.startswith('static')
             and not request.endpoint.startswith('admin.')
+            # La API interna no es navegacion: el sondeo de un proceso son
+            # sesenta peticiones por minuto y cada una seria un page_view.
+            and not request.endpoint.startswith('interno.')
             and request.endpoint not in _MANUALLY_LOGGED
             and not request.is_json
             and request.method == 'GET'
@@ -1082,24 +1114,12 @@ def _reporte_por_token(token):
 
 
 def _puede_editar_reporte(guardado):
-    return guardado.user_id == current_user.id or current_user.is_admin
+    return reportes_svc.puede_editar(guardado, current_user)
 
 
 def _vista_de_reporte(contexto):
-    """Los calculos que la plantilla no debe hacer.
-
-    Viven aqui y no en Jinja para que la plantilla no tenga que hacer
-    aritmetica ni protegerse de la division por cero.
-    """
-    total = contexto['kpis']['total_mentions'] or 1
-    return {
-        'pct_redes': round(contexto['kpis']['mentions_redes'] / total * 100),
-        'pct_prensa': round(contexto['kpis']['mentions_prensa'] / total * 100),
-        'top_authors': sorted(
-            contexto['content'].get('top_authors', []),
-            key=lambda a: a['posts'], reverse=True
-        )[:8],
-    }
+    """Los calculos que la plantilla no debe hacer (ver services/reportes.py)."""
+    return reportes_svc.vista_de_reporte(contexto)
 
 
 @app.route('/reporte/<token>')
@@ -1138,44 +1158,11 @@ def api_reporte_insights(token):
         return jsonify({'success': False, 'error': 'Este reporte no es tuyo.'}), 403
 
     # Ya se pidieron: no se repite el gasto porque alguien recargue la pagina.
-    if guardado.insights_status == Report.INSIGHTS_LISTO:
-        return jsonify({'success': True, 'estado': guardado.insights_status,
-                        'source': guardado.insights_source,
-                        'insights': (json.loads(guardado.context_json).get('insights') or {}),
-                        'warnings': (json.loads(guardado.context_json).get('warnings') or [])})
-
-    contexto = json.loads(guardado.context_json or '{}')
-    if not contexto:
+    # Que el modelo falle no invalida el reporte (ver services/reportes.py).
+    respuesta = reportes_svc.pedir_insights(guardado)
+    if respuesta is None:
         return jsonify({'success': False, 'error': 'El reporte no tiene contenido guardado.'}), 400
-
-    meta = report.aplicar_insights_de_ia(contexto)
-
-    if meta.get('ok'):
-        guardado.insights_status = Report.INSIGHTS_LISTO
-        guardado.insights_source = 'ia'
-        guardado.insights_error = None
-    else:
-        # Que el modelo falle no invalida el reporte: se queda con el texto por
-        # reglas, que ya estaba escrito, y se recuerda el motivo para poder
-        # ensenarlo en vez de dejar la pagina girando para siempre.
-        guardado.insights_status = Report.INSIGHTS_FALLIDO
-        guardado.insights_error = meta.get('reason')
-
-    guardado.context_json = json.dumps(contexto, ensure_ascii=False)
-    db.session.commit()
-
-    # Lo que el analista ya retoco a mano manda sobre lo que traiga el modelo.
-    editados = guardado.slots_editados()
-    insights = {k: v for k, v in (contexto.get('insights') or {}).items() if k not in editados}
-
-    return jsonify({
-        'success': bool(meta.get('ok')),
-        'estado': guardado.insights_status,
-        'source': guardado.insights_source,
-        'insights': insights,
-        'warnings': contexto.get('warnings') or [],
-        'error': guardado.insights_error,
-    })
+    return jsonify(respuesta)
 
 
 @app.route('/api/reportes/<token>/textos', methods=['POST'])
@@ -1192,23 +1179,11 @@ def api_reporte_textos(token):
         return jsonify({'success': False, 'error': 'Este reporte no es tuyo.'}), 403
 
     entrantes = (request.get_json(silent=True) or {}).get('textos')
-    if not isinstance(entrantes, dict):
+    guardados = reportes_svc.guardar_retoques(guardado, entrantes)
+    if guardados is None:
         return jsonify({'success': False, 'error': 'Nada que guardar.'}), 400
 
-    permitidos = set(insight_slots()) | {'client_name'}
-    retoques = json.loads(guardado.edits_json) if guardado.edits_json else {}
-    for slot, texto in entrantes.items():
-        if slot in permitidos and isinstance(texto, str):
-            # Un limite generoso: corta un pegado accidental de un documento
-            # entero sin estorbar a nadie que escriba de verdad.
-            retoques[slot] = texto.strip()[:2000]
-
-    guardado.edits_json = json.dumps(retoques, ensure_ascii=False)
-    if 'client_name' in retoques and retoques['client_name']:
-        guardado.title = retoques['client_name'][:255]
-    db.session.commit()
-
-    return jsonify({'success': True, 'guardados': len(retoques)})
+    return jsonify({'success': True, 'guardados': guardados})
 
 
 def insight_slots():

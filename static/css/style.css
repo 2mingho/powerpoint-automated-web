@@ -2630,6 +2630,24 @@ body.app-prompt-open {
   opacity: 1;
 }
 
+/* En el telefono el icono suele quedar pegado al borde derecho de la tarjeta.
+   Centrado, el globo de 250px sobresalia de la pantalla y, aun invisible,
+   ensanchaba la pagina: todo lo fijo (barra superior, barra inferior, el tour)
+   se medía contra ese ancho falso. Se ancla al borde derecho del icono. */
+@media (max-width: 768px) {
+  .tooltip .tooltip-text {
+    left: auto;
+    right: -8px;
+    margin-left: 0;
+    width: min(250px, calc(100vw - 32px));
+  }
+
+  .tooltip .tooltip-text::after {
+    left: auto;
+    right: 12px;
+  }
+}
+
 /* ─── ACTION BAR (FLOATING) ─── */
 .action-bar {
   background: var(--c-white);

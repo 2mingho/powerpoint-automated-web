@@ -1,0 +1,67 @@
+# Despliegue de la aplicacion completa (web + analisis) como UN solo servicio de Coolify
+# (tipo "Docker Compose", repositorio = este, rama = la de produccion, archivo = este).
+#
+#   analisis  Flask: solo /api/interno, /healthz y las MIGRACIONES. No es publico.
+#   web       Next.js: la aplicacion. Es el unico con dominio.
+#
+# Por que juntos: `web` espera a que `analisis` este sano, y `analisis` migra la base al
+# arrancar. Asi el orden (primero el esquema, despues la web) lo garantiza el propio compose y
+# no depende de lanzar dos despliegues a mano. Se hablan por el nombre del servicio, dentro de
+# la red del stack (http://analisis:5000), sin salir a internet.
+#
+# Variables (en la pestaña "Environment Variables" de Coolify; las marcadas con :? son obligatorias):
+#   DATABASE_URL     PostgreSQL (Neon u otro), la misma para los dos servicios
+#   SECRET_KEY       Flask: firma de sus cookies y tokens (aun vive en el servicio)
+#   SESSION_SECRET   web: sella las cookies de sesion. 32+ caracteres
+#   ANALYTICS_TOKEN  la llave entre servicios; igual en los dos
+#   ADMIN_PASSWORD   Flask exige una distinta de la de fabrica en produccion
+#   ADMIN_EMAIL      cuenta de administracion principal (por defecto admin@dataintel.com)
+#   GROQ_API_KEY     opcional, textos con IA del reporte
+#   ...mas abajo: ajustes opcionales
+name: newlink
+
+services:
+  analisis:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY}
+      ANALYTICS_TOKEN: ${ANALYTICS_TOKEN:?ANALYTICS_TOKEN}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@dataintel.com}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Esta Flask ya no sirve pantallas: solo /api/interno y /healthz. Quitar la variable (o ponerla a 0)
+      # devuelve las pantallas viejas, util para dar marcha atras sin tocar codigo.
+      FLASK_SOLO_INTERNO: ${FLASK_SOLO_INTERNO:-1}
+      # El registro de trabajos del analisis vive en la memoria del proceso: un solo worker y una sola copia.
+      WEB_CONCURRENCY: "1"
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
+    expose:
+      - "5000"
+    # El HEALTHCHECK de la imagen (/healthz) es el que usa `depends_on` y el que Coolify vigila.
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      analisis:
+        condition: service_healthy
+    environment:
+      # Coolify asigna el dominio a este servicio y puerto (se elige en su pantalla) y pone el proxy con TLS delante.
+      SERVICE_FQDN_WEB_3000: ""
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET}
+      ANALYTICS_URL: http://analisis:5000
+      ANALYTICS_TOKEN: ${ANALYTICS_TOKEN:?ANALYTICS_TOKEN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@dataintel.com}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Conexiones a la base por proceso, y segundos de actividad tras los que /healthz deja de preguntarle (0 = siempre).
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      HEALTHZ_DB_TTL: ${HEALTHZ_DB_TTL:-120}
+    expose:
+      - "3000"

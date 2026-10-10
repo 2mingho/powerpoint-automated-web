@@ -1,0 +1,219 @@
+@import "tailwindcss";
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/*
+ * Mundo visual: "Puerta de embarque". Ver .impeccable/surfaces/ para el
+ * contrato. Tinta, pizarra, acero y panel; el amarillo Newlink es identidad
+ * y "cambió y no lo has visto", nunca un estado de tarea.
+ *
+ * El tema se decide por data-theme en <html>, que el script de arranque fija
+ * desde la preferencia guardada o desde el sistema. Los componentes nunca
+ * usan colores sueltos: solo estos tokens.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Materiales */
+  --tinta: #0b0d10;
+  --pizarra: #1c2127;
+  --acero: #6b7178;
+  --marca: #fadf25;
+  --marca-tinta: #0b0d10;
+
+  /* Superficies */
+  --fondo: #eceef1;
+  --superficie: #ffffff;
+  --superficie-2: #f5f6f8;
+  --superficie-hundida: #e3e6ea;
+  --hilo: #d6d9de;
+  --hilo-fuerte: #b5bac1;
+
+  /* Texto */
+  --texto: #0b0d10;
+  --texto-2: #474d55;
+  --texto-3: #6b7178;
+
+  /* Barra lateral: siempre pizarra, en los dos temas */
+  --rail: #1c2127;
+  --rail-2: #252b33;
+  --rail-texto: #c3c8cf;
+  --rail-texto-fuerte: #ffffff;
+  --rail-hilo: #2f363f;
+
+  /* Tonos de estado (los del catalogo: neutro, info, aviso, alerta, bien, violeta) */
+  --tono-neutro: #5d646c;
+  --tono-info: #2a5ea8;
+  --tono-aviso: #a35f00;
+  --tono-alerta: #c0341d;
+  --tono-bien: #1f7546;
+  --tono-violeta: #6a4c9c;
+
+  /* Profundidad: desplazamiento y desenfoque, nunca halos */
+  --sombra-1: 0 1px 2px rgb(11 13 16 / 0.06), 0 1px 1px rgb(11 13 16 / 0.04);
+  --sombra-2: 0 6px 16px -4px rgb(11 13 16 / 0.14), 0 2px 4px rgb(11 13 16 / 0.06);
+  --sombra-3: 0 18px 40px -12px rgb(11 13 16 / 0.28), 0 4px 10px rgb(11 13 16 / 0.08);
+
+  /* Movimiento */
+  --dur-instante: 120ms;
+  --dur: 200ms;
+  --dur-vista: 340ms;
+  --curva: cubic-bezier(0.16, 1, 0.3, 1);
+  --curva-salida: cubic-bezier(0.4, 0, 1, 1);
+
+  --radio: 4px;
+  --radio-2: 8px;
+  --fila: 44px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fondo: #0d1014;
+  --superficie: #151a20;
+  --superficie-2: #1b2128;
+  --superficie-hundida: #10141a;
+  --hilo: #272e37;
+  --hilo-fuerte: #39424d;
+  --texto: #eef0f3;
+  --texto-2: #aab1ba;
+  --texto-3: #848c96;
+  --rail: #0a0c0f;
+  --rail-2: #151a20;
+  --rail-hilo: #1f252d;
+  --tono-neutro: #9aa2ac;
+  --tono-info: #7aa7e8;
+  --tono-aviso: #e3a44a;
+  --tono-alerta: #f07a63;
+  --tono-bien: #5fc08a;
+  --tono-violeta: #b29be0;
+  --sombra-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --sombra-2: 0 8px 20px -6px rgb(0 0 0 / 0.6), 0 2px 4px rgb(0 0 0 / 0.3);
+  --sombra-3: 0 22px 48px -12px rgb(0 0 0 / 0.75);
+}
+
+@theme inline {
+  --color-tinta: var(--tinta);
+  --color-pizarra: var(--pizarra);
+  --color-acero: var(--acero);
+  --color-marca: var(--marca);
+  --color-marca-tinta: var(--marca-tinta);
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-superficie-2: var(--superficie-2);
+  --color-hundida: var(--superficie-hundida);
+  --color-hilo: var(--hilo);
+  --color-hilo-fuerte: var(--hilo-fuerte);
+  --color-texto: var(--texto);
+  --color-texto-2: var(--texto-2);
+  --color-texto-3: var(--texto-3);
+  --color-rail: var(--rail);
+  --color-rail-2: var(--rail-2);
+  --color-rail-texto: var(--rail-texto);
+  --color-rail-fuerte: var(--rail-texto-fuerte);
+  --color-rail-hilo: var(--rail-hilo);
+  --color-neutro: var(--tono-neutro);
+  --color-info: var(--tono-info);
+  --color-aviso: var(--tono-aviso);
+  --color-alerta: var(--tono-alerta);
+  --color-bien: var(--tono-bien);
+  --color-violeta: var(--tono-violeta);
+
+  --font-sans: var(--fuente-cuerpo), ui-sans-serif, system-ui, sans-serif;
+  --font-rotulo: var(--fuente-rotulo), var(--fuente-cuerpo), ui-sans-serif, sans-serif;
+  --font-mono: var(--fuente-datos), ui-monospace, monospace;
+
+  /* Escala fija para producto (ratio ~1.2). Nada fluido. */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.35rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.6rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 2.5rem;
+  --text-3xl--line-height: 2.5rem;
+
+  --radius-sm: var(--radio);
+  --radius-md: var(--radio-2);
+  --shadow-1: var(--sombra-1);
+  --shadow-2: var(--sombra-2);
+  --shadow-3: var(--sombra-3);
+  --ease-salida: var(--curva);
+}
+
+/* ─── Base ─── */
+html { background: var(--fondo); }
+body {
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Las superficies del navegador tambien llevan el diseño */
+::selection { background: var(--marca); color: var(--marca-tinta); }
+/* En la capa base: las utilidades de Tailwind (outline-none, ring…) pueden sobrescribirlo. */
+@layer base {
+  :focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; border-radius: 2px; }
+  input, textarea { caret-color: var(--texto); }
+  a { text-underline-offset: 3px; }
+  * { scrollbar-width: thin; scrollbar-color: var(--hilo-fuerte) transparent; }
+}
+
+/* Cifras de datos siempre tabulares */
+.cifras, .font-mono, time, td { font-variant-numeric: tabular-nums; }
+
+/* Rotulo de columna o de panel: condensada, mayusculas, con aire */
+.rotulo {
+  font-family: var(--font-rotulo);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  line-height: 1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+/* ─── Movimiento ─── */
+@keyframes encendido {
+  from { background-color: var(--marca); color: var(--marca-tinta); }
+}
+@keyframes esqueleto { to { background-position: -200% 0; } }
+.esqueleto {
+  background: linear-gradient(90deg, var(--superficie-hundida) 0%, var(--superficie-2) 50%, var(--superficie-hundida) 100%);
+  background-size: 200% 100%;
+  animation: esqueleto 1.4s linear infinite;
+  border-radius: var(--radio);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  .esqueleto { animation: none; }
+}
+
+/* La cifra nueva entra como la paleta de un panel split-flap: desde abajo, sin rebote. */
+@keyframes paleta {
+  from { transform: translateY(60%); opacity: 0; filter: blur(2px); }
+  to { transform: none; opacity: 1; filter: none; }
+}
+@keyframes entrada-aviso {
+  from { transform: translateY(12px); opacity: 0; }
+}
+@keyframes indeterminado {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}

@@ -113,17 +113,21 @@ body.tour-activo {
   cursor: not-allowed;
 }
 
-@media (max-width: 640px) {
+/* Telefono: mismo corte que style.css y que tour.js. El globo ocupa el ancho
+   y tour.js solo decide la altura. Antes iba fijo abajo, y desde que existe la
+   barra inferior tapaba justo lo que el paso queria ensenar. */
+@media (max-width: 768px) {
   .tour-globo {
     left: 12px !important;
     right: 12px;
     width: auto;
-    bottom: 12px;
-    top: auto !important;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
   }
 
   .tour-globo-centro {
-    transform: none;
+    left: 12px !important;
+    transform: translateY(-50%);
   }
 }
 

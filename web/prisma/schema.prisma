@@ -1,0 +1,490 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model activity_logs {
+  id          Int       @id @default(autoincrement())
+  user_id     Int
+  action      String    @db.VarChar(100)
+  detail      String?
+  ip_address  String?   @db.VarChar(45)
+  timestamp   DateTime? @db.Timestamp(6)
+  entity_type String?   @db.VarChar(30)
+  entity_id   Int?
+  users       users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([entity_id], map: "ix_activity_logs_entity_id")
+  @@index([entity_type], map: "ix_activity_logs_entity_type")
+  @@index([timestamp], map: "ix_activity_logs_timestamp")
+  @@index([user_id, timestamp], map: "ix_activity_logs_user_ts")
+}
+
+model ai_providers {
+  id               Int        @id(map: "pk_ai_providers") @default(autoincrement())
+  name             String     @unique(map: "uq_ai_providers_name") @db.VarChar(100)
+  provider         String     @db.VarChar(50)
+  model            String     @db.VarChar(150)
+  api_key          String
+  is_active        Boolean    @default(false)
+  created_at       DateTime?  @db.Timestamp(6)
+  created_by_id    Int?
+  price_in_per_1m  Float      @default(0)
+  price_out_per_1m Float      @default(0)
+  users            users?     @relation(fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ai_providers_created_by_id")
+  ai_usage         ai_usage[]
+}
+
+model ai_usage {
+  id           Int           @id(map: "pk_ai_usage") @default(autoincrement())
+  provider_id  Int?
+  provider     String        @db.VarChar(50)
+  model        String        @db.VarChar(150)
+  feature      String?       @db.VarChar(50)
+  tokens_in    Int           @default(0)
+  tokens_out   Int           @default(0)
+  cost_usd     Float         @default(0)
+  ok           Boolean       @default(true)
+  created_at   DateTime?     @db.Timestamp(6)
+  user_id      Int?
+  ai_providers ai_providers? @relation(fields: [provider_id], references: [id], onUpdate: NoAction, map: "fk_ai_usage_provider_id")
+  users        users?        @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ai_usage_user_id")
+
+  @@index([created_at], map: "ix_ai_usage_created_at")
+  @@index([model], map: "ix_ai_usage_model")
+  @@index([provider_id], map: "ix_ai_usage_provider_id")
+}
+
+model alembic_version {
+  version_num String @id(map: "alembic_version_pkc") @db.VarChar(32)
+}
+
+model areas {
+  id                                              Int              @id @default(autoincrement())
+  name                                            String           @unique @db.VarChar(100)
+  description                                     String?
+  created_at                                      DateTime?        @db.Timestamp(6)
+  color                                           String?          @db.VarChar(20)
+  has_studies                                     Boolean          @default(false)
+  solicitudes_salientes task_requests[]  @relation("task_requests_from_area_idToareas")
+  solicitudes_entrantes   task_requests[]  @relation("task_requests_to_area_idToareas")
+  task_tags                                       task_tags[]
+  task_templates                                  task_templates[]
+  tasks                                           tasks[]
+  concesiones_finanzas                            finance_grants[]
+  contratos                                       contracts[]                @relation("contracts_area_idToareas")
+  contratos_asignados                             contracts[]                @relation("contracts_from_area_idToareas")
+  metas                                           goals[]
+  unit_leads                                      unit_leads[]
+  users                                           users[]
+}
+
+model clients {
+  id              Int       @id(map: "pk_clients") @default(autoincrement())
+  name            String    @db.VarChar(100)
+  name_key        String    @unique(map: "uq_clients_name_key") @db.VarChar(100)
+  client_type     String?   @db.VarChar(40)
+  account_lead_id Int?
+  is_active       Boolean   @default(true)
+  created_at      DateTime? @db.Timestamp(6)
+  responsable     users?    @relation("clients_account_lead_idTousers", fields: [account_lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_clients_account_lead_id_users")
+  tareas          tasks[]
+  contratos       contracts[]
+}
+
+model contracts {
+  id            Int       @id(map: "pk_contracts") @default(autoincrement())
+  client_id     Int
+  area_id       Int
+  contract_type String    @db.VarChar(20)
+  amount        Decimal   @db.Decimal(14, 2)
+  start_date    DateTime  @db.Date
+  end_date      DateTime  @db.Date
+  from_area_id  Int?
+  note          String?   @db.VarChar(500)
+  created_by    Int?
+  created_at    DateTime? @db.Timestamp(6)
+  updated_at    DateTime? @db.Timestamp(6)
+  cliente       clients   @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_contracts_client_id_clients")
+  unidad        areas     @relation("contracts_area_idToareas", fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_contracts_area_id_areas")
+  asigna        areas?    @relation("contracts_from_area_idToareas", fields: [from_area_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_contracts_from_area_id_areas")
+  creador       users?    @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_contracts_created_by_users")
+
+  @@index([area_id], map: "ix_contracts_area_id")
+  @@index([client_id], map: "ix_contracts_client_id")
+}
+
+model goals {
+  id         Int       @id(map: "pk_goals") @default(autoincrement())
+  year       Int
+  area_id    Int?
+  amount     Decimal   @db.Decimal(14, 2)
+  updated_by Int?
+  updated_at DateTime? @db.Timestamp(6)
+  unidad     areas?    @relation(fields: [area_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_goals_area_id_areas")
+  editor     users?    @relation(fields: [updated_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_goals_updated_by_users")
+}
+
+model finance_grants {
+  user_id    Int
+  area_id    Int
+  kind       String    @db.VarChar(20)
+  granted_by Int?
+  created_at DateTime? @db.Timestamp(6)
+  usuario    users     @relation("finance_grants_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_finance_grants_user_id_users")
+  unidad     areas     @relation(fields: [area_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_finance_grants_area_id_areas")
+  concedio   users?    @relation("finance_grants_granted_byTousers", fields: [granted_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_finance_grants_granted_by_users")
+
+  @@id([user_id, area_id, kind], map: "pk_finance_grants")
+  @@index([area_id], map: "ix_finance_grants_area_id")
+}
+
+model classification_presets {
+  id         Int       @id @default(autoincrement())
+  user_id    Int
+  name       String    @db.VarChar(100)
+  rules_json String
+  created_at DateTime? @db.Timestamp(6)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model notifications {
+  id          Int       @id @default(autoincrement())
+  user_id     Int
+  kind        String    @db.VarChar(30)
+  title       String    @db.VarChar(255)
+  body        String?
+  link_url    String?   @db.VarChar(500)
+  entity_type String?   @db.VarChar(30)
+  entity_id   Int?
+  read_at     DateTime? @db.Timestamp(6)
+  created_at  DateTime? @db.Timestamp(6)
+  users       users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([user_id, read_at], map: "ix_notif_user_unread")
+  @@index([created_at], map: "ix_notifications_created_at")
+  @@index([read_at], map: "ix_notifications_read_at")
+  @@index([user_id], map: "ix_notifications_user_id")
+}
+
+model pptx_templates {
+  id             Int       @id(map: "pk_pptx_templates") @default(autoincrement())
+  name           String    @unique(map: "uq_pptx_templates_name") @db.VarChar(150)
+  data           Bytes
+  size_bytes     Int
+  uploaded_by_id Int?
+  created_at     DateTime? @db.Timestamp(6)
+  users          users?    @relation(fields: [uploaded_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pptx_templates_uploaded_by_id")
+}
+
+model reports {
+  id              Int       @id @default(autoincrement())
+  filename        String?   @db.VarChar(255)
+  title           String?   @db.VarChar(255)
+  description     String?
+  created_at      DateTime? @db.Timestamp(6)
+  template_name   String?   @db.VarChar(255)
+  user_id         Int
+  token           String    @unique(map: "ix_reports_token") @db.VarChar(32)
+  updated_at      DateTime? @db.Timestamp(6)
+  context_json    String?
+  edits_json      String?
+  insights_source String?   @db.VarChar(10)
+  insights_status String?   @db.VarChar(20)
+  insights_error  String?
+  users           users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([user_id, created_at], map: "ix_reports_user_created")
+}
+
+model roles {
+  id           Int       @id @default(autoincrement())
+  code         String    @unique @db.VarChar(30)
+  display_name String    @db.VarChar(100)
+  description  String?
+  created_at   DateTime? @db.Timestamp(6)
+}
+
+model task_checklist_items {
+  id              Int       @id @default(autoincrement())
+  task_id         Int
+  body            String    @db.VarChar(500)
+  position        Int
+  is_completed    Boolean?
+  completed_at    DateTime? @db.Timestamp(6)
+  completed_by_id Int?
+  created_at      DateTime? @db.Timestamp(6)
+  users           users?    @relation(fields: [completed_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tasks           tasks     @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([task_id], map: "ix_task_checklist_items_task_id")
+}
+
+model task_comments {
+  id         Int       @id @default(autoincrement())
+  task_id    Int
+  user_id    Int
+  body       String
+  created_at DateTime? @db.Timestamp(6)
+  edited_at  DateTime? @db.Timestamp(6)
+  deleted_at DateTime? @db.Timestamp(6)
+  tasks      tasks     @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "ix_task_comments_created_at")
+  @@index([task_id], map: "ix_task_comments_task_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model task_dependencies {
+  id                                             Int       @id(map: "pk_task_dependencies") @default(autoincrement())
+  blocker_task_id                                Int
+  blocked_task_id                                Int
+  created_by_id                                  Int?
+  created_at                                     DateTime? @db.Timestamp(6)
+  bloqueada tasks     @relation("task_dependencies_blocked_task_idTotasks", fields: [blocked_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_dependencies_blocked_task_id_tasks")
+  bloqueadora tasks     @relation("task_dependencies_blocker_task_idTotasks", fields: [blocker_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_dependencies_blocker_task_id_tasks")
+  users                                          users?    @relation(fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_dependencies_created_by_id_users")
+
+  @@unique([blocker_task_id, blocked_task_id], map: "uq_task_dependency")
+  @@index([blocked_task_id], map: "ix_task_dependencies_blocked_task_id")
+  @@index([blocker_task_id], map: "ix_task_dependencies_blocker_task_id")
+}
+
+model task_priorities {
+  id         Int     @id(map: "pk_task_priorities") @default(autoincrement())
+  nombre     String  @unique(map: "uq_task_priorities_nombre") @db.VarChar(30)
+  orden      Int
+  color      String  @db.VarChar(20)
+  es_defecto Boolean
+}
+
+model task_requests {
+  id                                        Int       @id @default(autoincrement())
+  title                                     String    @db.VarChar(255)
+  description                               String?
+  client                                    String?   @db.VarChar(100)
+  due_date                                  DateTime? @db.Date
+  priority                                  String?   @db.VarChar(10)
+  requester_id                              Int
+  from_area_id                              Int?
+  to_area_id                                Int
+  status                                    String    @db.VarChar(15)
+  resolved_by_id                            Int?
+  resolved_at                               DateTime? @db.Timestamp(6)
+  rejection_reason                          String?
+  created_task_id                           Int?
+  created_at                                DateTime? @db.Timestamp(6)
+  tasks                                     tasks?    @relation(fields: [created_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unidad_origen   areas?    @relation("task_requests_from_area_idToareas", fields: [from_area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  solicitante   users     @relation("task_requests_requester_idTousers", fields: [requester_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resuelta_por users?    @relation("task_requests_resolved_by_idTousers", fields: [resolved_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unidad_destino     areas     @relation("task_requests_to_area_idToareas", fields: [to_area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([from_area_id], map: "ix_task_requests_from_area_id")
+  @@index([status], map: "ix_task_requests_status")
+  @@index([to_area_id], map: "ix_task_requests_to_area_id")
+}
+
+model task_statuses {
+  id         Int     @id(map: "pk_task_statuses") @default(autoincrement())
+  nombre     String  @unique(map: "uq_task_statuses_nombre") @db.VarChar(30)
+  orden      Int
+  color      String  @db.VarChar(20)
+  es_inicial Boolean
+  es_final   Boolean
+}
+
+model task_tag_links {
+  task_id   Int
+  tag_id    Int
+  task_tags task_tags @relation(fields: [tag_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_tag_links_tag_id_task_tags")
+  tasks     tasks     @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_tag_links_task_id_tasks")
+
+  @@id([task_id, tag_id], map: "pk_task_tag_links")
+  @@index([tag_id], map: "ix_task_tag_links_tag_id")
+}
+
+model task_tags {
+  id             Int              @id(map: "pk_task_tags") @default(autoincrement())
+  nombre         String           @db.VarChar(40)
+  color          String           @db.VarChar(20)
+  area_id        Int?
+  created_by_id  Int?
+  created_at     DateTime?        @db.Timestamp(6)
+  task_tag_links task_tag_links[]
+  areas          areas?           @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_tags_area_id_areas")
+  users          users?           @relation(fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_tags_created_by_id_users")
+
+  @@unique([area_id, nombre], map: "uq_task_tags_area_nombre")
+  @@index([area_id], map: "ix_task_tags_area_id")
+}
+
+model task_templates {
+  id            Int       @id @default(autoincrement())
+  area_id       Int
+  created_by_id Int?
+  name          String    @db.VarChar(100)
+  payload_json  String
+  created_at    DateTime? @db.Timestamp(6)
+  areas         areas     @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users         users?    @relation(fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([area_id], map: "ix_task_templates_area_id")
+}
+
+model task_watchers {
+  id                                     Int       @id @default(autoincrement())
+  task_id                                Int
+  user_id                                Int
+  added_by_id                            Int?
+  created_at                             DateTime? @db.Timestamp(6)
+  anadido_por users?    @relation("task_watchers_added_by_idTousers", fields: [added_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tasks                                  tasks     @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario     users     @relation("task_watchers_user_idTousers", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([task_id, user_id], map: "uq_task_watcher")
+  @@index([task_id], map: "ix_task_watchers_task_id")
+  @@index([user_id], map: "ix_task_watchers_user_id")
+}
+
+model tasks {
+  id                                                         Int                    @id @default(autoincrement())
+  title                                                      String                 @db.VarChar(255)
+  description                                                String?
+  client                                                     String?                @db.VarChar(100)
+  start_date                                                 DateTime?              @db.Date
+  end_date                                                   DateTime?              @db.Date
+  directorate                                                String?                @db.VarChar(255)
+  requested_by                                               String?                @db.VarChar(255)
+  budget_type                                                String?                @db.VarChar(255)
+  created_at                                                 DateTime?              @db.Timestamp(6)
+  due_date                                                   DateTime               @db.Date
+  status                                                     String                 @db.VarChar(30)
+  is_recurrent                                               Boolean?
+  recurrence_type                                            String?                @db.VarChar(20)
+  parent_task_id                                             Int?
+  area                                                       String                 @db.VarChar(20)
+  creator_id                                                 Int
+  assignee_id                                                Int
+  updated_at                                                 DateTime?              @db.Timestamp(6) @updatedAt
+  priority                                                   String                 @default("Media") @db.VarChar(10)
+  visibility                                                 String                 @default("unit") @db.VarChar(15)
+  area_id                                                    Int?
+  deleted_at                                                 DateTime?              @db.Timestamp(6)
+  deleted_by_id                                              Int?
+  board_position                                             Float?
+  client_id                                                  Int?
+  estimated_hours                                            Float?
+  reviewer_id                                                Int?
+  block_reason                                               String?                @db.VarChar(255)
+  done_at                                                    DateTime?              @db.Timestamp(6)
+  task_type                                                  String                 @default("normal") @db.VarChar(10)
+  phase                                                      String?                @db.VarChar(40)
+  study_method                                               String?                @db.VarChar(40)
+  task_checklist_items                                       task_checklist_items[]
+  task_comments                                              task_comments[]
+  bloqueada_por task_dependencies[]    @relation("task_dependencies_blocked_task_idTotasks")
+  bloquea_a task_dependencies[]    @relation("task_dependencies_blocker_task_idTotasks")
+  task_requests                                              task_requests[]
+  task_tag_links                                             task_tag_links[]
+  task_watchers                                              task_watchers[]
+  areas                                                      areas?                 @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_area_id")
+  borrada_por                           users?                 @relation("tasks_deleted_by_idTousers", fields: [deleted_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_deleted_by_id")
+  asignado                             users                  @relation("tasks_assignee_idTousers", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cliente_entidad                      clients?               @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_client_id_clients")
+  revisor                              users?                 @relation("tasks_reviewer_idTousers", fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_reviewer_id_users")
+  creador                              users                  @relation("tasks_creator_idTousers", fields: [creator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  padre                                                      tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  hijas                                                      tasks[]                @relation("tasksTotasks")
+
+  @@index([area_id], map: "ix_tasks_area_id")
+  @@index([client_id], map: "ix_tasks_client_id")
+  @@index([assignee_id, due_date], map: "ix_tasks_assignee_due")
+  @@index([deleted_at], map: "ix_tasks_deleted_at")
+  @@index([due_date], map: "ix_tasks_due_date")
+  @@index([parent_task_id], map: "ix_tasks_parent_task_id")
+  @@index([priority], map: "ix_tasks_priority")
+  @@index([reviewer_id], map: "ix_tasks_reviewer_id")
+}
+
+model temp_artifacts {
+  id           Int       @id @default(autoincrement())
+  kind         String    @db.VarChar(50)
+  file_id      String    @db.VarChar(120)
+  storage_name String    @db.VarChar(255)
+  user_id      Int
+  created_at   DateTime? @db.Timestamp(6)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([kind, file_id], map: "uq_temp_artifacts_kind_file_id")
+  @@index([created_at], map: "ix_temp_artifacts_created_at")
+  @@index([file_id], map: "ix_temp_artifacts_file_id")
+  @@index([kind], map: "ix_temp_artifacts_kind")
+  @@index([user_id], map: "ix_temp_artifacts_user_id")
+}
+
+model unit_leads {
+  user_id Int
+  area_id Int
+  areas   areas @relation(fields: [area_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_unit_leads_area_id")
+  users   users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_unit_leads_user_id")
+
+  @@id([user_id, area_id], map: "pk_unit_leads")
+  @@index([area_id], map: "ix_unit_leads_area_id")
+}
+
+model users {
+  id                                                Int                      @id @default(autoincrement())
+  username                                          String                   @db.VarChar(150)
+  email                                             String                   @unique @db.VarChar(150)
+  password                                          String                   @db.VarChar(200)
+  role                                              String                   @db.VarChar(20)
+  is_active                                         Boolean?
+  created_at                                        DateTime?                @db.Timestamp(6)
+  allowed_tools                                     String?
+  session_token                                     String?                  @db.VarChar(64)
+  force_logout                                      Boolean?
+  area_id                                           Int?
+  is_area_lead                                      Boolean?                 @default(false)
+  manager_id                                        Int?
+  tour_completed_at                                 DateTime?                @db.Timestamp(6)
+  weekly_capacity                                   Int?
+  activity_logs                                     activity_logs[]
+  ai_providers                                      ai_providers[]
+  ai_usage                                          ai_usage[]
+  classification_presets                            classification_presets[]
+  notifications                                     notifications[]
+  pptx_templates                                    pptx_templates[]
+  reports                                           reports[]
+  task_checklist_items                              task_checklist_items[]
+  task_comments                                     task_comments[]
+  task_dependencies                                 task_dependencies[]
+  solicitudes_hechas   task_requests[]          @relation("task_requests_requester_idTousers")
+  solicitudes_resueltas task_requests[]          @relation("task_requests_resolved_by_idTousers")
+  task_tags                                         task_tags[]
+  task_templates                                    task_templates[]
+  observaciones_anadidas    task_watchers[]          @relation("task_watchers_added_by_idTousers")
+  observaciones        task_watchers[]          @relation("task_watchers_user_idTousers")
+  tareas_borradas                  tasks[]                  @relation("tasks_deleted_by_idTousers")
+  tareas_asignadas                    tasks[]                  @relation("tasks_assignee_idTousers")
+  tareas_creadas                     tasks[]                  @relation("tasks_creator_idTousers")
+  tareas_a_revisar                   tasks[]                  @relation("tasks_reviewer_idTousers")
+  clientes_a_cargo                   clients[]                @relation("clients_account_lead_idTousers")
+  concesiones_finanzas               finance_grants[]         @relation("finance_grants_user_idTousers")
+  concesiones_otorgadas              finance_grants[]         @relation("finance_grants_granted_byTousers")
+  contratos_creados                  contracts[]
+  metas_editadas                     goals[]
+  temp_artifacts                                    temp_artifacts[]
+  unit_leads                                        unit_leads[]
+  manager                                             users?                   @relation("usersTousers", fields: [manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_manager_id")
+  reportes                                          users[]                  @relation("usersTousers")
+  areas                                             areas?                   @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([area_id], map: "ix_users_area_id")
+  @@index([manager_id], map: "ix_users_manager_id")
+}

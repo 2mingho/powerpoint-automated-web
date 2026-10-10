@@ -16,7 +16,8 @@ from services.clock import today_local, current_year
 from services.alcance import alcance_unidades, ambito_unidades, puede_ver_equipo
 from services.catalogo import (estados_validos, prioridades_validas,
                                estado_inicial, prioridad_por_defecto,
-                               estados_finales, es_estado_final)
+                               estados_finales, es_estado_final, aplicar_estado)
+from services.tablero import extras_de_tablero
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -167,6 +168,25 @@ def _can_view_task(task):
 
 def _can_edit_task(task):
     return current_user.is_admin or _task_in_current_unit(task)
+
+
+def _avisar_cambio_de_estado(task):
+    """Avisa a quien observa la tarea de su estado nuevo.
+
+    Lo comparten el formulario y el tablero: mover una tarjeta de columna es
+    el mismo cambio que elegir el estado en el modal.
+    """
+    watcher_ids = [watcher.user_id for watcher in task.watchers]
+    notify_many(
+        watcher_ids,
+        kind='task_watching',
+        title=f'Estado actualizado en: {task.title}',
+        body=f'Nuevo estado: {task.status}',
+        link_url=f'/tasks?task={task.id}',
+        entity_type='task',
+        entity_id=task.id,
+        actor_id=current_user.id,
+    )
 
 
 def _task_engagement_counts(task_ids):
@@ -379,7 +399,13 @@ def ensure_due_notifications(user):
 
     # Los avisos de hoy, en una sola consulta en vez de una por tarea. Un rango
     # sobre created_at y no func.date(created_at), que impide usar el indice.
-    inicio_hoy = datetime.combine(today, datetime.min.time())
+    # created_at se guarda en UTC sin zona: el "hoy" de negocio empieza a la
+    # medianoche de Santo Domingo, que hay que pasar a UTC. Tratarla como UTC
+    # desplazaba la ventana 4 h y repetia los avisos entre las 20:00 y las 24:00.
+    from datetime import timezone
+    from services.clock import APP_TIMEZONE
+    inicio_hoy = (datetime.combine(today, datetime.min.time(), tzinfo=APP_TIMEZONE)
+                  .astimezone(timezone.utc).replace(tzinfo=None))
     ya_avisadas = set(
         db.session.query(Notification.kind, Notification.entity_id).filter(
             Notification.user_id == user.id,
@@ -1033,11 +1059,14 @@ def api_tasks_list():
 
     # Los contadores se piden aparte porque el calendario no los usa y cuestan
     # tres consultas mas; la bandeja los necesita en cada fila.
-    counts = _task_engagement_counts([t.id for t in tasks])
+    ids = [t.id for t in tasks]
+    counts = _task_engagement_counts(ids)
+    extras = extras_de_tablero(ids)
     payload = []
     for t in tasks:
         item = t.to_dict()
         item.update(counts.get(t.id, {}))
+        item.update(extras.get(t.id, {}))
         payload.append(item)
     return jsonify(payload)
 
@@ -1829,7 +1858,7 @@ def api_tasks_bulk_update():
 
     for task in tasks:
         if updates_status:
-            task.status = updates_status
+            aplicar_estado(task, updates_status)
         if updates_priority:
             task.priority = updates_priority
         if due_date_map:
@@ -1939,7 +1968,7 @@ def api_tasks_update(task_id):
     status_changed = False
     if 'status' in data and data['status'] in estados_validos():
         status_changed = task.status != data['status']
-        task.status = data['status']
+        aplicar_estado(task, data['status'])
     if 'priority' in data:
         if data['priority'] not in prioridades_validas():
             return jsonify({'success': False, 'error': 'Prioridad inválida.'}), 400
@@ -1980,17 +2009,7 @@ def api_tasks_update(task_id):
         return jsonify({'success': False, 'error': 'La fecha de finalización no puede ser menor que la fecha de inicio.'}), 400
 
     if status_changed:
-        watcher_ids = [watcher.user_id for watcher in task.watchers]
-        notify_many(
-            watcher_ids,
-            kind='task_watching',
-            title=f'Estado actualizado en: {task.title}',
-            body=f'Nuevo estado: {task.status}',
-            link_url=f'/tasks?task={task.id}',
-            entity_type='task',
-            entity_id=task.id,
-            actor_id=current_user.id,
-        )
+        _avisar_cambio_de_estado(task)
 
     from blueprints.admin import log_activity
     log_activity('task_update', f'Tarea actualizada: {task.title} (id={task.id})',
@@ -2016,6 +2035,7 @@ def api_tasks_get(task_id):
     # Mismos campos que la lista con counts=1, para que el panel lateral pinte
     # la fila y el detalle con una sola forma de datos.
     payload.update(_task_engagement_counts([task.id]).get(task.id, {}))
+    payload.update(extras_de_tablero([task.id]).get(task.id, {}))
     payload['can_edit'] = _can_edit_task(task)
     payload['is_watcher'] = _is_task_watcher(task)
     payload['current_user_id'] = current_user.id
@@ -2835,7 +2855,7 @@ def api_admin_tasks_bulk_update():
 
     for task in tasks:
         if 'status' in updates:
-            task.status = updates['status']
+            aplicar_estado(task, updates['status'])
         if 'priority' in updates:
             task.priority = updates['priority']
         if assignee:

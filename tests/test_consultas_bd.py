@@ -138,6 +138,9 @@ def test_tarea_simple_se_notifica_con_su_id(client, equipo):
 
 def _selects_de_recurrencia(client, assignee_id, dias):
     inicio = today_local() + timedelta(days=7)
+    # Las recurrentes no pueden iniciar en fin de semana: la prueba no debe depender del dia en que corra.
+    while inicio.weekday() >= 5:
+        inicio += timedelta(days=1)
     with _sentencias() as vistas:
         datos = _crear_tarea(
             client, assignee_id,

@@ -523,6 +523,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // La vista Hoy se alimenta de los mismos datos: si no se recarga aqui, las
     // dos vistas se contradicen en cuanto se crea, mueve o completa una tarea.
     if (typeof window.recargarVistaHoy === 'function') window.recargarVistaHoy();
+    // El tablero se recarga solo si esta a la vista; si no, al volver a el.
+    if (typeof window.recargarTablero === 'function') window.recargarTablero();
   }
 
   let searchTimer = null;
@@ -1876,6 +1878,12 @@ document.addEventListener('DOMContentLoaded', function () {
       ofrecerPlantillas();
     }
 
+    // Etiquetas y relaciones viven en tasks_tablero.js: se guardan al momento,
+    // como el checklist, y necesitan saber que tarea se acaba de abrir.
+    if (window.TareasApp && typeof window.TareasApp.alAbrirTarea === 'function') {
+      window.TareasApp.alAbrirTarea(editMode && taskData ? taskData : null);
+    }
+
     hideContextMenu();
     abrirPanel();
     // El foco lo pone mostrarFormulario(); al crear puede que primero se vea
@@ -2802,6 +2810,8 @@ document.addEventListener('DOMContentLoaded', function () {
       // Observadas se carga al entrar, no al arrancar la pagina: es la vista
       // menos usada y no merece una peticion que casi nadie va a mirar.
       if (vista === 'observadas') loadWatchingTasks();
+      // El tablero, igual: se pide al entrar y despues solo si algo cambio.
+      if (vista === 'tablero' && typeof window.recargarTablero === 'function') window.recargarTablero();
     };
 
     let recordada = null;
@@ -2810,7 +2820,7 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {
       recordada = null;
     }
-    if (recordada === 'calendario' || recordada === 'observadas') aplicarVista(recordada);
+    if (recordada === 'calendario' || recordada === 'observadas' || recordada === 'tablero') aplicarVista(recordada);
 
     botones.forEach(function (boton) {
       boton.addEventListener('click', function () {
@@ -2845,7 +2855,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Solo el calendario: refreshCalendar() tambien recarga Hoy, y la bandeja
     // ya actualiza su fila en sitio tras cada cambio. Incluye la cuenta de
     // vencidas, asi que la bandeja no la pide aparte.
-    refrescarCalendario: refetchCalendarIfVisible
+    refrescarCalendario: refetchCalendarIfVisible,
+    // El tablero aplica los mismos filtros que el calendario.
+    filtros: function () { return getCalendarFilters(); }
   };
 
   actualizarContadorDeFiltros();

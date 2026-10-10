@@ -2921,6 +2921,7 @@
    "Hoy" y en "Observadas" no filtran nada y solo ocupan sitio. */
 .tasks-panel--today,
 .tasks-panel--calendar,
+.tasks-panel--board,
 .tasks-panel--filters,
 .tasks-panel--watching {
   display: none;
@@ -2929,9 +2930,15 @@
 .tasks-shell[data-vista="hoy"] .tasks-panel--today,
 .tasks-shell[data-vista="calendario"] .tasks-panel--calendar,
 .tasks-shell[data-vista="calendario"] .tasks-panel--filters,
+.tasks-shell[data-vista="tablero"] .tasks-panel--board,
+.tasks-shell[data-vista="tablero"] .tasks-panel--filters,
 .tasks-shell[data-vista="observadas"] .tasks-panel--watching {
   display: block;
 }
+
+/* En el tablero el estado son las columnas: filtrar por el dejaria todas
+   menos una vacias. */
+.tasks-shell[data-vista="tablero"] .campo-filtro-estado { display: none; }
 
 .today-groups {
   display: flex;
@@ -4687,4 +4694,362 @@
     transition: none;
   }
   .bandeja-aviso { transform: none; }
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   TABLERO KANBAN, ETIQUETAS Y RELACIONES
+   Los tonos son los mismos tokens que estados y prioridades (neutro, info,
+   aviso, alerta, bien) mas un violeta para que las etiquetas tengan seis
+   colores distinguibles. El fondo se mezcla del propio tono, asi el tema
+   oscuro no necesita una segunda tabla.
+   ═══════════════════════════════════════════════════════ */
+
+:root { --c-violeta: #6d5a8a; }
+[data-theme="dark"] { --c-violeta: #a896c4; }
+
+.tono-neutro  { --tono: var(--c-prio-baja); }
+.tono-info    { --tono: var(--c-info); }
+.tono-aviso   { --tono: var(--c-warning); }
+.tono-alerta  { --tono: var(--c-danger); }
+.tono-bien    { --tono: var(--c-success); }
+.tono-violeta { --tono: var(--c-violeta); }
+
+/* ─── Etiqueta ─── */
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--tono, var(--c-prio-baja)) 35%, transparent);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--tono, var(--c-prio-baja)) 13%, transparent);
+  color: var(--tono, var(--c-text-secondary));
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.etiqueta-alternar,
+.etiqueta-nueva {
+  height: 28px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.etiqueta-alternar[aria-pressed="false"] {
+  background: transparent;
+  border-color: var(--c-border);
+  color: var(--c-text-secondary);
+}
+.etiqueta-alternar[aria-pressed="true"] { border-color: var(--tono); }
+.etiqueta-alternar:disabled { cursor: default; opacity: 0.7; }
+.etiqueta-nueva {
+  background: transparent;
+  border: 1px dashed var(--c-border);
+  color: var(--c-text-secondary);
+}
+.etiqueta-alternar:focus-visible,
+.etiqueta-nueva:focus-visible,
+.etiqueta-color:focus-visible,
+.tablero-tarjeta-btn:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+.tarea-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tarea-etiquetas-vacio { color: var(--c-text-secondary); font-size: 0.82rem; }
+
+.etiqueta-colores { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.etiqueta-color {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--tono);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 2px var(--c-white);
+}
+.etiqueta-color[aria-checked="true"] { border-color: var(--c-text); }
+
+.etiqueta-punto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--tono);
+  flex-shrink: 0;
+}
+
+/* ─── Barra del tablero ─── */
+.tablero-herramientas {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-sm);
+  margin-bottom: var(--sp-md);
+}
+.tablero-herramientas .bandeja-alcance { margin-right: auto; }
+.tablero-filtro-etiqueta { min-width: 170px; }
+
+.tablero-aviso {
+  margin: 0 0 var(--sp-sm);
+  color: var(--c-warning);
+  font-size: 0.85rem;
+}
+
+/* ─── Columnas ─── */
+.tablero {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-md);
+  overflow-x: auto;
+  padding-bottom: var(--sp-sm);
+  min-height: 320px;
+  scroll-snap-type: x proximity;
+  scrollbar-color: var(--c-border) transparent;
+}
+
+.tablero-columna {
+  flex: 0 0 288px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 230px);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border-light);
+  border-top: 3px solid var(--tono);
+  border-radius: var(--r-xl);
+  scroll-snap-align: start;
+}
+
+.tablero-columna-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+}
+.tablero-columna-cabecera h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--c-text);
+}
+.tablero-columna-punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tono);
+}
+.tablero-columna-cuenta {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--c-white);
+  border: 1px solid var(--c-border-light);
+  color: var(--c-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.tablero-columna-vencidas {
+  margin-left: auto;
+  color: var(--c-danger);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.tablero-columna-nota {
+  margin: -4px 14px 6px;
+  color: var(--c-text-secondary);
+  font-size: 0.72rem;
+}
+
+.tablero-tarjetas {
+  list-style: none;
+  margin: 0;
+  padding: 4px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 64px;
+  flex: 1;
+}
+/* Una columna vacia sigue siendo un sitio donde soltar. */
+.tablero-tarjetas:empty::before {
+  content: 'Suelta aquí una tarea';
+  display: block;
+  padding: 18px 8px;
+  border: 1px dashed var(--c-border);
+  border-radius: var(--r-lg);
+  color: var(--c-text-secondary);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+/* ─── Tarjeta ─── */
+.tablero-tarjeta {
+  position: relative;
+  background: var(--c-white);
+  border: 1px solid var(--c-border-light);
+  border-left: 3px solid var(--c-prio-media);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+  transition: box-shadow var(--t-fast), border-color var(--t-fast);
+}
+.tablero-tarjeta:hover { box-shadow: var(--shadow-md); }
+.tablero-tarjeta.prio-alta { border-left-color: var(--c-prio-alta); }
+.tablero-tarjeta.prio-baja { border-left-color: var(--c-prio-baja); }
+.tablero-tarjeta.is-done { opacity: 0.62; }
+.tablero-tarjeta.is-done .tablero-tarjeta-titulo { text-decoration: line-through; }
+
+.tablero-tarjeta-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: inherit;
+  border-radius: inherit;
+}
+
+.tablero-tarjeta-etiquetas { display: flex; flex-wrap: wrap; gap: 4px; }
+.tablero-tarjeta-titulo {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+.tablero-tarjeta-cliente {
+  font-size: 0.75rem;
+  color: var(--c-text-secondary);
+}
+.tablero-tarjeta-pie {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--c-text-secondary);
+  font-size: 0.72rem;
+}
+.tablero-tarjeta-pie .bandeja-avatar { margin-left: auto; width: 24px; height: 24px; }
+.tablero-prio { font-weight: 700; }
+.tablero-tarjeta.prio-alta .tablero-prio { color: var(--c-prio-alta); }
+.tablero-tarjeta.is-overdue .tablero-fecha { color: var(--c-danger); font-weight: 700; }
+.tablero-bloqueo { color: var(--c-danger); font-weight: 700; }
+.tablero-tarjeta.is-blocked { background: color-mix(in srgb, var(--c-danger) 4%, var(--c-white)); }
+
+/* Estados del arrastre (SortableJS). */
+.tablero-tarjeta.is-fantasma {
+  opacity: 0.35;
+  border-style: dashed;
+  box-shadow: none;
+}
+.tablero-tarjeta.is-elegida { box-shadow: var(--shadow-lg); }
+.tablero-tarjeta.is-arrastrando { cursor: grabbing; transform: rotate(1.5deg); }
+
+/* ─── Relaciones (pestana del modal) ─── */
+.relaciones-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--sp-md) 0 var(--sp-xs);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--c-text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.relaciones-titulo:first-child { margin-top: 0; }
+.relaciones-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.relaciones-nota { margin: 0; color: var(--c-text-secondary); font-size: 0.82rem; }
+.relacion {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: 'estado titulo quitar' 'estado meta quitar';
+  align-items: center;
+  column-gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-lg);
+  background: var(--c-white);
+}
+.relacion-estado {
+  grid-area: estado;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--c-bg);
+  color: var(--c-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.relacion-titulo { grid-area: titulo; font-size: 0.86rem; font-weight: 600; color: var(--c-text); }
+.relacion-meta { grid-area: meta; font-size: 0.74rem; color: var(--c-text-secondary); }
+.relacion .bandeja-icono-btn { grid-area: quitar; }
+.relacion.is-done .relacion-titulo { text-decoration: line-through; color: var(--c-text-secondary); }
+
+.relaciones-alta {
+  display: grid;
+  grid-template-columns: minmax(170px, auto) 1fr;
+  gap: var(--sp-sm);
+  margin-top: var(--sp-md);
+}
+.relaciones-alta .autocomplete-item small { color: var(--c-text-secondary); }
+
+/* ─── Dialogo de etiquetas ─── */
+.tablero-etiquetas-dialogo { max-width: 560px; }
+.tablero-etiqueta-alta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-sm);
+  margin-bottom: var(--sp-md);
+}
+.tablero-etiqueta-alta .form-input { flex: 1 1 180px; }
+.tablero-etiquetas-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tablero-etiqueta-fila {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--r-lg);
+}
+.tablero-etiqueta-fila .form-input { flex: 1 1 140px; height: 32px; }
+
+/* La bandeja tambien pinta las etiquetas y el candado en cada fila. */
+.bandeja-fila-etiquetas { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.bandeja-fila-bloqueo { color: var(--c-danger); font-weight: 700; }
+
+@media (max-width: 768px) {
+  .tablero-herramientas .bandeja-alcance { flex: 1 1 100%; max-width: 100%; margin-right: 0; overflow-x: auto; flex-wrap: nowrap; }
+  .tablero-filtro-etiqueta { flex: 1; min-width: 0; }
+  .tablero { gap: var(--sp-sm); margin: 0 calc(-1 * var(--sp-md)); padding: 0 var(--sp-md) var(--sp-sm); scroll-snap-type: x mandatory; }
+  .tablero-columna { flex-basis: 84vw; max-height: calc(100vh - 260px); }
+  .relaciones-alta { grid-template-columns: 1fr; }
+  /* El modal generico entra desde abajo en movil con un transform que solo
+     anima el de la tarea; este dialogo se queda en su sitio. */
+  #tagsDialogOverlay .task-modal { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tablero-tarjeta,
+  .etiqueta-alternar { transition: none; }
+  .tablero-tarjeta.is-arrastrando { transform: none; }
 }

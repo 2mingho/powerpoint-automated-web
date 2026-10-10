@@ -1,0 +1,14 @@
+# Que NO entra en la imagen de la web (el contexto es web/).
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+test-results/
+playwright-report/
+e2e/
+src/generated/
+*.md
+!README.md
+tsconfig.tsbuildinfo
+npm-debug.log*

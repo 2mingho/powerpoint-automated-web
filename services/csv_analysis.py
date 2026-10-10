@@ -323,12 +323,18 @@ def generate_insights(df, general_data, missing_data, numeric_data, correlation_
     return insights
 
 
-def analyze_csv(file_path, encoding='utf-8', separator=','):
+def analyze_csv(file_path, encoding='utf-8', separator=',', progreso=None):
     """
     Main orchestrator function that runs all analyses.
     Returns a comprehensive JSON-serializable dictionary.
+
+    `progreso(fase, porcentaje, mensaje)` es opcional y se llama entre los
+    pasos reales del analisis, para quien quiera ensenar el avance.
     """
+    avisar = progreso or (lambda *a, **k: None)
+
     # Load the file
+    avisar('limpieza', 10, 'Leyendo las filas del archivo')
     df, load_info = load_csv(file_path, encoding, separator)
     
     if not load_info['success']:
@@ -341,12 +347,18 @@ def analyze_csv(file_path, encoding='utf-8', separator=','):
     
     # Run all analyses
     try:
+        avisar('limpieza', 70, 'Tipos de columna y valores faltantes')
         gen = general_info(df)
         miss = missing_analysis(df)
+        avisar('calculo', 10, 'Estadísticas numéricas')
         num = numeric_stats(df)
+        avisar('calculo', 45, 'Estadísticas de texto')
         cat = categorical_stats(df)
+        avisar('calculo', 75, 'Correlaciones')
         corr = correlation_matrix(df)
+        avisar('graficos', 10, 'Distribuciones para los gráficos')
         dist_num = distribution_data(df)
+        avisar('graficos', 60, 'Valores más frecuentes')
         dist_cat = categorical_distribution(df)
         insights = generate_insights(df, gen, miss, num, corr, cat)
 

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-09T01:05:22.000Z",
+  "title": "Design System: Newlink Data Intel",
+  "extensions": {
+    "colorMeta": {
+      "marca": { "role": "primary", "displayName": "Amarillo Newlink", "canonical": "#fadf25", "tonalRamp": ["#2c2704", "#514807", "#796c0b", "#a49410", "#cfbc17", "#fadf25", "#fce965", "#fff5ad"] },
+      "tinta": { "role": "neutral", "displayName": "Tinta", "canonical": "#0b0d10", "tonalRamp": ["#0b0d10", "#23272d", "#3e444c", "#5d646d", "#7e8791", "#a3abb3", "#cbd0d5", "#f0f2f4"] },
+      "pizarra": { "role": "neutral", "displayName": "Pizarra", "canonical": "#1c2127", "tonalRamp": ["#101419", "#1c2127", "#353c45", "#555e69", "#7b8590", "#a2abb4", "#cbd1d6", "#f0f2f4"] },
+      "fondo": { "role": "neutral", "displayName": "Fondo de trabajo", "canonical": "#eceef1", "tonalRamp": ["#1b2026", "#343b43", "#525c66", "#75808b", "#9ca5ae", "#c3c9d0", "#eceef1", "#fafbfc"] },
+      "superficie": { "role": "neutral", "displayName": "Panel", "canonical": "#ffffff", "tonalRamp": ["#202429", "#3a3f45", "#585e65", "#7a8087", "#a0a5aa", "#c5c9cc", "#ebedee", "#ffffff"] },
+      "hilo": { "role": "neutral", "displayName": "Divisor", "canonical": "#d6d9de", "tonalRamp": ["#1e2228", "#353a42", "#555d67", "#78818b", "#9da5ae", "#c1c7cd", "#d6d9de", "#f0f1f3"] },
+      "texto-secundario": { "role": "neutral", "displayName": "Texto secundario", "canonical": "#474d55", "tonalRamp": ["#202429", "#343941", "#474d55", "#626a73", "#828a93", "#a6adb5", "#cbd0d5", "#eff1f3"] },
+      "alerta": { "role": "semantic", "displayName": "Alerta", "canonical": "#c0341d", "tonalRamp": ["#30100c", "#541911", "#7a2216", "#9e2b1a", "#c0341d", "#dc654e", "#ed9f8d", "#f9d6cd"] },
+      "bien": { "role": "semantic", "displayName": "Bien", "canonical": "#1f7546", "tonalRamp": ["#0b2416", "#113923", "#185530", "#1f7546", "#379562", "#67b58a", "#a2d6b7", "#def3e4"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Título", "purpose": "Encabezados de pantalla y panel" },
+      "body": { "displayName": "Cuerpo", "purpose": "Lectura y formularios" },
+      "label": { "displayName": "Rótulo", "purpose": "Columnas y acciones" },
+      "data": { "displayName": "Dato", "purpose": "Cifras, fechas e identificadores" }
+    },
+    "shadows": [{ "name": "panel", "value": "0 1px 2px rgb(11 13 16 / 0.06), 0 1px 1px rgb(11 13 16 / 0.04)", "purpose": "Separar panel del fondo" }],
+    "motion": [{ "name": "fila", "value": "220ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Continuidad al reordenar trabajo" }],
+    "breakpoints": [{ "name": "sm", "value": "640px" }, { "name": "md", "value": "768px" }, { "name": "lg", "value": "1024px" }]
+  },
+  "components": [
+    { "name": "Botón primario", "kind": "button", "refersTo": "button-primary", "description": "Acción principal; amarillo solo al confirmar.", "html": "<button class=\"ds-primary\">CREAR TAREA</button>", "css": ".ds-primary{height:40px;padding:0 16px;background:#0b0d10;color:#fff;border:0;border-radius:4px;font:600 14px 'Barlow Condensed',sans-serif;letter-spacing:.1em;cursor:pointer;transition:background .2s}.ds-primary:hover{background:#1c2127}.ds-primary:active{background:#fadf25;color:#0b0d10}.ds-primary:focus-visible{outline:2px solid #0b0d10;outline-offset:2px}" },
+    { "name": "Botón secundario", "kind": "button", "description": "Acción secundaria con contorno.", "html": "<button class=\"ds-secondary\">EXPORTAR CSV</button>", "css": ".ds-secondary{height:40px;padding:0 16px;background:#fff;color:#0b0d10;border:1px solid #0b0d10;border-radius:4px;font:600 14px 'Barlow Condensed',sans-serif;letter-spacing:.1em;cursor:pointer}.ds-secondary:hover{background:#f5f6f8}.ds-secondary:focus-visible{outline:2px solid #0b0d10;outline-offset:2px}" },
+    { "name": "Campo", "kind": "input", "description": "Entrada con borde fuerte y foco visible.", "html": "<label class=\"ds-label\" for=\"ds-query\">BUSCAR TAREA</label><input class=\"ds-input\" id=\"ds-query\" placeholder=\"Título o cliente\">", "css": ".ds-label{display:block;margin-bottom:6px;color:#474d55;font:600 12px 'Barlow Condensed',sans-serif;letter-spacing:.12em}.ds-input{height:40px;padding:0 12px;background:#fff;color:#0b0d10;border:1px solid #b5bac1;border-radius:4px;font:400 14px Barlow,sans-serif}.ds-input:focus-visible{outline:2px solid #0b0d10;outline-offset:2px}" },
+    { "name": "Panel", "kind": "card", "refersTo": "panel", "description": "Superficie de trabajo con hilo y encabezado compacto.", "html": "<section class=\"ds-panel\"><h2>PRÓXIMAS SALIDAS</h2><p>Trabajo ordenado por entrega</p></section>", "css": ".ds-panel{background:#fff;border:1px solid #d6d9de;border-radius:8px;box-shadow:0 1px 2px rgb(11 13 16 / .06);color:#0b0d10}.ds-panel h2{margin:0;padding:14px 16px;border-bottom:1px solid #d6d9de;font:600 14px 'Barlow Condensed',sans-serif;letter-spacing:.14em}.ds-panel p{padding:0 16px;font:400 14px Barlow,sans-serif}" },
+    { "name": "Celda de estado cambiado", "kind": "custom", "refersTo": "status-changed", "description": "Atención temporal; el texto conserva el significado del estado.", "html": "<span class=\"ds-changed\">EN PROGRESO · CAMBIÓ HACE POCO</span>", "css": ".ds-changed{display:inline-flex;align-items:center;min-height:24px;padding:0 8px;background:#fadf25;color:#0b0d10;border:1px solid #fadf25;border-radius:4px;font:600 12px 'Barlow Condensed',sans-serif;letter-spacing:.1em}" },
+    { "name": "Navegación activa", "kind": "nav", "description": "Rail oscuro con selección amarilla.", "html": "<nav class=\"ds-nav\"><a href=\"#\">MIS TAREAS</a></nav>", "css": ".ds-nav{padding:8px;background:#1c2127}.ds-nav a{display:block;padding:12px;background:#252b33;color:#fadf25;font:600 13px 'Barlow Condensed',sans-serif;letter-spacing:.1em;text-decoration:none;border-left:2px solid #fadf25}.ds-nav a:hover{background:#353c45}.ds-nav a:focus-visible{outline:2px solid #fadf25;outline-offset:2px}" }
+  ],
+  "narrative": {
+    "northStar": "Puerta de embarque",
+    "overview": "Interfaz operativa de alta densidad: paneles de salidas, filas ordenadas por entrega y detalle como pase segmentado. Trabajo urgente visible al entrar; información ocasional se descubre al pedirla. Precisión de oficina, sin aspecto de juguete ni movimiento que distraiga.",
+    "keyCharacteristics": ["Filas compactas y divisores finos para escanear trabajo real.", "Amarillo Newlink reservado para identidad y cambios todavía no vistos.", "El estado se explica con texto, tono y movimiento breve; procesos largos muestran fases y progreso real."],
+    "rules": [{ "name": "The Yellow Attention Rule", "body": "Amarillo identifica Newlink o un cambio no visto; los estados se expresan con los tonos semánticos del catálogo (`neutro`, `info`, `aviso`, `alerta`, `bien`, `violeta`).", "section": "colors" }],
+    "dos": ["Do reutilizar tokens y primitivas de `web/src/components/ui/`.", "Do verificar 1440 y 390 px, temas claro/oscuro y `prefers-reduced-motion`.", "Do enseñar fase y progreso real en generación, clasificación, unión y subidas."],
+    "donts": ["Don't usar amarillo como estado de tarea.", "Don't sustituir filas operativas por tarjetas grandes o anidadas.", "Don't animar por decoración ni ocultar cambios bajo una transición."]
+  }
+}

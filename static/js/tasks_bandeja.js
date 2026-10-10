@@ -308,6 +308,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (seleccionada) clases.push('is-selected');
 
     const meta = [];
+    const bloqueos = Number(t.blocked_by_open) || 0;
+    if (bloqueos && !hecha) {
+      meta.push(`<span class="bandeja-fila-bloqueo"><i class="fa-solid fa-lock" aria-hidden="true"></i> Bloqueada por ${bloqueos}</span>`);
+    }
     if (t.client) meta.push(escapeHtml(t.client));
     const total = Number(t.checklist_total) || 0;
     if (total) meta.push(`Checklist ${Number(t.checklist_done) || 0}/${total}`);
@@ -336,6 +340,8 @@ document.addEventListener('DOMContentLoaded', function () {
       +     `<button type="button" class="bandeja-fila-btn" data-accion="abrir" aria-controls="tasksDetailPanel"${seleccionada ? ' aria-current="true"' : ''}>`
       +       '<span class="bandeja-fila-main">'
       +         `<span class="bandeja-fila-titulo">${titulo}</span>`
+      +         ((t.tags && t.tags.length && app.htmlEtiquetas)
+                  ? `<span class="bandeja-fila-etiquetas">${app.htmlEtiquetas(t.tags)}</span>` : '')
       +         (meta.length ? `<span class="bandeja-fila-meta">${meta.join(' · ')}</span>` : '')
       +       '</span>'
       +       `<span class="bandeja-pill ${claseDeEstado(t.status)}">${escapeHtml(t.status || '')}</span>`
@@ -675,6 +681,10 @@ document.addEventListener('DOMContentLoaded', function () {
       +   `<dt>Entrega</dt><dd class="${vencida ? 'is-overdue' : ''}">${escapeHtml(t.due_date ? fechaLarga(t.due_date) + ' · ' + etiquetaVencimiento(t.due_date) : '—')}</dd>`
       +   `<dt>Prioridad</dt><dd>${segmentos(PRIORIDADES, t.priority, 'prioridad', 'Prioridad', !puedeEditar)}</dd>`
       +   `<dt>Cliente</dt><dd>${escapeHtml(t.client || '—')}</dd>`
+      +   ((t.tags && t.tags.length && app.htmlEtiquetas)
+            ? `<dt>Etiquetas</dt><dd class="tarea-etiquetas">${app.htmlEtiquetas(t.tags)}</dd>` : '')
+      +   ((Number(t.blocked_by_open) && !hecha)
+            ? `<dt>Bloqueo</dt><dd class="bandeja-fila-bloqueo"><i class="fa-solid fa-lock" aria-hidden="true"></i> Espera por ${Number(t.blocked_by_open)} tarea(s) abierta(s)</dd>` : '')
       + '</dl>'
       + '<section class="bandeja-detalle-seccion" aria-labelledby="tasksDetailChecklistTitle">'
       +   `<h3 id="tasksDetailChecklistTitle">Checklist <span>${hechos}/${items.length}</span></h3>`

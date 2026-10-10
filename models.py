@@ -3,7 +3,7 @@ from flask_login import UserMixin
 from extensions import db
 from extensions import login_manager
 from datetime import datetime
-from sqlalchemy import false
+from sqlalchemy import false, true
 import json
 import secrets
 
@@ -30,9 +30,106 @@ class Area(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Color de la unidad en mapas de calor y graficos (#rrggbb). Nulo = el de la paleta.
+    color = db.Column(db.String(20), nullable=True)
+    # Solo las unidades con estudios pueden crear tareas de tipo "estudio".
+    has_studies = db.Column(db.Boolean, nullable=False, default=False, server_default=false())
 
     def __repr__(self):
         return f"<Area {self.name}>"
+
+
+class Contract(db.Model):
+    """Contrato de un cliente con una unidad (ver 0018_contratos_metas).
+
+    El monto es el TOTAL en USD y se reparte en partes iguales entre los meses
+    naturales de start_date a end_date. Un cliente o unidad con contratos no se
+    puede borrar. Quien lo ve o edita lo decide la app (finance_grants).
+    """
+    __tablename__ = 'contracts'
+    __table_args__ = (
+        db.CheckConstraint('amount > 0', name='ck_contracts_amount'),
+        db.CheckConstraint('end_date > start_date', name='ck_contracts_dates'),
+        db.CheckConstraint("contract_type IN ('Fee', 'Proyecto', 'Asignación')", name='ck_contracts_type'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False, index=True)
+    contract_type = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    from_area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='SET NULL'), nullable=True)
+    note = db.Column(db.String(500), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    client = db.relationship('Client', foreign_keys=[client_id])
+    unidad = db.relationship('Area', foreign_keys=[area_id])
+
+
+class Goal(db.Model):
+    """Meta anual de ingresos. area_id NULL es la meta de la direccion."""
+    __tablename__ = 'goals'
+    __table_args__ = (
+        db.CheckConstraint('amount >= 0', name='ck_goals_amount'),
+        db.CheckConstraint('year BETWEEN 2000 AND 2100', name='ck_goals_year'),
+        db.Index('uq_goals_year_area', 'year', 'area_id', unique=True,
+                 postgresql_where=db.text('area_id IS NOT NULL'), sqlite_where=db.text('area_id IS NOT NULL')),
+        db.Index('uq_goals_year_direction', 'year', unique=True,
+                 postgresql_where=db.text('area_id IS NULL'), sqlite_where=db.text('area_id IS NULL')),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='CASCADE'), nullable=True)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class FinanceGrant(db.Model):
+    """Permiso de EDITAR los ingresos de una unidad (ver 0017_finanzas_permisos).
+
+    kind: 'contracts' (contratos) o 'goals' (metas de ingresos), independientes.
+    Solo concede edicion; quien puede ver lo decide la estructura de mando.
+    """
+    __tablename__ = 'finance_grants'
+    __table_args__ = (db.CheckConstraint("kind IN ('contracts', 'goals')", name='ck_finance_grants_kind'),)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='CASCADE'), primary_key=True, index=True)
+    kind = db.Column(db.String(20), primary_key=True)
+    granted_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    usuario = db.relationship('User', foreign_keys=[user_id])
+    unidad = db.relationship('Area', foreign_keys=[area_id])
+
+
+class Client(db.Model):
+    """Cliente como entidad. Las tareas lo enlazan por client_id y siguen
+    guardando su nombre en tasks.client, siempre igual al de esta fila.
+
+    name_key es el nombre sin mayusculas, acentos ni espacios repetidos: dos
+    textos que dan la misma clave son el mismo cliente (ver 0016_clientes).
+    """
+    __tablename__ = 'clients'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    name_key = db.Column(db.String(100), nullable=False, unique=True)
+    client_type = db.Column(db.String(40), nullable=True)
+    account_lead_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=true())
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    account_lead = db.relationship('User', foreign_keys=[account_lead_id])
+
+    def __repr__(self):
+        return f"<Client {self.name}>"
 
 
 class TaskStatus(db.Model):
@@ -210,6 +307,9 @@ class User(UserMixin, db.Model):
     session_token = db.Column(db.String(64), nullable=True)
     force_logout = db.Column(db.Boolean, default=False)
     is_area_lead = db.Column(db.Boolean, default=False, server_default=false())
+    # Horas por semana que esta persona puede trabajar. Nulo = la capacidad
+    # estandar de la app; 0 = no recibe carga (direccion, administracion).
+    weekly_capacity = db.Column(db.Integer, nullable=True)
     # Indexada: el alcance de unidad filtra usuarios por area_id en cada
     # consulta de tareas.
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
@@ -434,6 +534,7 @@ class Task(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     client = db.Column(db.String(100), nullable=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True, index=True)
     start_date = db.Column(db.Date, nullable=True)
     end_date = db.Column(db.Date, nullable=True)
     directorate = db.Column(db.String(255), nullable=True)
@@ -454,12 +555,29 @@ class Task(db.Model):
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
     deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     deleted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # Orden dentro de su columna del tablero. Es un real para poder soltar una
+    # tarjeta entre otras dos sin renumerar la columna entera. Nula = nunca se
+    # ha colocado a mano; esas van al final, por fecha de entrega.
+    board_position = db.Column(db.Float, nullable=True)
+    # Seguimiento: horas, revision, bloqueo y estudios. Todo nulo o con valor por
+    # defecto, asi que las tareas existentes no cambian.
+    estimated_hours = db.Column(db.Float, nullable=True)
+    reviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    block_reason = db.Column(db.String(255), nullable=True)
+    # Cuando pasó a un estado final. Nulo en las que se cerraron antes de existir
+    # la columna: no se reconstruye, para no inventar la puntualidad.
+    done_at = db.Column(db.DateTime, nullable=True)
+    task_type = db.Column(db.String(10), nullable=False, default='normal', server_default='normal')
+    phase = db.Column(db.String(40), nullable=True)
+    study_method = db.Column(db.String(40), nullable=True)
 
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     assignee_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     creator = db.relationship('User', foreign_keys=[creator_id], backref='created_tasks')
     assignee = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_tasks')
+    reviewer = db.relationship('User', foreign_keys=[reviewer_id])
+    client_ref = db.relationship('Client', foreign_keys=[client_id])
     area_ref = db.relationship('Area', foreign_keys=[area_id])
     children = db.relationship('Task', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
 
@@ -500,6 +618,7 @@ class Task(db.Model):
             'assignee_id': self.assignee_id,
             'assignee_name': self.assignee.username if self.assignee else '',
             'updated_at': self.updated_at.isoformat() if self.updated_at else '',
+            'board_position': self.board_position,
             'is_overdue': bool(self.due_date and self.due_date < today_local() and self.status != 'Completado'),
         }
         if include_counts:
@@ -674,6 +793,80 @@ class TaskTemplate(db.Model):
             'payload': payload,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
         }
+
+
+task_tag_links = db.Table(
+    'task_tag_links',
+    db.Column('task_id', db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True),
+    # Indexada aparte: filtrar el tablero por etiqueta busca por tag_id, y la
+    # clave primaria solo sirve empezando por task_id.
+    db.Column('tag_id', db.Integer, db.ForeignKey('task_tags.id', ondelete='CASCADE'),
+              primary_key=True, index=True),
+)
+
+
+class TaskTag(db.Model):
+    """Etiqueta de color para clasificar tareas, varias por tarea.
+
+    Pertenece a una unidad, como las plantillas: cada equipo clasifica su
+    trabajo a su manera y no deberia ver las etiquetas de los demas. area_id
+    nulo es una etiqueta comun, que solo crea un admin y ven todos.
+
+    El color es un token del sistema (neutro, info, aviso...), no un hex, por
+    el mismo motivo que en estados y prioridades: el tema oscuro lo resuelve
+    aparte.
+    """
+    __tablename__ = 'task_tags'
+    __table_args__ = (
+        db.UniqueConstraint('area_id', 'nombre', name='uq_task_tags_area_nombre'),
+    )
+
+    COLORES = ('neutro', 'info', 'aviso', 'alerta', 'bien', 'violeta')
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(40), nullable=False)
+    color = db.Column(db.String(20), nullable=False, default='neutro')
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True, index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    area = db.relationship('Area')
+    tasks = db.relationship('Task', secondary=task_tag_links, lazy='dynamic',
+                            backref=db.backref('tags', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'color': self.color,
+            'area_id': self.area_id,
+            'area_name': self.area.name if self.area else '',
+        }
+
+
+class TaskDependency(db.Model):
+    """Una tarea que no deberia cerrarse hasta que otra lo este.
+
+    blocker_task_id es la que va primero; blocked_task_id, la que espera. La
+    relacion es dirigida y no puede formar ciclos: eso lo comprueba quien la
+    crea, porque una restriccion de la base no sabe recorrer un grafo.
+    """
+    __tablename__ = 'task_dependencies'
+    __table_args__ = (
+        db.UniqueConstraint('blocker_task_id', 'blocked_task_id', name='uq_task_dependency'),
+        db.CheckConstraint('blocker_task_id <> blocked_task_id', name='ck_task_dependency_distintas'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    blocker_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'),
+                                nullable=False, index=True)
+    blocked_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'),
+                                nullable=False, index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    blocker = db.relationship('Task', foreign_keys=[blocker_task_id])
+    blocked = db.relationship('Task', foreign_keys=[blocked_task_id])
 
 
 class TaskRequest(db.Model):

@@ -24,6 +24,9 @@
       <button type="button" class="tasks-view-btn" role="tab" data-vista="hoy" aria-selected="true" aria-controls="tasksTodayView">
         <i class="fa-solid fa-list-check"></i> <span>Hoy</span>
       </button>
+      <button type="button" class="tasks-view-btn" role="tab" data-vista="tablero" aria-selected="false" aria-controls="tasksBoardPanel">
+        <i class="fa-solid fa-table-columns"></i> <span>Tablero</span>
+      </button>
       <button type="button" class="tasks-view-btn" role="tab" data-vista="calendario" aria-selected="false" aria-controls="tasksCalendarPanel">
         <i class="fa-regular fa-calendar"></i> <span>Calendario</span>
       </button>
@@ -148,7 +151,7 @@
         </summary>
 
         <div class="tasks-filters" id="tasksFilters">
-          <div class="campo-icono">
+          <div class="campo-icono campo-filtro-estado">
             <i class="fa-regular fa-circle-dot" aria-hidden="true"></i>
             <select class="form-select" id="tasksFilterStatus" aria-label="Filtrar por estado">
               <option value="">Estado</option>
@@ -203,6 +206,38 @@
         </div>
       </details>
 
+
+      {# ─── Tablero ───
+        Una columna por estado del catalogo, en su orden. Arrastrar una
+        tarjeta cambia su estado y su sitio; el orden dentro de la columna se
+        guarda. Comparte los filtros del calendario (salvo Estado, que aqui
+        son las propias columnas). La logica vive en static/js/tasks_tablero.js. #}
+      <section class="tasks-panel tasks-panel--board" id="tasksBoardPanel" aria-labelledby="tasksBoardTitle">
+        <h2 id="tasksBoardTitle" class="visually-hidden">Tablero por estado</h2>
+        <div class="tablero-herramientas">
+          <div class="bandeja-alcance" role="group" aria-label="Qué tareas ver en el tablero">
+            <button type="button" class="bandeja-chip" data-tablero-scope="mine" aria-pressed="false">Asignadas a mí</button>
+            <button type="button" class="bandeja-chip" data-tablero-scope="created" aria-pressed="false">Creadas por mí</button>
+            <button type="button" class="bandeja-chip" data-tablero-scope="" aria-pressed="true">Mi unidad</button>
+          </div>
+          <div class="campo-icono tablero-filtro-etiqueta">
+            <i class="fa-solid fa-tag" aria-hidden="true"></i>
+            <select class="form-select" id="tasksBoardTag" aria-label="Filtrar por etiqueta">
+              <option value="">Etiqueta</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnBoardTags" aria-haspopup="dialog">
+            <i class="fa-solid fa-tags" aria-hidden="true"></i> <span class="btn-label-desktop">Etiquetas</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnBoardRefresh" aria-label="Actualizar tablero">
+            <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p class="tablero-aviso modal-hidden" id="tasksBoardNotice" role="status"></p>
+        <div class="tablero" id="tasksBoard" aria-busy="true">
+          <p class="today-loading">Cargando tablero...</p>
+        </div>
+      </section>
 
       <section class="tasks-panel tasks-panel--calendar" id="tasksCalendarPanel" aria-labelledby="tasksCalendarTitle">
         <h2 id="tasksCalendarTitle" class="visually-hidden">Calendario de trabajo</h2>
@@ -282,6 +317,7 @@
            encontraba no sabia para que servia. Como pestana se ve, se cuenta y
            tiene sitio para explicarse. #}
         <button type="button" class="task-tab" data-tab="watchers">Observadores <span class="task-tab-count" id="taskWatchersCount">0</span></button>
+        <button type="button" class="task-tab" data-tab="relations">Relaciones <span class="task-tab-count" id="taskRelationsCount">0</span></button>
         <button type="button" class="task-tab" data-tab="activity">Actividad</button>
       </div>
 
@@ -336,6 +372,13 @@
           <option value="{{ priority }}"{% if priority == default_priority %} selected{% endif %}>{{ priority }}</option>
           {% endfor %}
         </select>
+      </div>
+
+      {# Etiquetas: solo al editar, porque se guardan aparte y al momento,
+         como el checklist. Al crear, la tarea todavia no existe. #}
+      <div class="form-group form-group-tight modal-hidden" id="taskTagsGroup">
+        <span class="form-label" id="taskTagsLabel">Etiquetas</span>
+        <div class="tarea-etiquetas" id="taskTagsEditor" role="group" aria-labelledby="taskTagsLabel"></div>
       </div>
 
       {# Estado: solo al editar #}
@@ -474,6 +517,25 @@
         </div>
       </div>
 
+      <div class="task-tab-panel" id="taskTabRelations">
+        <p class="tasks-modal-intro">Marca qué tiene que cerrarse antes que esta tarea. En el tablero, las tareas que esperan por otra abierta llevan un candado.</p>
+        <div class="relaciones" id="taskRelations">
+          <div class="task-comments-empty">Cargando relaciones…</div>
+        </div>
+        <form class="relaciones-alta" id="taskRelationsForm" autocomplete="off">
+          <label class="visually-hidden" for="taskRelationsType">Tipo de relación</label>
+          <select class="form-select" id="taskRelationsType">
+            <option value="blocked_by">Bloqueada por</option>
+            <option value="blocks">Bloquea a</option>
+          </select>
+          <div class="autocomplete-wrap">
+            <label class="visually-hidden" for="taskRelationsSearch">Buscar tarea</label>
+            <input type="search" class="form-input" id="taskRelationsSearch" placeholder="Buscar tarea por título…" maxlength="100">
+            <div class="autocomplete-list" id="taskRelationsResults" role="listbox"></div>
+          </div>
+        </form>
+      </div>
+
       <div class="task-tab-panel" id="taskTabActivity">
         <div class="task-activity-list" id="taskActivityList">
           <div class="task-comments-empty">Todavía sin cambios registrados. Aquí aparecerá quién tocó qué y cuándo.</div>
@@ -537,6 +599,26 @@
   <button type="button" class="bandeja-aviso-cerrar" id="tasksUndoToastClose" aria-label="Cerrar aviso">&times;</button>
 </div>
 
+{# Gestion de etiquetas: crear, renombrar, recolorear y borrar. #}
+<div class="task-modal-overlay modal-hidden" id="tagsDialogOverlay">
+  <div class="task-modal tablero-etiquetas-dialogo" role="dialog" aria-modal="true" aria-labelledby="tagsDialogTitle">
+    <div class="task-modal-header">
+      <h2 id="tagsDialogTitle">Etiquetas</h2>
+      <button class="task-modal-close" id="tagsDialogClose" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="task-modal-body">
+      <p class="tasks-modal-intro">Las etiquetas son de tu unidad: solo las ve y usa tu equipo.</p>
+      <form class="tablero-etiqueta-alta" id="tagsDialogForm" autocomplete="off">
+        <label class="visually-hidden" for="tagsDialogName">Nombre de la etiqueta</label>
+        <input type="text" class="form-input" id="tagsDialogName" maxlength="40" placeholder="Nueva etiqueta">
+        <div class="etiqueta-colores" id="tagsDialogColors" role="radiogroup" aria-label="Color"></div>
+        <button type="submit" class="btn btn-primary btn-sm">Crear</button>
+      </form>
+      <ul class="tablero-etiquetas-lista" id="tagsDialogList"></ul>
+    </div>
+  </div>
+</div>
+
 {# Solo id y nombre: es lo que necesita el "@persona" del alta rapida.
    tojson escapa <, > y & para que un nombre no pueda cerrar el script. #}
 <script type="application/json" id="tasksAreaUsers">[{% for u in area_users %}{{ {'id': u.id, 'username': u.username}|tojson }}{% if not loop.last %},{% endif %}{% endfor %}]</script>
@@ -546,11 +628,14 @@
 
 <!-- FullCalendar JS -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<!-- SortableJS: arrastre entre columnas con raton y con el dedo -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/muelle.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tasks_bandeja.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tasks_tablero.js') }}"></script>
 <script src="{{ url_for('static', filename='js/task_request_form.js') }}"></script>
 {% endblock %}
