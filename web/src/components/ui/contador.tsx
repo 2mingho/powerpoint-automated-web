@@ -13,7 +13,7 @@ const tonoTexto: Record<Tono, string> = {
  * y el rotulo se enciende un instante. Cifras tabulares, nunca saltan de ancho.
  */
 export function Contador({
-  rotulo, valor, tono = "neutro", activo, onClick, detalle,
+  rotulo, valor, tono = "neutro", activo, onClick, detalle, texto,
 }: {
   rotulo: string;
   valor: number;
@@ -21,6 +21,8 @@ export function Contador({
   activo?: boolean;
   onClick?: () => void;
   detalle?: string;
+  /* Lo que se pinta en lugar del numero ("50 %", "—"); `valor` sigue decidiendo el tono. */
+  texto?: string;
 }) {
   const [clave, setClave] = useState(0);
   const previo = useRef(valor);
@@ -29,14 +31,14 @@ export function Contador({
     previo.current = valor;
   }, [valor]);
 
+  /* Sin onClick es una cifra, no un boton: no promete una accion que no tiene. */
+  const Etiqueta = onClick ? "button" : "div";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={activo}
+    <Etiqueta
+      {...(onClick ? { type: "button" as const, onClick, "aria-pressed": activo } : {})}
       className={cx(
         "group relative flex min-w-0 flex-col items-start gap-1 px-4 py-3 text-left",
-        "transition-colors duration-[var(--dur)] hover:bg-superficie-2",
+        onClick && "transition-colors duration-[var(--dur)] hover:bg-superficie-2",
         "after:absolute after:inset-x-4 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-texto after:transition-transform after:duration-[var(--dur)] after:ease-salida",
         activo && "after:scale-x-100",
       )}
@@ -52,10 +54,10 @@ export function Contador({
             clave > 0 && "motion-safe:animate-[paleta_var(--dur-vista)_var(--curva)]",
           )}
         >
-          {valor}
+          {texto ?? valor}
         </span>
       </span>
       {detalle && <span className="text-xs text-texto-3">{detalle}</span>}
-    </button>
+    </Etiqueta>
   );
 }

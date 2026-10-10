@@ -67,3 +67,16 @@ export function puedeCerrar(revisorId: number | null, quienId: number, esLider: 
 export function puedeCambiarRevisor(revisorActual: number | null, quienId: number, esLider: boolean): boolean {
   return revisorActual == null || revisorActual === quienId || esLider;
 }
+
+/*
+ * En cual de los cinco grupos de seguimiento cae un estado del catalogo (que es
+ * editable). Final = hecha; inicial = pendiente; el nombre decide bloqueo y
+ * revision; el resto esta en curso.
+ */
+export function grupoDeEstado(e: { nombre: string; esInicial: boolean; esFinal: boolean }): "pendiente" | "en_curso" | "bloqueada" | "revision" | "hecha" {
+  if (e.esFinal) return "hecha";
+  if (esEstadoDeBloqueo(e.nombre)) return "bloqueada";
+  if (/revis/i.test(e.nombre)) return "revision";
+  if (e.esInicial) return "pendiente";
+  return "en_curso";
+}

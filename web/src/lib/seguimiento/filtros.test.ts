@@ -6,6 +6,7 @@ const t = (o: Partial<TareaFiltrable> = {}): TareaFiltrable => ({
   estado: "en_curso",
   entrega: "2026-10-14",
   horas: 4,
+  unidad: "u1",
   cliente: "c1",
   persona: "p1",
   tipo: "Fee",
@@ -55,6 +56,20 @@ describe("filtros cruzados", () => {
     expect(pasaFiltros(t({ entrega: "2026-10-01" }), vencida, HOY)).toBe(true);
     expect(pasaFiltros(t({ entrega: "2026-10-01", estado: "hecha" }), vencida, HOY)).toBe(false);
     expect(pasaFiltros(t(), vencida, HOY)).toBe(false);
+  });
+
+  it("unidad filtra por la unidad de la tarea", () => {
+    const f = { ...SIN_FILTROS, unidad: "u2" };
+    expect(pasaFiltros(t(), f, HOY)).toBe(false);
+    expect(pasaFiltros(t({ unidad: "u2" }), f, HOY)).toBe(true);
+    expect(pasaFiltros(t(), f, HOY, "unidad")).toBe(true);
+  });
+
+  it("'abierta' deja pasar todo lo que no esta hecho", () => {
+    const f = { ...SIN_FILTROS, estado: "abierta" };
+    expect(pasaFiltros(t({ estado: "pendiente" }), f, HOY)).toBe(true);
+    expect(pasaFiltros(t({ estado: "bloqueada" }), f, HOY)).toBe(true);
+    expect(pasaFiltros(t({ estado: "hecha" }), f, HOY)).toBe(false);
   });
 
   it("alternar activa, cambia y quita sin tocar el rango", () => {

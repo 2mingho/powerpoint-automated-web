@@ -14,6 +14,10 @@ import type { TareaDTO } from "@/lib/tareas/tipos";
 import type { Tono } from "@/components/ui/estado";
 import { diaSemana } from "@/lib/tareas/fechas";
 import { FranjaInicio, MarcarVisita } from "./_inicio/cliente";
+import { PanelInicio } from "./_inicio/panel";
+import { datosPanel, MAX_FILAS_PANEL } from "@/lib/panel/datos";
+import { leerPeriodo, rangoDePeriodo } from "@/lib/seguimiento/periodo";
+import { tieneHerramienta, type UsuarioActual } from "@/lib/auth/session";
 import { fechaCorta, haceCuanto, MESES_LARGOS, relativo } from "./tareas/_componentes/cliente";
 
 export const metadata = { title: "Inicio" };
@@ -21,18 +25,55 @@ export const metadata = { title: "Inicio" };
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 /* Inicio: lo de hoy primero. El marco sale al instante; los datos llegan por streaming. */
-export default function Inicio() {
+export default function Inicio(props: PageProps<"/">) {
   return (
     <div className="flex flex-col gap-5">
       <Suspense fallback={<EsqueletoInicio />}>
-        <Contenido />
+        <Vista searchParams={props.searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function Contenido() {
+/* Dos pestañas: «Hoy» (lo tuyo) y «Panel» (filtros cruzados sobre todo lo que ves). */
+async function Vista({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
   const u = await exigirUsuario();
+  const q = await searchParams;
+  const panel = q.vista === "panel" && tieneHerramienta(u, "tasks");
+  return panel ? <ContenidoPanel u={u} q={q} /> : <Contenido u={u} conPanel={tieneHerramienta(u, "tasks")} />;
+}
+
+function Pestanas({ actual }: { actual: "hoy" | "panel" }) {
+  const clase = (activa: boolean) => cx(
+    "inline-flex h-10 items-center border-b-2 px-4 font-rotulo text-sm font-semibold uppercase tracking-[0.12em] transition-colors duration-[var(--dur)]",
+    activa ? "border-texto text-texto" : "border-transparent text-texto-3 hover:text-texto",
+  );
+  return (
+    <nav aria-label="Vistas de Inicio" className="flex border-b border-hilo">
+      <Link href="/" aria-current={actual === "hoy" ? "page" : undefined} className={clase(actual === "hoy")}>Hoy</Link>
+      <Link href="/?vista=panel" aria-current={actual === "panel" ? "page" : undefined} className={clase(actual === "panel")}>Panel</Link>
+    </nav>
+  );
+}
+
+async function ContenidoPanel({ u, q }: { u: UsuarioActual; q: Record<string, string | string[] | undefined> }) {
+  const hoy = hoyNegocio();
+  const periodo = leerPeriodo(q.periodo);
+  const rango = rangoDePeriodo(periodo, hoy, { desde: q.desde, hasta: q.hasta });
+  const d = await datosPanel(u, rango);
+  return (
+    <>
+      <header className="flex flex-wrap items-end gap-x-4 gap-y-1">
+        <h1 className="font-rotulo text-2xl font-semibold uppercase tracking-[0.06em]">Panel</h1>
+        <p className="text-texto-2">Todo lo que puedes ver, filtrado entre sí</p>
+      </header>
+      <Pestanas actual="panel" />
+      <PanelInicio filas={d.filas} estados={d.estados} hoy={hoy} periodo={periodo} desde={rango.desde} hasta={rango.hasta} truncado={d.truncado} tope={MAX_FILAS_PANEL} />
+    </>
+  );
+}
+
+async function Contenido({ u, conPanel }: { u: UsuarioActual; conPanel: boolean }) {
   const galletas = await cookies();
   const crudo = galletas.get("nl_ultima_visita")?.value;
   const desde = desdeUltimaVisita(crudo);
@@ -55,6 +96,8 @@ async function Contenido() {
           </Link>
         )}
       </header>
+
+      {conPanel && <Pestanas actual="hoy" />}
 
       {d.conTareas && d.contadores && <FranjaInicio contadores={d.contadores} />}
 

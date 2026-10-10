@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { efectosDeEstado, esEstadoDeBloqueo, leerHoras, puedeCambiarRevisor, puedeCerrar } from "./estado";
+import { efectosDeEstado, esEstadoDeBloqueo, grupoDeEstado, leerHoras, puedeCambiarRevisor, puedeCerrar } from "./estado";
 
 const AHORA = new Date("2026-10-09T15:00:00Z");
 
@@ -61,5 +61,19 @@ describe("aprobacion por revisor", () => {
     expect(puedeCambiarRevisor(7, 1, false)).toBe(false);
     expect(puedeCambiarRevisor(7, 7, false)).toBe(true);
     expect(puedeCambiarRevisor(7, 1, true)).toBe(true);
+  });
+});
+
+describe("grupoDeEstado", () => {
+  const e = (nombre: string, esInicial = false, esFinal = false) => ({ nombre, esInicial, esFinal });
+  it("clasifica los estados del catalogo en los cinco grupos", () => {
+    expect(grupoDeEstado(e("Completado", false, true))).toBe("hecha");
+    expect(grupoDeEstado(e("Bloqueado"))).toBe("bloqueada");
+    expect(grupoDeEstado(e("En revisión"))).toBe("revision");
+    expect(grupoDeEstado(e("Pendiente", true))).toBe("pendiente");
+    expect(grupoDeEstado(e("En Progreso"))).toBe("en_curso");
+  });
+  it("final manda sobre el nombre", () => {
+    expect(grupoDeEstado(e("Bloqueado y cerrado", false, true))).toBe("hecha");
   });
 });
