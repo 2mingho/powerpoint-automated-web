@@ -143,9 +143,33 @@ test.describe("la ficha en pantalla", () => {
     const tarjeta = page.getByRole("dialog", { name: `Cliente: ${nombre}` });
     await expect(tarjeta).toBeVisible();
     await expect(tarjeta).toBeFocused();
+    // No se cierra sola: el foco que pasa del nombre a la ficha no es "salir".
+    await page.waitForTimeout(700);
+    await expect(tarjeta).toBeVisible();
+    await expect(tarjeta).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(tarjeta).toBeHidden();
     await expect(disparador).toBeFocused();
+  });
+
+  test("con el teclado: Tab dentro de la ficha la mantiene y al salir de ella se cierra", async ({ page, context }, info) => {
+    test.skip(info.project.name !== "escritorio", "El teclado se prueba en escritorio.");
+    const { e, nombre, abierta } = await pantalla("fic-tab");
+    await entrarComo(context, e.empleado);
+    await page.goto(`${BASE}/tareas`);
+    const disparador = page.locator(`li[data-tarea="${abierta}"]`).getByRole("button", { name: `Ficha del cliente ${nombre}` });
+    await disparador.focus();
+    await page.keyboard.press("Enter");
+    const tarjeta = page.getByRole("dialog", { name: `Cliente: ${nombre}` });
+    await expect(tarjeta).toBeFocused();
+    await expect(tarjeta.getByRole("link").first()).toBeVisible(); // ya cargo: antes no hay a donde ir
+    await page.keyboard.press("Tab"); // al primer enlace de la propia ficha
+    await page.waitForTimeout(500);
+    await expect(tarjeta).toBeVisible();
+    await expect(tarjeta.getByRole("link").first()).toBeFocused();
+    await tarjeta.getByRole("link").last().focus();
+    await page.keyboard.press("Tab"); // fuera de la ficha
+    await expect(tarjeta).toBeHidden();
   });
 
   test("al tocar: abre como hoja inferior sin abrir la tarea, y se cierra al tocar fuera", async ({ page, context }, info) => {

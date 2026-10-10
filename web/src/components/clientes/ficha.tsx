@@ -55,7 +55,8 @@ export function NombreCliente({ id, nombre, className, children }: { id: number 
       onPointerEnter={(e) => { if (e.pointerType === "mouse") programarAbrir(datos(e.currentTarget, false)); }}
       onPointerLeave={(e) => { if (e.pointerType === "mouse") programarCerrar(); }}
       onFocus={(e) => { if (e.currentTarget.matches(":focus-visible")) programarAbrir(datos(e.currentTarget, false)); }}
-      onBlur={programarCerrar}
+      // Si el foco pasa a la propia ficha (Enter abre y la enfoca), no se cierra.
+      onBlur={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.("[data-ficha]")) programarCerrar(); }}
       onClick={(e) => {
         if (tipo.current === "touch") { e.stopPropagation(); if (meAbierto) cerrar(); else abrir(datos(e.currentTarget, false)); return; }
         // Teclado (detail 0): abre y lleva el foco a la ficha. Con el raton ya se abrio al pasar; el clic no cambia la fila.
@@ -141,7 +142,10 @@ export function FichaClienteHost() {
 
   return (
     <div
-      ref={caja} role="dialog" tabIndex={-1} aria-label={`Cliente: ${abierta.nombre}`} aria-busy={e?.fase === "cargando" || undefined}
+      ref={caja} role="dialog" tabIndex={-1} data-ficha aria-label={`Cliente: ${abierta.nombre}`} aria-busy={e?.fase === "cargando" || undefined}
+      onFocus={mantener}
+      // Salir de la ficha con el teclado la cierra, salvo que se vuelva al nombre que la abrio.
+      onBlur={(ev) => { const a = ev.relatedTarget as Node | null; if (!ev.currentTarget.contains(a) && a !== abierta.ancla) programarCerrar(); }}
       onPointerEnter={mantener} onPointerLeave={(ev) => { if (ev.pointerType === "mouse") programarCerrar(); }}
       style={estrecha || !pos ? undefined : { left: pos.left, top: pos.top }}
       className={cx(
