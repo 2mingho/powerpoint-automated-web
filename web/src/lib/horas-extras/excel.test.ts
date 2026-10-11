@@ -105,6 +105,29 @@ describe("libro de horas extras", () => {
   });
 });
 
+describe("texto escrito por el usuario", () => {
+  it("una celda que empieza con = + - @ se guarda como texto y nunca como formula (no se ejecuta al abrir el Excel)", async () => {
+    const malicioso = '=HYPERLINK("http://malo.example","clic")';
+    const buf = await libroDeHorasExtras({
+      unidad: "Media Watch", limite: 80, periodo: SEP30, personas: [{ id: 9, nombre: "+cmd|' /C calc'!A0" }], generadoPor: "Jarlina Fulgencio", hoy: "2026-09-22",
+      entradas: [e(9, "+cmd|' /C calc'!A0", "2026-09-14", 2, malicioso, "@SUM(1+1)")],
+    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf as unknown as ArrayBuffer);
+    const ws = wb.getWorksheet("2DA QUINCENA DE SEPTIEMBRE")!;
+    const celdas: ExcelJS.Cell[] = [];
+    ws.eachRow((f) => f.eachCell((c) => celdas.push(c)));
+    for (const texto of [malicioso, "@SUM(1+1)", "+CMD|' /C CALC'!A0"]) {
+      const c = celdas.find((x) => String(x.value).toUpperCase() === texto.toUpperCase());
+      expect(c, texto).toBeDefined();
+      expect(c!.type, texto).toBe(ExcelJS.ValueType.String); // texto, no ValueType.Formula
+    }
+    // Las unicas formulas son las de los totales.
+    const formulas = celdas.filter((c) => c.type === ExcelJS.ValueType.Formula).map((c) => (c.value as { formula: string }).formula);
+    expect(formulas.every((f) => /^(SUM|COUNTA)\(|^F\d+$|^[DEF]\d+(\+[DEF]\d+)*$/.test(f))).toBe(true);
+  });
+});
+
 describe("iniciales", () => {
   it("las de cada nombre, para firmar el reporte", () => {
     expect(iniciales("Jarlina Fulgencio")).toBe("JF");
