@@ -51,7 +51,8 @@ test.describe("API de gastos", () => {
     const d = await (await r.get(`${BASE}/api/gastos?unidad=${e.alfa}&anio=${ANIO}`)).json();
     expect(d.puedeEditar).toBe(true);
     expect(d.gastos).toHaveLength(3); // el del año pasado no
-    expect(d.resumen).toMatchObject({ gastado: 750.5, presupuesto: 1400, restante: 649.5, estado: "bien" });
+    // Marketing (400) no tiene presupuesto: no se mide contra los 1400 de las otras dos categorias.
+    expect(d.resumen).toMatchObject({ gastado: 750.5, sinPresupuesto: 400, presupuesto: 1400, restante: 1049.5, estado: "bien" });
     const viajes = d.resumen.porCategoria.find((c: { categoria: string }) => c.categoria === "Viajes y viáticos");
     expect(viajes).toMatchObject({ gastado: 350.5, presupuesto: 400, estado: "bien" });
     expect(d.resumen.porCategoria.map((c: { categoria: string }) => c.categoria).sort()).toEqual(["Capacitación", "Marketing", "Viajes y viáticos"]);

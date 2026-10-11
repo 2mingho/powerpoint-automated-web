@@ -142,22 +142,30 @@ export function VistaHorasExtras({ datos }: { datos: DatosHorasExtras }) {
           <Vacio titulo={`Sin horas extras en T${datos.trimestre} ${periodo.anio}`}>{puedeEditar ? "Registra horas extras de tu equipo: aquí verás cuánto lleva cada persona contra el máximo del trimestre." : "Cuando el líder de la unidad registre horas extras, las verás aquí."}</Vacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[34rem] table-fixed border-collapse text-sm">
+            <table className="w-full min-w-[32rem] table-fixed border-collapse text-sm">
               <thead>
                 <tr className="border-b border-hilo">
-                  <th scope="col" className="rotulo w-36 px-3 py-2 text-left sm:w-48 sm:px-4">Persona</th>
+                  <th scope="col" className="rotulo w-28 px-3 py-2 text-left sm:w-48 sm:px-4">Persona</th>
+                  <th scope="col" className="rotulo w-28 px-1 py-2 text-center sm:w-40">Trimestre</th>
                   {matriz.periodos.map((p) => (
                     <th key={`${p.mes}-${p.mitad}`} scope="col" className="rotulo px-0.5 py-2 text-center">
                       <span className="font-mono cifras">{mesCorto(p.mes)} {p.mitad}</span>
                     </th>
                   ))}
-                  <th scope="col" className="rotulo w-32 px-2 py-2 text-center sm:w-40">Trimestre</th>
                 </tr>
               </thead>
               <tbody>
                 {filasCalor.map((f) => (
                   <tr key={f.personaId} className="border-b border-hilo last:border-b-0">
                     <th scope="row" className="px-3 py-1.5 text-left font-normal sm:px-4"><span className="block truncate">{f.nombre}</span></th>
+                    <td className="p-0.5">
+                      <div tabIndex={0} role="img" aria-label={`${f.nombre}, trimestre: ${num(f.total)} de ${num(f.limite)} h${f.aviso ? `. ${TEXTO_AVISO[f.aviso]}` : ""}`}
+                        title={`${num(f.total)} de ${num(f.limite)} h${f.restante >= 0 ? ` · quedan ${num(f.restante)}` : ` · ${num(-f.restante)} de más`}`}
+                        className={cx("flex h-11 flex-col items-center justify-center rounded-sm leading-tight", FONDO[f.nivel], f.nivel >= 3 && "font-semibold")}>
+                        <span className="font-mono cifras">{num(f.total)} / {num(f.limite)}</span>
+                        <span className={cx("text-[0.6875rem]", f.aviso === "excedido" ? "text-alerta" : "text-texto-2")}>{f.aviso ? TEXTO_AVISO[f.aviso] : `quedan ${num(f.restante)}`}</span>
+                      </div>
+                    </td>
                     {f.celdas.map((c) => {
                       const actual = c.periodo.mes === periodo.mes && c.periodo.mitad === periodo.mitad;
                       const texto = `${f.nombre}, ${rotuloPeriodo(c.periodo, false)}: ${num(c.horas)} h (${ROTULO_NIVEL[c.nivel].toLowerCase()} frente al ritmo de ${num(Math.round(matriz.ritmo * 10) / 10)} h por quincena)`;
@@ -170,22 +178,14 @@ export function VistaHorasExtras({ datos }: { datos: DatosHorasExtras }) {
                         </td>
                       );
                     })}
-                    <td className="p-0.5">
-                      <div tabIndex={0} role="img" aria-label={`${f.nombre}, trimestre: ${num(f.total)} de ${num(f.limite)} h${f.aviso ? `. ${TEXTO_AVISO[f.aviso]}` : ""}`}
-                        title={`${num(f.total)} de ${num(f.limite)} h${f.restante >= 0 ? ` · quedan ${num(f.restante)}` : ` · ${num(-f.restante)} de más`}`}
-                        className={cx("flex h-11 flex-col items-center justify-center rounded-sm leading-tight", FONDO[f.nivel], f.nivel >= 3 && "font-semibold")}>
-                        <span className="font-mono cifras">{num(f.total)} / {num(f.limite)}</span>
-                        <span className={cx("text-[0.6875rem]", f.aviso === "excedido" ? "text-alerta" : "text-texto-2")}>{f.aviso ? TEXTO_AVISO[f.aviso] : `quedan ${num(f.restante)}`}</span>
-                      </div>
-                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t border-hilo font-mono text-xs text-texto-2 cifras">
                   <th scope="row" className="px-3 py-2 text-left font-normal sm:px-4">Total</th>
-                  {matriz.totalesPorPeriodo.map((t, i) => <td key={i} className="py-2 text-center">{t ? num(t) : "—"}</td>)}
                   <td className="py-2 text-center font-medium text-texto">{num(matriz.total)}</td>
+                  {matriz.totalesPorPeriodo.map((t, i) => <td key={i} className="py-2 text-center">{t ? num(t) : "—"}</td>)}
                 </tr>
               </tfoot>
             </table>

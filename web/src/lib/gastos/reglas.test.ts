@@ -50,12 +50,17 @@ describe("resumen del año", () => {
   ];
   const r = resumenDeGastos(gastos, [{ categoria: "Viajes y viáticos", monto: 1000 }, { categoria: "Marketing", monto: 1000 }, { categoria: "Capacitación", monto: 500 }], 2026);
 
-  it("totales del año, sin contar otros años", () => {
+  it("totales del año, sin contar otros años; el presupuesto se mide solo contra lo gastado en categorías con presupuesto", () => {
     expect(r.gastado).toBe(1480.25);
+    expect(r.sinPresupuesto).toBe(30); // «Otros» no tiene presupuesto
     expect(r.presupuesto).toBe(2500);
-    expect(r.restante).toBe(1019.75);
-    expect(r.porcentaje).toBeCloseTo(0.592, 3);
+    expect(r.restante).toBe(1049.75); // 2500 - (1480.25 - 30)
+    expect(r.porcentaje).toBeCloseTo(0.58, 3);
     expect(r.estado).toBe("bien");
+  });
+  it("gastar en una categoría sin presupuesto no se come el de otra", () => {
+    const s = resumenDeGastos([{ id: 1, fecha: "2026-01-10", categoria: "Marketing", monto: 950 }, { id: 2, fecha: "2026-01-11", categoria: "Otros", monto: 5000 }], [{ categoria: "Marketing", monto: 1000 }], 2026);
+    expect(s).toMatchObject({ gastado: 5950, sinPresupuesto: 5000, presupuesto: 1000, restante: 50, estado: "cerca" });
   });
   it("por mes", () => {
     expect(r.porMes.map((m) => m.gastado)).toEqual([500.25, 0, 980, 0, 0, 0, 0, 0, 0, 0, 0, 0]);

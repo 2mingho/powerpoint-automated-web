@@ -112,7 +112,7 @@ export function VistaGastos({ datos }: { datos: DatosGastos }) {
       </section>
 
       <div role="group" aria-label="Cifras del año" className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-hilo bg-hilo shadow-1 md:grid-cols-4">
-        <div className="bg-superficie"><Contador compacto rotulo="Gastado" valor={r.gastado} texto={usdS(r.gastado)} detalle={usd(r.gastado)} /></div>
+        <div className="bg-superficie"><Contador compacto rotulo="Gastado" valor={r.gastado} texto={usdS(r.gastado)} detalle={r.sinPresupuesto > 0 && r.presupuesto > 0 ? `${usd(r.sinPresupuesto)} sin presupuesto` : usd(r.gastado)} /></div>
         <div className="bg-superficie"><Contador compacto rotulo="Presupuesto" valor={r.presupuesto} texto={r.presupuesto ? usdS(r.presupuesto) : "—"} detalle={r.presupuesto ? usd(r.presupuesto) : "sin presupuesto"} /></div>
         <div className="bg-superficie">
           <Contador compacto rotulo={r.restante !== null && r.restante < 0 ? "Excedido en" : "Disponible"} valor={Math.abs(r.restante ?? 0)} texto={r.restante === null ? "—" : usdS(Math.abs(r.restante))}

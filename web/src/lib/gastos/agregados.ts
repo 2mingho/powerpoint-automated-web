@@ -13,9 +13,12 @@ export type FilaCategoria = { categoria: string; gastado: number; presupuesto: n
 
 export type ResumenGastos = {
   anio: number;
+  /* Todo lo gastado en el año, con o sin presupuesto. */
   gastado: number;
+  /* De lo gastado, lo que cayo en categorias SIN presupuesto: no se mide contra nada. */
+  sinPresupuesto: number;
   presupuesto: number;
-  /* Lo que queda del presupuesto total (negativo si se paso); null si no hay presupuesto. */
+  /* Lo que queda del presupuesto total (negativo si se paso), midiendo solo lo gastado en categorias con presupuesto; null si no hay presupuesto. */
   restante: number | null;
   porcentaje: number | null;
   estado: Estado;
@@ -25,8 +28,9 @@ export type ResumenGastos = {
 
 /*
  * Solo cuentan los gastos del año. Las categorias son las que tienen gasto o presupuesto (sin distinguir mayusculas),
- * de mas gastado a menos. El presupuesto TOTAL es la suma de los presupuestos por categoria: un gasto en una categoria
- * sin presupuesto cuenta en lo gastado pero no mueve el presupuesto.
+ * de mas gastado a menos. El presupuesto TOTAL es la suma de los presupuestos por categoria y se mide contra lo gastado
+ * en ESAS categorias: un gasto en una categoria sin presupuesto cuenta en lo gastado, pero no gasta presupuesto de otra
+ * (se informa aparte en `sinPresupuesto`).
  */
 export function resumenDeGastos(gastos: readonly GastoFila[], presupuestos: readonly PresupuestoFila[], anio: number): ResumenGastos {
   const delAnio = gastos.filter((g) => g.fecha.startsWith(`${anio}-`));
@@ -53,11 +57,13 @@ export function resumenDeGastos(gastos: readonly GastoFila[], presupuestos: read
 
   const gastado = redondear(delAnio.reduce((a, g) => a + g.monto, 0));
   const presupuesto = redondear(presupuestos.reduce((a, p) => a + p.monto, 0));
+  const sinPresupuesto = redondear(porCategoria.filter((c) => c.presupuesto <= 0).reduce((a, c) => a + c.gastado, 0));
+  const medido = redondear(gastado - sinPresupuesto);
   return {
-    anio, gastado, presupuesto,
-    restante: presupuesto > 0 ? redondear(presupuesto - gastado) : null,
-    porcentaje: presupuesto > 0 ? gastado / presupuesto : null,
-    estado: estadoDePresupuesto(gastado, presupuesto),
+    anio, gastado, sinPresupuesto, presupuesto,
+    restante: presupuesto > 0 ? redondear(presupuesto - medido) : null,
+    porcentaje: presupuesto > 0 ? medido / presupuesto : null,
+    estado: estadoDePresupuesto(medido, presupuesto),
     porMes: porMes.map((m) => ({ mes: m.mes, gastado: redondear(m.gastado) })),
     porCategoria,
   };
