@@ -272,6 +272,8 @@ function EditarUnidad({ u, personas, onHecho, onError }: { u: Unidad; personas: 
   const [nombre, setNombre] = useState(u.nombre);
   const [descripcion, setDescripcion] = useState(u.descripcion);
   const [estudios, setEstudios] = useState(u.tieneEstudios);
+  const [horasExtras, setHorasExtras] = useState(u.tieneHorasExtras);
+  const [limiteHE, setLimiteHE] = useState(String(u.limiteHorasExtras));
   const [nuevoLider, setNuevoLider] = useState("");
   const [borrar, setBorrar] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -291,8 +293,18 @@ function EditarUnidad({ u, personas, onHecho, onError }: { u: Unidad; personas: 
         <input type="checkbox" className="mt-1 size-4 accent-[var(--texto)]" checked={estudios} onChange={(e) => setEstudios(e.target.checked)} />
         <span><span className="block">Hace estudios</span><span className="block text-sm text-texto-3">Quienes la integran pueden crear estudios con todas sus fases desde Mis tareas.</span></span>
       </label>
-      <Boton variante="secundario" cargando={guardando} disabled={nombre === u.nombre && descripcion === u.descripcion && estudios === u.tieneEstudios}
-        onClick={() => accion(() => pedir(`/api/admin/unidades/${u.id}`, { metodo: "PATCH", cuerpo: { nombre, descripcion, tieneEstudios: estudios } }), `Unidad ${nombre} actualizada.`)}>Guardar unidad</Boton>
+      <label className="flex min-h-10 cursor-pointer items-start gap-3 rounded-sm px-1 hover:bg-superficie-2">
+        <input type="checkbox" className="mt-1 size-4 accent-[var(--texto)]" checked={horasExtras} onChange={(e) => setHorasExtras(e.target.checked)} />
+        <span><span className="block">Gestiona horas extras</span><span className="block text-sm text-texto-3">Quien la lidera registra las horas extras de su gente y ve el mapa de calor contra el máximo del trimestre.</span></span>
+      </label>
+      {horasExtras && (
+        <Campo etiqueta="Máximo de horas extras por persona y trimestre">
+          {(a) => <Entrada {...a} inputMode="decimal" value={limiteHE} maxLength={6} onChange={(e) => setLimiteHE(e.target.value)} className="max-w-32" />}
+        </Campo>
+      )}
+      <Boton variante="secundario" cargando={guardando}
+        disabled={nombre === u.nombre && descripcion === u.descripcion && estudios === u.tieneEstudios && horasExtras === u.tieneHorasExtras && limiteHE === String(u.limiteHorasExtras)}
+        onClick={() => accion(() => pedir(`/api/admin/unidades/${u.id}`, { metodo: "PATCH", cuerpo: { nombre, descripcion, tieneEstudios: estudios, tieneHorasExtras: horasExtras, ...(horasExtras ? { limiteHorasExtras: limiteHE } : {}) } }), `Unidad ${nombre} actualizada.`)}>Guardar unidad</Boton>
 
       <section aria-label="Líderes" className="border-t border-hilo pt-4">
         <h3 className="rotulo mb-2">Líderes</h3>

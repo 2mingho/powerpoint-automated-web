@@ -64,34 +64,39 @@ model alembic_version {
 }
 
 model areas {
-  id                                              Int              @id @default(autoincrement())
-  name                                            String           @unique @db.VarChar(100)
-  description                                     String?
-  created_at                                      DateTime?        @db.Timestamp(6)
-  color                                           String?          @db.VarChar(20)
-  has_studies                                     Boolean          @default(false)
-  solicitudes_salientes task_requests[]  @relation("task_requests_from_area_idToareas")
-  solicitudes_entrantes   task_requests[]  @relation("task_requests_to_area_idToareas")
-  task_tags                                       task_tags[]
-  task_templates                                  task_templates[]
-  tasks                                           tasks[]
-  concesiones_finanzas                            finance_grants[]
-  contratos                                       contracts[]                @relation("contracts_area_idToareas")
-  contratos_asignados                             contracts[]                @relation("contracts_from_area_idToareas")
-  metas                                           goals[]
-  unit_leads                                      unit_leads[]
-  users                                           users[]
+  id                    Int                @id @default(autoincrement())
+  name                  String             @unique @db.VarChar(100)
+  description           String?
+  created_at            DateTime?          @db.Timestamp(6)
+  color                 String?            @db.VarChar(20)
+  has_studies           Boolean            @default(false)
+  has_overtime          Boolean            @default(false)
+  overtime_limit        Decimal            @default(80) @db.Decimal(6, 2)
+  solicitudes_salientes task_requests[]    @relation("task_requests_from_area_idToareas")
+  solicitudes_entrantes task_requests[]    @relation("task_requests_to_area_idToareas")
+  task_tags             task_tags[]
+  task_templates        task_templates[]
+  tasks                 tasks[]
+  concesiones_finanzas  finance_grants[]
+  contratos             contracts[]        @relation("contracts_area_idToareas")
+  contratos_asignados   contracts[]        @relation("contracts_from_area_idToareas")
+  metas                 goals[]
+  gastos                expenses[]
+  presupuestos_gastos   expense_budgets[]
+  horas_extras          overtime_entries[]
+  unit_leads            unit_leads[]
+  users                 users[]
 }
 
 model clients {
-  id              Int       @id(map: "pk_clients") @default(autoincrement())
-  name            String    @db.VarChar(100)
-  name_key        String    @unique(map: "uq_clients_name_key") @db.VarChar(100)
-  client_type     String?   @db.VarChar(40)
+  id              Int         @id(map: "pk_clients") @default(autoincrement())
+  name            String      @db.VarChar(100)
+  name_key        String      @unique(map: "uq_clients_name_key") @db.VarChar(100)
+  client_type     String?     @db.VarChar(40)
   account_lead_id Int?
-  is_active       Boolean   @default(true)
-  created_at      DateTime? @db.Timestamp(6)
-  responsable     users?    @relation("clients_account_lead_idTousers", fields: [account_lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_clients_account_lead_id_users")
+  is_active       Boolean     @default(true)
+  created_at      DateTime?   @db.Timestamp(6)
+  responsable     users?      @relation("clients_account_lead_idTousers", fields: [account_lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_clients_account_lead_id_users")
   tareas          tasks[]
   contratos       contracts[]
 }
@@ -241,14 +246,14 @@ model task_comments {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model task_dependencies {
-  id                                             Int       @id(map: "pk_task_dependencies") @default(autoincrement())
-  blocker_task_id                                Int
-  blocked_task_id                                Int
-  created_by_id                                  Int?
-  created_at                                     DateTime? @db.Timestamp(6)
-  bloqueada tasks     @relation("task_dependencies_blocked_task_idTotasks", fields: [blocked_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_dependencies_blocked_task_id_tasks")
-  bloqueadora tasks     @relation("task_dependencies_blocker_task_idTotasks", fields: [blocker_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_dependencies_blocker_task_id_tasks")
-  users                                          users?    @relation(fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_dependencies_created_by_id_users")
+  id              Int       @id(map: "pk_task_dependencies") @default(autoincrement())
+  blocker_task_id Int
+  blocked_task_id Int
+  created_by_id   Int?
+  created_at      DateTime? @db.Timestamp(6)
+  bloqueada       tasks     @relation("task_dependencies_blocked_task_idTotasks", fields: [blocked_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_dependencies_blocked_task_id_tasks")
+  bloqueadora     tasks     @relation("task_dependencies_blocker_task_idTotasks", fields: [blocker_task_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_dependencies_blocker_task_id_tasks")
+  users           users?    @relation(fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_dependencies_created_by_id_users")
 
   @@unique([blocker_task_id, blocked_task_id], map: "uq_task_dependency")
   @@index([blocked_task_id], map: "ix_task_dependencies_blocked_task_id")
@@ -264,26 +269,26 @@ model task_priorities {
 }
 
 model task_requests {
-  id                                        Int       @id @default(autoincrement())
-  title                                     String    @db.VarChar(255)
-  description                               String?
-  client                                    String?   @db.VarChar(100)
-  due_date                                  DateTime? @db.Date
-  priority                                  String?   @db.VarChar(10)
-  requester_id                              Int
-  from_area_id                              Int?
-  to_area_id                                Int
-  status                                    String    @db.VarChar(15)
-  resolved_by_id                            Int?
-  resolved_at                               DateTime? @db.Timestamp(6)
-  rejection_reason                          String?
-  created_task_id                           Int?
-  created_at                                DateTime? @db.Timestamp(6)
-  tasks                                     tasks?    @relation(fields: [created_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  unidad_origen   areas?    @relation("task_requests_from_area_idToareas", fields: [from_area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  solicitante   users     @relation("task_requests_requester_idTousers", fields: [requester_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  resuelta_por users?    @relation("task_requests_resolved_by_idTousers", fields: [resolved_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  unidad_destino     areas     @relation("task_requests_to_area_idToareas", fields: [to_area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               Int       @id @default(autoincrement())
+  title            String    @db.VarChar(255)
+  description      String?
+  client           String?   @db.VarChar(100)
+  due_date         DateTime? @db.Date
+  priority         String?   @db.VarChar(10)
+  requester_id     Int
+  from_area_id     Int?
+  to_area_id       Int
+  status           String    @db.VarChar(15)
+  resolved_by_id   Int?
+  resolved_at      DateTime? @db.Timestamp(6)
+  rejection_reason String?
+  created_task_id  Int?
+  created_at       DateTime? @db.Timestamp(6)
+  tasks            tasks?    @relation(fields: [created_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unidad_origen    areas?    @relation("task_requests_from_area_idToareas", fields: [from_area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  solicitante      users     @relation("task_requests_requester_idTousers", fields: [requester_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resuelta_por     users?    @relation("task_requests_resolved_by_idTousers", fields: [resolved_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unidad_destino   areas     @relation("task_requests_to_area_idToareas", fields: [to_area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([from_area_id], map: "ix_task_requests_from_area_id")
   @@index([status], map: "ix_task_requests_status")
@@ -338,13 +343,13 @@ model task_templates {
 }
 
 model task_watchers {
-  id                                     Int       @id @default(autoincrement())
-  task_id                                Int
-  user_id                                Int
-  added_by_id                            Int?
-  created_at                             DateTime? @db.Timestamp(6)
+  id          Int       @id @default(autoincrement())
+  task_id     Int
+  user_id     Int
+  added_by_id Int?
+  created_at  DateTime? @db.Timestamp(6)
   anadido_por users?    @relation("task_watchers_added_by_idTousers", fields: [added_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  tasks                                  tasks     @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tasks       tasks     @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuario     users     @relation("task_watchers_user_idTousers", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([task_id, user_id], map: "uq_task_watcher")
@@ -353,54 +358,54 @@ model task_watchers {
 }
 
 model tasks {
-  id                                                         Int                    @id @default(autoincrement())
-  title                                                      String                 @db.VarChar(255)
-  description                                                String?
-  client                                                     String?                @db.VarChar(100)
-  start_date                                                 DateTime?              @db.Date
-  end_date                                                   DateTime?              @db.Date
-  directorate                                                String?                @db.VarChar(255)
-  requested_by                                               String?                @db.VarChar(255)
-  budget_type                                                String?                @db.VarChar(255)
-  created_at                                                 DateTime?              @db.Timestamp(6)
-  due_date                                                   DateTime               @db.Date
-  status                                                     String                 @db.VarChar(30)
-  is_recurrent                                               Boolean?
-  recurrence_type                                            String?                @db.VarChar(20)
-  parent_task_id                                             Int?
-  area                                                       String                 @db.VarChar(20)
-  creator_id                                                 Int
-  assignee_id                                                Int
-  updated_at                                                 DateTime?              @db.Timestamp(6) @updatedAt
-  priority                                                   String                 @default("Media") @db.VarChar(10)
-  visibility                                                 String                 @default("unit") @db.VarChar(15)
-  area_id                                                    Int?
-  deleted_at                                                 DateTime?              @db.Timestamp(6)
-  deleted_by_id                                              Int?
-  board_position                                             Float?
-  client_id                                                  Int?
-  estimated_hours                                            Float?
-  reviewer_id                                                Int?
-  block_reason                                               String?                @db.VarChar(255)
-  done_at                                                    DateTime?              @db.Timestamp(6)
-  task_type                                                  String                 @default("normal") @db.VarChar(10)
-  phase                                                      String?                @db.VarChar(40)
-  study_method                                               String?                @db.VarChar(40)
-  task_checklist_items                                       task_checklist_items[]
-  task_comments                                              task_comments[]
-  bloqueada_por task_dependencies[]    @relation("task_dependencies_blocked_task_idTotasks")
-  bloquea_a task_dependencies[]    @relation("task_dependencies_blocker_task_idTotasks")
-  task_requests                                              task_requests[]
-  task_tag_links                                             task_tag_links[]
-  task_watchers                                              task_watchers[]
-  areas                                                      areas?                 @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_area_id")
-  borrada_por                           users?                 @relation("tasks_deleted_by_idTousers", fields: [deleted_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_deleted_by_id")
-  asignado                             users                  @relation("tasks_assignee_idTousers", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  cliente_entidad                      clients?               @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_client_id_clients")
-  revisor                              users?                 @relation("tasks_reviewer_idTousers", fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_reviewer_id_users")
-  creador                              users                  @relation("tasks_creator_idTousers", fields: [creator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  padre                                                      tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  hijas                                                      tasks[]                @relation("tasksTotasks")
+  id                   Int                    @id @default(autoincrement())
+  title                String                 @db.VarChar(255)
+  description          String?
+  client               String?                @db.VarChar(100)
+  start_date           DateTime?              @db.Date
+  end_date             DateTime?              @db.Date
+  directorate          String?                @db.VarChar(255)
+  requested_by         String?                @db.VarChar(255)
+  budget_type          String?                @db.VarChar(255)
+  created_at           DateTime?              @db.Timestamp(6)
+  due_date             DateTime               @db.Date
+  status               String                 @db.VarChar(30)
+  is_recurrent         Boolean?
+  recurrence_type      String?                @db.VarChar(20)
+  parent_task_id       Int?
+  area                 String                 @db.VarChar(20)
+  creator_id           Int
+  assignee_id          Int
+  updated_at           DateTime?              @updatedAt @db.Timestamp(6)
+  priority             String                 @default("Media") @db.VarChar(10)
+  visibility           String                 @default("unit") @db.VarChar(15)
+  area_id              Int?
+  deleted_at           DateTime?              @db.Timestamp(6)
+  deleted_by_id        Int?
+  board_position       Float?
+  client_id            Int?
+  estimated_hours      Float?
+  reviewer_id          Int?
+  block_reason         String?                @db.VarChar(255)
+  done_at              DateTime?              @db.Timestamp(6)
+  task_type            String                 @default("normal") @db.VarChar(10)
+  phase                String?                @db.VarChar(40)
+  study_method         String?                @db.VarChar(40)
+  task_checklist_items task_checklist_items[]
+  task_comments        task_comments[]
+  bloqueada_por        task_dependencies[]    @relation("task_dependencies_blocked_task_idTotasks")
+  bloquea_a            task_dependencies[]    @relation("task_dependencies_blocker_task_idTotasks")
+  task_requests        task_requests[]
+  task_tag_links       task_tag_links[]
+  task_watchers        task_watchers[]
+  areas                areas?                 @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_area_id")
+  borrada_por          users?                 @relation("tasks_deleted_by_idTousers", fields: [deleted_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_deleted_by_id")
+  asignado             users                  @relation("tasks_assignee_idTousers", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cliente_entidad      clients?               @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_client_id_clients")
+  revisor              users?                 @relation("tasks_reviewer_idTousers", fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_reviewer_id_users")
+  creador              users                  @relation("tasks_creator_idTousers", fields: [creator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  padre                tasks?                 @relation("tasksTotasks", fields: [parent_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  hijas                tasks[]                @relation("tasksTotasks")
 
   @@index([area_id], map: "ix_tasks_area_id")
   @@index([client_id], map: "ix_tasks_client_id")
@@ -439,52 +444,110 @@ model unit_leads {
 }
 
 model users {
-  id                                                Int                      @id @default(autoincrement())
-  username                                          String                   @db.VarChar(150)
-  email                                             String                   @unique @db.VarChar(150)
-  password                                          String                   @db.VarChar(200)
-  role                                              String                   @db.VarChar(20)
-  is_active                                         Boolean?
-  created_at                                        DateTime?                @db.Timestamp(6)
-  allowed_tools                                     String?
-  session_token                                     String?                  @db.VarChar(64)
-  force_logout                                      Boolean?
-  area_id                                           Int?
-  is_area_lead                                      Boolean?                 @default(false)
-  manager_id                                        Int?
-  tour_completed_at                                 DateTime?                @db.Timestamp(6)
-  weekly_capacity                                   Int?
-  activity_logs                                     activity_logs[]
-  ai_providers                                      ai_providers[]
-  ai_usage                                          ai_usage[]
-  classification_presets                            classification_presets[]
-  notifications                                     notifications[]
-  pptx_templates                                    pptx_templates[]
-  reports                                           reports[]
-  task_checklist_items                              task_checklist_items[]
-  task_comments                                     task_comments[]
-  task_dependencies                                 task_dependencies[]
-  solicitudes_hechas   task_requests[]          @relation("task_requests_requester_idTousers")
-  solicitudes_resueltas task_requests[]          @relation("task_requests_resolved_by_idTousers")
-  task_tags                                         task_tags[]
-  task_templates                                    task_templates[]
-  observaciones_anadidas    task_watchers[]          @relation("task_watchers_added_by_idTousers")
-  observaciones        task_watchers[]          @relation("task_watchers_user_idTousers")
-  tareas_borradas                  tasks[]                  @relation("tasks_deleted_by_idTousers")
-  tareas_asignadas                    tasks[]                  @relation("tasks_assignee_idTousers")
-  tareas_creadas                     tasks[]                  @relation("tasks_creator_idTousers")
-  tareas_a_revisar                   tasks[]                  @relation("tasks_reviewer_idTousers")
-  clientes_a_cargo                   clients[]                @relation("clients_account_lead_idTousers")
-  concesiones_finanzas               finance_grants[]         @relation("finance_grants_user_idTousers")
-  concesiones_otorgadas              finance_grants[]         @relation("finance_grants_granted_byTousers")
-  contratos_creados                  contracts[]
-  metas_editadas                     goals[]
-  temp_artifacts                                    temp_artifacts[]
-  unit_leads                                        unit_leads[]
-  manager                                             users?                   @relation("usersTousers", fields: [manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_manager_id")
-  reportes                                          users[]                  @relation("usersTousers")
-  areas                                             areas?                   @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                       Int                      @id @default(autoincrement())
+  username                 String                   @db.VarChar(150)
+  email                    String                   @unique @db.VarChar(150)
+  password                 String                   @db.VarChar(200)
+  role                     String                   @db.VarChar(20)
+  is_active                Boolean?
+  created_at               DateTime?                @db.Timestamp(6)
+  allowed_tools            String?
+  session_token            String?                  @db.VarChar(64)
+  force_logout             Boolean?
+  area_id                  Int?
+  is_area_lead             Boolean?                 @default(false)
+  manager_id               Int?
+  tour_completed_at        DateTime?                @db.Timestamp(6)
+  weekly_capacity          Int?
+  activity_logs            activity_logs[]
+  ai_providers             ai_providers[]
+  ai_usage                 ai_usage[]
+  classification_presets   classification_presets[]
+  notifications            notifications[]
+  pptx_templates           pptx_templates[]
+  reports                  reports[]
+  task_checklist_items     task_checklist_items[]
+  task_comments            task_comments[]
+  task_dependencies        task_dependencies[]
+  solicitudes_hechas       task_requests[]          @relation("task_requests_requester_idTousers")
+  solicitudes_resueltas    task_requests[]          @relation("task_requests_resolved_by_idTousers")
+  task_tags                task_tags[]
+  task_templates           task_templates[]
+  observaciones_anadidas   task_watchers[]          @relation("task_watchers_added_by_idTousers")
+  observaciones            task_watchers[]          @relation("task_watchers_user_idTousers")
+  tareas_borradas          tasks[]                  @relation("tasks_deleted_by_idTousers")
+  tareas_asignadas         tasks[]                  @relation("tasks_assignee_idTousers")
+  tareas_creadas           tasks[]                  @relation("tasks_creator_idTousers")
+  tareas_a_revisar         tasks[]                  @relation("tasks_reviewer_idTousers")
+  clientes_a_cargo         clients[]                @relation("clients_account_lead_idTousers")
+  concesiones_finanzas     finance_grants[]         @relation("finance_grants_user_idTousers")
+  concesiones_otorgadas    finance_grants[]         @relation("finance_grants_granted_byTousers")
+  contratos_creados        contracts[]
+  metas_editadas           goals[]
+  gastos_registrados       expenses[]
+  presupuestos_editados    expense_budgets[]
+  horas_extras             overtime_entries[]       @relation("overtime_entries_user_idTousers")
+  horas_extras_registradas overtime_entries[]       @relation("overtime_entries_created_byTousers")
+  temp_artifacts           temp_artifacts[]
+  unit_leads               unit_leads[]
+  manager                  users?                   @relation("usersTousers", fields: [manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_manager_id")
+  reportes                 users[]                  @relation("usersTousers")
+  areas                    areas?                   @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([area_id], map: "ix_users_area_id")
   @@index([manager_id], map: "ix_users_manager_id")
+}
+
+model expenses {
+  id          Int       @id(map: "pk_expenses") @default(autoincrement())
+  area_id     Int
+  spent_on    DateTime  @db.Date
+  category    String    @db.VarChar(60)
+  description String    @db.VarChar(300)
+  amount      Decimal   @db.Decimal(14, 2)
+  vendor      String?   @db.VarChar(120)
+  note        String?   @db.VarChar(500)
+  created_by  Int?
+  created_at  DateTime? @db.Timestamp(6)
+  updated_at  DateTime? @db.Timestamp(6)
+  unidad      areas     @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_expenses_area_id_areas")
+  creador     users?    @relation(fields: [created_by], references: [id], onUpdate: NoAction, map: "fk_expenses_created_by_users")
+
+  @@index([area_id, spent_on], map: "ix_expenses_area_id_spent_on")
+}
+
+model expense_budgets {
+  id         Int       @id(map: "pk_expense_budgets") @default(autoincrement())
+  area_id    Int
+  year       Int
+  category   String    @db.VarChar(60)
+  amount     Decimal   @db.Decimal(14, 2)
+  updated_by Int?
+  updated_at DateTime? @db.Timestamp(6)
+  unidad     areas     @relation(fields: [area_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_expense_budgets_area_id_areas")
+  editor     users?    @relation(fields: [updated_by], references: [id], onUpdate: NoAction, map: "fk_expense_budgets_updated_by_users")
+
+  @@unique([area_id, year, category], map: "uq_expense_budgets_area_year_category")
+}
+
+model overtime_entries {
+  id           Int       @id(map: "pk_overtime_entries") @default(autoincrement())
+  area_id      Int
+  user_id      Int
+  work_date    DateTime  @db.Date
+  detail       String    @db.VarChar(300)
+  schedule     String?   @db.VarChar(120)
+  hours        Decimal   @db.Decimal(5, 2)
+  period_year  Int
+  period_month Int       @db.SmallInt
+  period_half  Int       @db.SmallInt
+  created_by   Int?
+  created_at   DateTime? @db.Timestamp(6)
+  updated_at   DateTime? @db.Timestamp(6)
+  unidad       areas     @relation(fields: [area_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_overtime_entries_area_id_areas")
+  registrador  users?    @relation("overtime_entries_created_byTousers", fields: [created_by], references: [id], onUpdate: NoAction, map: "fk_overtime_entries_created_by_users")
+  persona      users     @relation("overtime_entries_user_idTousers", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_overtime_entries_user_id_users")
+
+  @@index([area_id, period_year, period_month], map: "ix_overtime_entries_area_period")
+  @@index([user_id], map: "ix_overtime_entries_user_id")
 }

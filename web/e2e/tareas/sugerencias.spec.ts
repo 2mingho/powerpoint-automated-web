@@ -9,7 +9,7 @@ import { entrarComo, escenario, sql } from "./apoyo";
 test.beforeEach(({}, info) => { test.skip(info.project.name !== "escritorio", "El raton y el teclado se prueban una vez, en escritorio."); });
 
 const RUTAS = [
-  "/", "/?vista=panel", "/tareas", "/tareas?vista=tablero", "/tareas?vista=calendario", "/equipo", "/ingresos", "/estudios", "/solicitudes",
+  "/", "/?vista=panel", "/gastos", "/horas-extras", "/tareas", "/tareas?vista=tablero", "/tareas?vista=calendario", "/equipo", "/ingresos", "/estudios", "/solicitudes",
   "/clasificacion", "/analisis", "/reportes", "/union",
   "/admin", "/admin/personas", "/admin/organizacion", "/admin/clientes", "/admin/catalogo", "/admin/plantillas", "/admin/actividad", "/admin/ia",
 ];

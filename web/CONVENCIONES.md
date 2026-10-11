@@ -51,6 +51,23 @@ Producto y diseño: `../PRODUCT.md` (quién lo usa y qué no se puede romper) y 
 - La meta de la dirección (`goals.area_id` NULL) la fija solo el administrador y la ve quien ve todas las unidades.
 - Un cliente o unidad con contratos no se borra; unir clientes mueve sus contratos.
 
+## Gastos y horas extras de la unidad
+
+Los gestiona quien **lidera** la unidad (`unit_leads`); la dirección que la supervisa (`alcanceUnidades`) los ve sin editar; el
+resto de la gente no sabe que existen (404). La administración edita todo. Migración `0019_gastos_horas_extras`.
+
+- **Gastos** (`/gastos`, `lib/gastos/`): USD, como los contratos. Cada gasto lleva fecha, categoría, descripción, monto, proveedor y
+  nota. La categoría es texto que se normaliza contra las ya usadas (sin distinguir mayúsculas ni tildes) para que «viajes» y
+  «Viajes» no partan un presupuesto. El presupuesto es anual por unidad y categoría; avisa desde el 90 % y marca el exceso, sin
+  bloquear. Una unidad con gastos no se puede eliminar. Exporta CSV.
+- **Horas extras** (`/horas-extras`, `lib/horas-extras/`): solo las unidades con `areas.has_overtime` (lo activa un administrador en
+  Organización, con su máximo por persona y trimestre, 80 por defecto). Nace del Excel de Media Watch: se reporta por **quincena**
+  (15 = del 1 al 15, 30 = del 16 al fin de mes), cada hora se segmenta en L-V o SAB-DOM por la fecha trabajada y hay un máximo por
+  persona y **trimestre natural**. El reporte (año, mes, quincena) es el de la fecha trabajada o uno posterior (se reporta tarde,
+  nunca por adelantado). El máximo avisa y se ve en el mapa de calor; no bloquea. El Excel que se descarga (`exceljs`) repite el
+  formato actual: hoja GENERALES y la hoja de la quincena, con fórmulas en los totales (`excel.test.ts` lo comprueba con las cifras
+  reales del reporte de septiembre: 73,5 h de 5 colaboradores).
+
 ## Volumen: qué se trae de la base
 
 Probado con 60.000 tareas (34.000 abiertas). Reglas para no volver a pedir de más:

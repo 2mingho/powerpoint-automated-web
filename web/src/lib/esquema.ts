@@ -13,7 +13,7 @@
 export const HISTORIAL = [
   "0001_baseline", "0002_tasks_collab", "0004_jerarquia_de_mando", "0006_plantillas_pptx", "0007_catalogo_estados",
   "0008_proveedores_ia", "0009_consumo_ia", "0010_solicitud_sin_unidad", "0011_tour_de_bienvenida", "0012_reportes_persistentes",
-  "0013_indices_de_consulta", "0014_tablero_etiquetas", "0015_seguimiento", "0016_clientes", "0017_finanzas_permisos", "0018_contratos_metas",
+  "0013_indices_de_consulta", "0014_tablero_etiquetas", "0015_seguimiento", "0016_clientes", "0017_finanzas_permisos", "0018_contratos_metas", "0019_gastos_horas_extras",
 ] as const;
 
 export const REVISION_ESPERADA = HISTORIAL[HISTORIAL.length - 1];

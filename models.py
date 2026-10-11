@@ -25,6 +25,7 @@ class Role(db.Model):
 class Area(db.Model):
     """Organizational areas for grouping users."""
     __tablename__ = 'areas'
+    __table_args__ = (db.CheckConstraint('overtime_limit > 0', name='ck_areas_overtime_limit'),)
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -34,6 +35,9 @@ class Area(db.Model):
     color = db.Column(db.String(20), nullable=True)
     # Solo las unidades con estudios pueden crear tareas de tipo "estudio".
     has_studies = db.Column(db.Boolean, nullable=False, default=False, server_default=false())
+    # La unidad gestiona horas extras (su lider las registra), con un maximo por persona y trimestre.
+    has_overtime = db.Column(db.Boolean, nullable=False, default=False, server_default=false())
+    overtime_limit = db.Column(db.Numeric(6, 2), nullable=False, default=80, server_default='80')
 
     def __repr__(self):
         return f"<Area {self.name}>"
@@ -68,6 +72,70 @@ class Contract(db.Model):
 
     client = db.relationship('Client', foreign_keys=[client_id])
     unidad = db.relationship('Area', foreign_keys=[area_id])
+
+
+class Expense(db.Model):
+    """Gasto de una unidad, en USD (ver 0019_gastos_horas_extras). Una unidad con gastos no se puede borrar."""
+    __tablename__ = 'expenses'
+    __table_args__ = (
+        db.CheckConstraint('amount > 0', name='ck_expenses_amount'),
+        db.Index('ix_expenses_area_id_spent_on', 'area_id', 'spent_on'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False)
+    spent_on = db.Column(db.Date, nullable=False)
+    category = db.Column(db.String(60), nullable=False)
+    description = db.Column(db.String(300), nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    vendor = db.Column(db.String(120), nullable=True)
+    note = db.Column(db.String(500), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ExpenseBudget(db.Model):
+    """Presupuesto anual de una unidad por categoria de gasto."""
+    __tablename__ = 'expense_budgets'
+    __table_args__ = (
+        db.CheckConstraint('amount >= 0', name='ck_expense_budgets_amount'),
+        db.CheckConstraint('year BETWEEN 2000 AND 2100', name='ck_expense_budgets_year'),
+        db.UniqueConstraint('area_id', 'year', 'category', name='uq_expense_budgets_area_year_category'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id', ondelete='CASCADE'), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    category = db.Column(db.String(60), nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class OvertimeEntry(db.Model):
+    """Horas extras de una persona. period_* es el reporte (año, mes, quincena 15 o 30) al que pertenece."""
+    __tablename__ = 'overtime_entries'
+    __table_args__ = (
+        db.CheckConstraint('hours > 0 AND hours <= 24', name='ck_overtime_entries_hours'),
+        db.CheckConstraint('period_month BETWEEN 1 AND 12', name='ck_overtime_entries_month'),
+        db.CheckConstraint('period_half IN (15, 30)', name='ck_overtime_entries_half'),
+        db.Index('ix_overtime_entries_area_period', 'area_id', 'period_year', 'period_month'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    work_date = db.Column(db.Date, nullable=False)
+    detail = db.Column(db.String(300), nullable=False)
+    schedule = db.Column(db.String(120), nullable=True)
+    hours = db.Column(db.Numeric(5, 2), nullable=False)
+    period_year = db.Column(db.Integer, nullable=False)
+    period_month = db.Column(db.SmallInteger, nullable=False)
+    period_half = db.Column(db.SmallInteger, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Goal(db.Model):

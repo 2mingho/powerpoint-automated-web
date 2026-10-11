@@ -8,6 +8,10 @@ export type ItemNav = {
   soloEquipo?: boolean;
   /* Solo quien ve los ingresos de alguna unidad (supervisar o poder editar). */
   soloIngresos?: boolean;
+  /* Solo quien lidera o supervisa alguna unidad (sus gastos). */
+  soloGastos?: boolean;
+  /* Solo quien lidera o supervisa una unidad que gestiona horas extras. */
+  soloHorasExtras?: boolean;
   /* Solo si la persona crea estudios o ve alguno. */
   soloEstudios?: boolean;
   soloAdmin?: boolean;
@@ -27,6 +31,8 @@ export const NAVEGACION: ItemNav[] = [
   { href: "/equipo", rotulo: "Equipo", icono: "Users", herramienta: "tasks", soloEquipo: true, grupo: "trabajo" },
   { href: "/estudios", rotulo: "Estudios", icono: "Layers", herramienta: "tasks", soloEstudios: true, grupo: "trabajo" },
   { href: "/ingresos", rotulo: "Ingresos", icono: "CircleDollarSign", soloIngresos: true, grupo: "trabajo" },
+  { href: "/gastos", rotulo: "Gastos", icono: "Receipt", soloGastos: true, grupo: "trabajo" },
+  { href: "/horas-extras", rotulo: "Horas extras", icono: "Timer", soloHorasExtras: true, grupo: "trabajo" },
   { href: "/reportes/nuevo", rotulo: "Generar reporte", icono: "FileChartColumn", herramienta: "reports", grupo: "datos" },
   { href: "/reportes", rotulo: "Mis reportes", icono: "FolderOpen", herramienta: "reports", grupo: "datos" },
   { href: "/clasificacion", rotulo: "Clasificación", icono: "Tags", herramienta: "classification", grupo: "datos" },

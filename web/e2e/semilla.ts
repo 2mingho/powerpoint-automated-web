@@ -102,7 +102,7 @@ async function q<T = Record<string, unknown>>(c: PoolClient, sql: string, p: unk
 async function organizacion(c: PoolClient): Promise<Ctx> {
   await q(c, `TRUNCATE notifications, task_requests, task_watchers, task_comments, task_checklist_items, task_tag_links,
     task_dependencies, task_templates, task_tags, tasks, clients, ai_usage, ai_providers, activity_logs, unit_leads,
-    classification_presets, reports, temp_artifacts, contracts, goals, finance_grants RESTART IDENTITY CASCADE`);
+    classification_presets, reports, temp_artifacts, contracts, goals, finance_grants, expenses, expense_budgets, overtime_entries RESTART IDENTITY CASCADE`);
 
   // Catalogo por defecto (las pruebas lo renombran y lo restauran).
   const estados: [string, number, string, boolean, boolean][] = [
