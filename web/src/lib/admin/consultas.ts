@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { HERRAMIENTAS, type Herramienta } from "@/lib/auth/session";
 import { concesionesDeVarios } from "@/lib/finanzas/permisos";
 import { EMAIL_ADMIN_PROTEGIDO } from "./protegido";
+import { ROLES } from "@/lib/roles";
 import { enmascararClave } from "./mascara";
 import { arbolDeMando, cadenaHaciaArriba, calcularAlcances, type PersonaOrg } from "./mando";
 
@@ -23,9 +24,9 @@ export { EMAIL_ADMIN_PROTEGIDO, esAdminProtegido } from "./protegido";
 export const POR_PAGINA_USUARIOS = 25;
 export const POR_PAGINA_ACTIVIDAD = 50;
 
-function herramientasDe(role: string, permitidas: string | null): Herramienta[] {
+function herramientasDe(esAdmin: boolean, permitidas: string | null): Herramienta[] {
   const todas = Object.keys(HERRAMIENTAS) as Herramienta[];
-  if (role === "admin" || !permitidas) return todas;
+  if (esAdmin || !permitidas) return todas;
   try {
     const l = JSON.parse(permitidas);
     return Array.isArray(l) ? todas.filter((h) => l.includes(h)) : todas;
@@ -48,7 +49,7 @@ export async function resumenAdmin() {
     db.users.count({ where: { is_active: true, area_id: null } }),
     db.areas.findMany({ select: { id: true } }),
     db.unit_leads.findMany({ select: { area_id: true }, distinct: ["area_id"] }),
-    db.roles.count(),
+    Promise.resolve(ROLES.length),
     db.task_statuses.findMany({ select: { es_inicial: true, es_final: true } }),
     db.task_priorities.findMany({ select: { es_defecto: true } }),
     db.pptx_templates.count(),
@@ -99,7 +100,8 @@ export function leerFiltrosUsuarios(p: URLSearchParams): FiltrosUsuarios {
 export async function listarUsuarios(f: FiltrosUsuarios) {
   const y: Prisma.usersWhereInput[] = [{ NOT: { email: { equals: EMAIL_ADMIN_PROTEGIDO, mode: "insensitive" } } }];
   if (f.q) y.push({ OR: [{ username: { contains: f.q, mode: "insensitive" } }, { email: { contains: f.q, mode: "insensitive" } }] });
-  if (f.rol) y.push({ role: f.rol });
+  if (f.rol === "admin") y.push({ is_admin: true });
+  else if (f.rol) y.push({ role: f.rol });
   if (f.unidad === "sin") y.push({ area_id: null });
   else if (/^\d+$/.test(f.unidad)) y.push({ area_id: Number(f.unidad) });
   if (f.estado === "activos") y.push({ is_active: true });
@@ -115,7 +117,7 @@ export async function listarUsuarios(f: FiltrosUsuarios) {
     skip: (pagina - 1) * POR_PAGINA_USUARIOS,
     take: POR_PAGINA_USUARIOS,
     select: {
-      id: true, username: true, email: true, role: true, is_active: true, created_at: true, allowed_tools: true,
+      id: true, username: true, email: true, role: true, is_admin: true, is_active: true, created_at: true, allowed_tools: true,
       area_id: true, manager_id: true, weekly_capacity: true, force_logout: true, areas: { select: { name: true } }, manager: { select: { username: true } },
     },
   });
@@ -124,26 +126,27 @@ export async function listarUsuarios(f: FiltrosUsuarios) {
     total, pagina, paginas,
     filas: filas.map((u) => ({
       finanzas: concesiones.get(u.id)!,
-      id: u.id, nombre: u.username, email: u.email, rol: u.role, activo: u.is_active !== false,
+      id: u.id, nombre: u.username, email: u.email, rol: u.role, esAdmin: u.is_admin, activo: u.is_active !== false,
       creado: u.created_at?.toISOString() ?? null, unidadId: u.area_id, unidad: u.areas?.name ?? null,
       managerId: u.manager_id, capacidad: u.weekly_capacity, manager: u.manager?.username ?? null, expulsado: !!u.force_logout,
-      herramientas: herramientasDe(u.role, u.allowed_tools),
+      herramientas: herramientasDe(u.is_admin, u.allowed_tools),
     })),
   };
 }
 export type FilaUsuario = Awaited<ReturnType<typeof listarUsuarios>>["filas"][number];
 
 export async function opcionesPersonas() {
-  const [roles, unidades, personas, porRol] = await Promise.all([
-    db.roles.findMany({ orderBy: { code: "asc" } }),
+  const [unidades, personas, porRol, admins] = await Promise.all([
     db.areas.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.users.findMany({ where: { is_active: true }, orderBy: { username: "asc" }, select: { id: true, username: true } }),
     db.users.groupBy({ by: ["role"], _count: { _all: true } }),
+    db.users.count({ where: { is_admin: true } }),
   ]);
   const conteo = new Map(porRol.map((r) => [r.role, r._count._all]));
   return {
-    roles: roles.map((r) => ({ id: r.id, codigo: r.code, nombre: r.display_name, descripcion: r.description ?? "", usuarios: conteo.get(r.code) ?? 0 })),
-    adminUsuarios: conteo.get("admin") ?? 0,
+    // Los cargos son cinco y fijos (lib/roles.ts): ya no hay catalogo que editar.
+    roles: ROLES.map((r) => ({ codigo: r.codigo, nombre: r.nombre, usuarios: conteo.get(r.codigo) ?? 0 })),
+    adminUsuarios: admins,
     unidades: unidades.map((a) => ({ id: a.id, nombre: a.name })),
     personas: personas.map((p) => ({ id: p.id, nombre: p.username })),
   };

@@ -16,8 +16,8 @@ test.beforeEach(() => {
 
 const RUTAS_API: [string, string][] = [
   ["GET", "/api/admin/resumen"], ["GET", "/api/admin/usuarios"], ["POST", "/api/admin/usuarios"], ["PATCH", "/api/admin/usuarios/1"],
-  ["POST", "/api/admin/usuarios/1/activo"], ["POST", "/api/admin/usuarios/1/expulsar"], ["GET", "/api/admin/roles"], ["POST", "/api/admin/roles"],
-  ["PATCH", "/api/admin/roles/1"], ["DELETE", "/api/admin/roles/1"], ["GET", "/api/admin/unidades"], ["POST", "/api/admin/unidades"],
+  ["POST", "/api/admin/usuarios/1/activo"], ["POST", "/api/admin/usuarios/1/expulsar"], 
+  ["GET", "/api/admin/unidades"], ["POST", "/api/admin/unidades"],
   ["PATCH", "/api/admin/unidades/1"], ["DELETE", "/api/admin/unidades/1"], ["GET", "/api/admin/organizacion"], ["POST", "/api/admin/organizacion/lideres"],
   ["DELETE", "/api/admin/organizacion/lideres"], ["POST", "/api/admin/organizacion/superior"], ["GET", "/api/admin/catalogo"],
   ["POST", "/api/admin/catalogo/estados"], ["PATCH", "/api/admin/catalogo/estados/1"], ["DELETE", "/api/admin/catalogo/estados/1"],
@@ -73,7 +73,7 @@ test("api_key nunca aparece en ninguna respuesta de administracion", async ({ br
   const edicion = await page.request.patch(`/api/admin/ia/${id}`, { data: { nombre: `E2E editada ${id}`, proveedor: "openai", modelo: "gpt-e2e", clave: "" } });
   const respuestas = [altaTexto, await edicion.text()];
 
-  for (const ruta of ["/api/admin/ia", "/api/admin/resumen", "/api/admin/actividad", "/api/admin/usuarios", "/api/admin/organizacion", "/api/admin/roles"]) {
+  for (const ruta of ["/api/admin/ia", "/api/admin/resumen", "/api/admin/actividad", "/api/admin/usuarios", "/api/admin/organizacion"]) {
     respuestas.push(await (await page.request.get(ruta)).text());
   }
   for (const ruta of ["/admin", "/admin/ia", "/admin/actividad"]) {
@@ -119,10 +119,12 @@ test("forzar cierre de sesion expulsa al usuario en su siguiente peticion", asyn
   expect((await bd<{ force_logout: boolean }>("select force_logout from users where id = $1", [id]))[0].force_logout).toBe(false);
 });
 
-test("un admin no puede expulsarse ni desactivarse a si mismo, ni quitarse el rol", async ({ browser }) => {
+test("un admin no puede expulsarse ni desactivarse a si mismo, ni quitarse la casilla de administracion", async ({ browser }) => {
   const { page } = await contextoCon(browser, ADMIN);
   const yo = await idDe(ADMIN);
   expect((await page.request.post(`/api/admin/usuarios/${yo}/expulsar`, { data: {} })).status()).toBe(400);
   expect((await page.request.post(`/api/admin/usuarios/${yo}/activo`, { data: { activo: false } })).status()).toBe(400);
-  expect((await page.request.patch(`/api/admin/usuarios/${yo}`, { data: { rol: "DI" } })).status()).toBe(400);
+  expect((await page.request.patch(`/api/admin/usuarios/${yo}`, { data: { esAdmin: false } })).status()).toBe(400);
+  // Administrar no es un cargo.
+  expect((await page.request.patch(`/api/admin/usuarios/${yo}`, { data: { rol: "admin" } })).status()).toBe(400);
 });

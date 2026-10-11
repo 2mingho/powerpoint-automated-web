@@ -13,7 +13,7 @@ const conceder = (user: number, area: number, kind: "contracts" | "goals") =>
 const lidera = (user: number, area: number) => sql("INSERT INTO unit_leads (user_id, area_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [user, area]);
 const cliente = async (e: Esc, nombre: string) => {
   const n = `${nombre} ${e.sufijo}`;
-  return { nombre: n, id: (await sql<{ id: number }>("INSERT INTO clients (name, name_key, client_type, is_active, created_at) VALUES ($1, $2, 'Corporativo', true, now()) ON CONFLICT (name_key) DO UPDATE SET name = excluded.name RETURNING id", [n, n.toLowerCase()]))[0].id };
+  return { nombre: n, id: (await sql<{ id: number }>("INSERT INTO clients (name, name_key, client_type, is_active, created_at) VALUES ($1, $2, 'Privado', true, now()) ON CONFLICT (name_key) DO UPDATE SET name = excluded.name RETURNING id", [n, n.toLowerCase()]))[0].id };
 };
 const contrato = (clienteId: number, area: number, monto: number, tipo = "Fee", ini = `${ANIO}-01-01`, fin = `${ANIO}-12-31`) =>
   sql("INSERT INTO contracts (client_id, area_id, contract_type, amount, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, now(), now())", [clienteId, area, tipo, monto, ini, fin]);

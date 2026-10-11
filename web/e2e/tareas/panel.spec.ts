@@ -11,7 +11,7 @@ const URL_PANEL = `${BASE}/?vista=panel&periodo=todo`;
 async function conClientes(prefijo: string) {
   const e = await escenario(prefijo);
   const clientes = new Map<string, number>();
-  const cliente = async (nombre: string, tipo = "Corporativo") => {
+  const cliente = async (nombre: string, tipo = "Privado") => {
     const nombreCompleto = `${nombre} ${e.sufijo}`;
     if (!clientes.has(nombreCompleto)) {
       clientes.set(nombreCompleto, (await sql<{ id: number }>("INSERT INTO clients (name, name_key, client_type, is_active, created_at) VALUES ($1, $2, $3, true, now()) RETURNING id", [nombreCompleto, nombreCompleto.toLowerCase(), tipo]))[0].id);
@@ -102,8 +102,8 @@ test.describe("el panel en pantalla", () => {
 
   test("los filtros se combinan, las listas se acotan y se quitan de uno en uno o todos", async ({ context, page }) => {
     const { e, cliente, tarea } = await conClientes("pan-filtros");
-    const a = await cliente("Altice", "Corporativo");
-    const b = await cliente("Arajet", "Aerolinea");
+    const a = await cliente("Altice", "Privado");
+    const b = await cliente("Arajet", "Público");
     await tarea("A uno", a, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 2));
     await tarea("A dos", a, e.alfa, e.companero, "Completado", sumarDias(HOY, 3), undefined, 0);
     await tarea("B uno", b, e.alfa, e.empleado, "En Progreso", sumarDias(HOY, 4));
@@ -232,7 +232,7 @@ test.describe("el panel en pantalla", () => {
     await tabla(page).getByRole("button", { name: `Ficha del cliente ${c.nombre}` }).hover();
     const ficha = page.getByRole("dialog", { name: `Cliente: ${c.nombre}` });
     await expect(ficha).toBeVisible();
-    await expect(ficha.getByText("Corporativo")).toBeVisible();
+    await expect(ficha.getByText("Privado")).toBeVisible();
   });
 
   test("sin tareas en el periodo enseña que hacer", async ({ context, page }, info) => {
@@ -310,8 +310,8 @@ test.describe("graficos que filtran", () => {
 
   test("donas: tipo de cliente y unidad filtran desde su leyenda", async ({ context, page }) => {
     const { e, cliente, tarea } = await conClientes("pan-g-dona");
-    const a = await cliente("Altice", "Corporativo");
-    const b = await cliente("Arajet", "Aerolinea");
+    const a = await cliente("Altice", "Privado");
+    const b = await cliente("Arajet", "Público");
     await tarea("Corp 1", a, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 2));
     await tarea("Corp 2", a, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 3));
     await tarea("Aero 1", b, e.alfa, e.empleado, "Pendiente", sumarDias(HOY, 4));
@@ -319,11 +319,11 @@ test.describe("graficos que filtran", () => {
 
     const tipos = page.getByRole("list", { name: "Por tipo de cliente", exact: true });
     await expect(tipos.getByRole("button")).toHaveCount(2);
-    await tipos.getByRole("button", { name: /^Aerolinea/ }).click();
+    await tipos.getByRole("button", { name: /^Público/ }).click();
     await expect(filas(page)).toHaveCount(1);
     await expect(tabla(page).getByText("Aero 1")).toBeVisible();
     await expect(tipos.getByRole("button")).toHaveCount(2); // sigue entera
-    await tipos.getByRole("button", { name: /^Aerolinea/ }).click();
+    await tipos.getByRole("button", { name: /^Público/ }).click();
     await expect(filas(page)).toHaveCount(3);
 
     const unidades = page.getByRole("list", { name: "Por unidad", exact: true });
@@ -366,8 +366,8 @@ test.describe("detalle en el servidor", () => {
   test("cada filtro del detalle devuelve exactamente las tareas que cumplen su criterio, y el total coincide con la cifra", async ({ context, page }, info) => {
     test.skip(info.project.name !== "escritorio", "Una vez, en escritorio.");
     const { e, cliente, tarea } = await conClientes("pan-detalle");
-    const a = await cliente("Alfa-cli", "Corporativo");
-    const b = await cliente("Beta-cli", "Pyme");
+    const a = await cliente("Alfa-cli", "Privado");
+    const b = await cliente("Beta-cli", "Público");
     await sql("INSERT INTO finance_grants (user_id, area_id, kind, created_at) VALUES ($1, $2, 'contracts', now())", [e.empleado, e.alfa]);
     // El contrato Proyecto (empieza despues) gana al Fee donde se solapan; fuera de ambos, nada.
     const contrato = (cli: number, tipo: string, ini: string, fin: string) =>
@@ -401,7 +401,7 @@ test.describe("detalle en el servidor", () => {
     expect(await ids("")).toEqual(quienes(...todas));
     expect(await ids(`cliente=${encodeURIComponent(b.nombre)}`)).toEqual(quienes(t.vencidaB, t.revision, t.hechaVieja));
     expect(await ids(`persona=${e.companero}`)).toEqual(quienes(t.vencidaB, t.revision, t.hechaVieja));
-    expect(await ids("tipo=Pyme")).toEqual(quienes(t.vencidaB, t.revision, t.hechaVieja));
+    expect(await ids(`tipo=${encodeURIComponent("Público")}`)).toEqual(quienes(t.vencidaB, t.revision, t.hechaVieja));
     expect(await ids("estado=vencida")).toEqual(quienes(t.vencida, t.vencidaB));
     expect(await ids("estado=abierta")).toEqual(quienes(t.vencida, t.vencidaB, t.hoyA, t.pronto, t.lejos, t.revision));
     expect(await ids("estado=hecha")).toEqual(quienes(t.hechaReciente, t.hechaVieja, t.hechaSinFecha));

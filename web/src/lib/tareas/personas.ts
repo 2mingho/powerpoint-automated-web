@@ -15,7 +15,7 @@ export async function personasDelAmbito(u: UsuarioActual, soloActivos = true): P
     orderBy: { username: "asc" },
     select: { id: true, username: true, role: true, area_id: true, areas: { select: { name: true } } },
   });
-  return filas.map((p) => ({ id: p.id, nombre: p.username, unidad: p.areas?.name || p.role || "Sin unidad", unidadId: p.area_id }));
+  return filas.map((p) => ({ id: p.id, nombre: p.username, unidad: p.areas?.name || "Sin unidad", unidadId: p.area_id }));
 }
 
 /*

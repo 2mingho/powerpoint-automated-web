@@ -36,17 +36,15 @@
 
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label" for="role">Rol</label>
+        <label class="form-label" for="role">Cargo</label>
         <select id="role" name="role" class="form-select">
-          <option value="admin" {{ 'selected' if user and user.role == 'admin' }}>Admin</option>
           {% for role in roles %}
-          <option value="{{ role.code }}" {{ 'selected' if user and user.role == role.code }}>{{ role.display_name }} ({{ role.code }})</option>
+          <option value="{{ role.code }}" {{ 'selected' if (user and user.role == role.code) or (not user and role.code == 'analista') }}>{{ role.display_name }}</option>
           {% endfor %}
-          {% if not roles %}
-          <option value="DI" {{ 'selected' if not user or user.role == 'DI' }}>DI</option>
-          <option value="MW" {{ 'selected' if user and user.role == 'MW' }}>MW</option>
-          {% endif %}
         </select>
+        <label style="display:flex;gap:.5rem;align-items:center;margin-top:.75rem">
+          <input type="checkbox" name="es_admin" {{ 'checked' if user and user.es_admin }}> Es administrador
+        </label>
       </div>
       <div class="form-group">
         <label class="form-label" for="area_id">Area</label>

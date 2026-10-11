@@ -105,7 +105,7 @@ async function cargaDelAlcance(u: UsuarioActual, hoy: string, finales: string[])
     .map((a) => ({
       id: a.assignee_id,
       nombre: porId.get(a.assignee_id)?.username ?? "",
-      unidad: porId.get(a.assignee_id)?.areas?.name || porId.get(a.assignee_id)?.role || "",
+      unidad: porId.get(a.assignee_id)?.areas?.name || "",
       abiertas: a._count._all,
       vencidas: venc.get(a.assignee_id) ?? 0,
     }))

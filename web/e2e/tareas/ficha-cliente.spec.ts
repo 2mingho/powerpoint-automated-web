@@ -11,7 +11,7 @@ type Ficha = { id: number; nombre: string; tipo: string; lider: string; abiertas
 async function conCliente(prefijo: string) {
   const e = await escenario(prefijo);
   const nombre = `Ficha ${e.sufijo}`;
-  const id = (await sql<{ id: number }>("INSERT INTO clients (name, name_key, client_type, is_active, created_at) VALUES ($1, $2, 'Corporativo', true, now()) RETURNING id", [nombre, nombre.toLowerCase()]))[0].id;
+  const id = (await sql<{ id: number }>("INSERT INTO clients (name, name_key, client_type, is_active, created_at) VALUES ($1, $2, 'Privado', true, now()) RETURNING id", [nombre, nombre.toLowerCase()]))[0].id;
   /* Una tarea de ese cliente: unidad, responsable, estado, entrega y, si esta cerrada, cuando se cerro. */
   const tarea = async (titulo: string, area: number, quien: number, estado: string, entrega: string, cerradaHace?: number) => {
     const t = await e.tarea(titulo, area, quien, quien, estado, entrega);
@@ -36,7 +36,7 @@ test.describe("API de la ficha", () => {
     const r = await ficha(context, id);
     expect(r.status(), await r.text()).toBe(200);
     const f = (await r.json()) as Ficha;
-    expect(f).toMatchObject({ id, tipo: "Corporativo", abiertas: 2, vencidas: 1 });
+    expect(f).toMatchObject({ id, tipo: "Privado", abiertas: 2, vencidas: 1 });
     expect(f.proximas.map((t) => t.titulo)).toEqual(["Alfa abierta"]);
     expect(JSON.stringify(f)).not.toContain("Beta");
     expect(JSON.stringify(f)).not.toContain(`ajeno.${e.sufijo}`);
@@ -114,7 +114,7 @@ test.describe("la ficha en pantalla", () => {
     await disparador.hover();
     const tarjeta = page.getByRole("dialog", { name: `Cliente: ${nombre}` });
     await expect(tarjeta).toBeVisible();
-    await expect(tarjeta.getByText("Corporativo")).toBeVisible();
+    await expect(tarjeta.getByText("Privado")).toBeVisible();
     await expect(tarjeta.getByRole("term").filter({ hasText: "Abiertas" })).toBeVisible();
     await expect(tarjeta.getByRole("link", { name: /Entrega del cliente/ })).toBeVisible();
 
@@ -195,7 +195,7 @@ test.describe("la ficha en pantalla", () => {
     test.skip(info.project.name !== "escritorio", "Una vez basta.");
     const { e, nombre, tarea } = await pantalla("fic-equipo");
     await tarea("En beta", e.beta, e.ajeno, "Pendiente", sumarDias(HOY, 1));
-    const lider = (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'DI', true, now(), $3, '[\"tasks\"]', now() FROM users WHERE id = $4 RETURNING id",
+    const lider = (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'analista', true, now(), $3, '[\"tasks\"]', now() FROM users WHERE id = $4 RETURNING id",
       [`lider.${e.sufijo}`, `lider.${e.sufijo}@e2e.test`, e.alfa, e.empleado]))[0].id;
     await sql("INSERT INTO unit_leads (user_id, area_id) VALUES ($1, $2)", [lider, e.alfa]);
     await entrarComo(context, lider);

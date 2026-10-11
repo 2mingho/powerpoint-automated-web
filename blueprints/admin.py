@@ -14,6 +14,9 @@ DEFAULT_ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@dataintel.com')
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
+# Cargos posibles (0020). Administrar es una casilla aparte (User.es_admin), no un cargo.
+CARGOS = ('coordinador', 'analista', 'ejecutiva', 'gerente', 'director')
+
 
 # ─────────────────────────────────────────────────────────────
 # Decorators & Helpers
@@ -79,9 +82,8 @@ def dashboard():
     roles_count = {}
     for r in all_roles:
         roles_count[r.code] = User.query.filter_by(role=r.code).count()
-    # Always include 'admin' even if not in Role table
-    if 'admin' not in roles_count:
-        roles_count['admin'] = User.query.filter_by(role='admin').count()
+    # Administracion es una casilla aparte del cargo.
+    roles_count['admin'] = User.query.filter_by(es_admin=True).count()
     total_logs = ActivityLog.query.count()
     total_roles = Role.query.count()
     total_areas = Area.query.count()
@@ -120,7 +122,9 @@ def users_list():
             (User.email.ilike(patron))
         )
     # Accept any role code (dynamic from Role table or 'admin')
-    if role_filter:
+    if role_filter == 'admin':
+        query = query.filter_by(es_admin=True)
+    elif role_filter:
         query = query.filter_by(role=role_filter)
 
     if area_filter == 'sin':
@@ -180,10 +184,14 @@ def user_create():
         username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
-        role = request.form.get('role', 'DI')
+        role = request.form.get('role', 'analista')
+        es_admin = request.form.get('es_admin') == 'on'
         area_id = request.form.get('area_id', '') or None
 
         # Validation
+        if role not in CARGOS:
+            flash(f'El cargo debe ser uno de: {", ".join(CARGOS)}.', 'error')
+            return redirect(url_for('admin.user_create'))
         if not username or len(username) < 3:
             flash('El nombre de usuario debe tener al menos 3 caracteres.', 'error')
             return redirect(url_for('admin.user_create'))
@@ -202,6 +210,7 @@ def user_create():
             email=email,
             password=generate_password_hash(password, method='scrypt'),
             role=role,
+            es_admin=es_admin,
             area_id=int(area_id) if area_id else None,
         )
         # Set tool permissions
@@ -211,7 +220,7 @@ def user_create():
         db.session.add(new_user)
         db.session.commit()
 
-        log_activity('admin_create_user', f'Creo usuario: {username} ({email}) con rol {role}')
+        log_activity('admin_create_user', f'Creo usuario: {username} ({email}) con cargo {role}{" y administrador" if es_admin else ""}')
         flash(f'Usuario "{username}" creado exitosamente.', 'success')
         return redirect(url_for('admin.users_list'))
 
@@ -240,14 +249,18 @@ def user_edit(user_id):
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
         role = request.form.get('role', user.role)
+        es_admin = request.form.get('es_admin') == 'on'
         area_id = request.form.get('area_id', '') or None
 
         if not username or len(username) < 3:
             flash('El nombre de usuario debe tener al menos 3 caracteres.', 'error')
             return redirect(url_for('admin.user_edit', user_id=user_id))
+        if role not in CARGOS:
+            flash(f'El cargo debe ser uno de: {", ".join(CARGOS)}.', 'error')
+            return redirect(url_for('admin.user_edit', user_id=user_id))
 
         # Prevent admin from removing their own admin role
-        if user.id == current_user.id and role != 'admin':
+        if user.id == current_user.id and not es_admin:
             flash('No puedes quitarte tu propio rol de administrador.', 'error')
             return redirect(url_for('admin.user_edit', user_id=user_id))
 
@@ -263,8 +276,11 @@ def user_edit(user_id):
             changes.append(f'email: {user.email} -> {email}')
             user.email = email
         if user.role != role:
-            changes.append(f'rol: {user.role} -> {role}')
+            changes.append(f'cargo: {user.role} -> {role}')
             user.role = role
+        if bool(user.es_admin) != es_admin:
+            changes.append(f'administrador: {"si" if es_admin else "no"}')
+            user.es_admin = es_admin
         new_area_id = int(area_id) if area_id else None
         if user.area_id != new_area_id:
             changes.append('area actualizada')
@@ -501,48 +517,21 @@ def roles_list():
 @admin_bp.route('/roles/create', methods=['POST'])
 @admin_required
 def role_create():
-    code = (request.form.get('code') or '').strip().upper()[:30]
-    display_name = (request.form.get('display_name') or '').strip()[:100]
-    description = (request.form.get('description') or '').strip()
-    if not code or not display_name:
-        flash('Codigo y nombre son requeridos.', 'error')
-        return redirect(url_for('admin.roles_list'))
-    if Role.query.filter_by(code=code).first():
-        flash(f'El codigo "{code}" ya existe.', 'error')
-        return redirect(url_for('admin.roles_list'))
-    role = Role(code=code, display_name=display_name, description=description)
-    db.session.add(role)
-    db.session.commit()
-    log_activity('role_create', f'Rol creado: {code}')
-    flash(f'Rol "{display_name}" creado.', 'success')
+    flash('Los cargos son fijos (coordinador, analista, ejecutiva, gerente y director); ya no se crean, editan ni eliminan.', 'error')
     return redirect(url_for('admin.roles_list'))
 
 
 @admin_bp.route('/roles/<int:role_id>/edit', methods=['POST'])
 @admin_required
 def role_edit(role_id):
-    role = Role.query.get_or_404(role_id)
-    role.display_name = (request.form.get('display_name') or role.display_name).strip()[:100]
-    role.description = (request.form.get('description') or '').strip()
-    db.session.commit()
-    log_activity('role_edit', f'Rol editado: {role.code}')
-    flash(f'Rol "{role.display_name}" actualizado.', 'success')
+    flash('Los cargos son fijos (coordinador, analista, ejecutiva, gerente y director); ya no se crean, editan ni eliminan.', 'error')
     return redirect(url_for('admin.roles_list'))
 
 
 @admin_bp.route('/roles/<int:role_id>/delete', methods=['POST'])
 @admin_required
 def role_delete(role_id):
-    role = Role.query.get_or_404(role_id)
-    # Prevent deleting if users are assigned this role
-    users_with_role = User.query.filter_by(role=role.code).count()
-    if users_with_role > 0:
-        flash(f'No se puede eliminar: {users_with_role} usuario(s) tienen este rol.', 'error')
-        return redirect(url_for('admin.roles_list'))
-    db.session.delete(role)
-    db.session.commit()
-    log_activity('role_delete', f'Rol eliminado: {role.code}')
-    flash('Rol eliminado.', 'success')
+    flash('Los cargos son fijos (coordinador, analista, ejecutiva, gerente y director); ya no se crean, editan ni eliminan.', 'error')
     return redirect(url_for('admin.roles_list'))
 
 

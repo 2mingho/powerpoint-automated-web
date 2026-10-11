@@ -5,6 +5,7 @@ import { ErrorApi } from "@/lib/api";
 import { registrarActividad } from "@/lib/actividad";
 import { claveDeCliente, nombreLimpio, parecidos } from "./nombre";
 import { resolverClientes } from "./resolver";
+import { leerTipoCliente, TIPOS_CLIENTE } from "./tipos";
 
 /*
  * Administracion de clientes (solo admin: son globales, y renombrar o unir uno
@@ -16,7 +17,6 @@ import { resolverClientes } from "./resolver";
 
 export const POR_PAGINA_CLIENTES = 25;
 const MAX_NOMBRE = 100;
-const MAX_TIPO = 40;
 
 export type FiltrosClientes = { q: string; estado: "" | "activos" | "inactivos"; pagina: number };
 
@@ -40,7 +40,7 @@ export async function listarClientes(f: FiltrosClientes) {
   const total = await db.clients.count({ where });
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA_CLIENTES));
   const pagina = Math.min(f.pagina, paginas);
-  const [filas, todos, pendientes, personas, tipos] = await Promise.all([
+  const [filas, todos, pendientes, personas] = await Promise.all([
     db.clients.findMany({
       where, orderBy: { name_key: "asc" }, skip: (pagina - 1) * POR_PAGINA_CLIENTES, take: POR_PAGINA_CLIENTES,
       select: { id: true, name: true, name_key: true, client_type: true, account_lead_id: true, is_active: true, responsable: { select: { username: true } } },
@@ -48,7 +48,6 @@ export async function listarClientes(f: FiltrosClientes) {
     db.clients.findMany({ select: { id: true, name: true, name_key: true }, orderBy: { name_key: "asc" } }),
     contarPendientes(),
     db.users.findMany({ where: { is_active: true }, select: { id: true, username: true }, orderBy: { username: "asc" } }),
-    db.clients.findMany({ where: { client_type: { not: null } }, distinct: ["client_type"], select: { client_type: true }, orderBy: { client_type: "asc" } }),
   ]);
   const conteos = await db.tasks.groupBy({ by: ["client_id"], where: { client_id: { in: filas.map((c) => c.id) }, deleted_at: null }, _count: { _all: true } });
   const tareas = new Map(conteos.map((c) => [c.client_id, c._count._all]));
@@ -63,7 +62,7 @@ export async function listarClientes(f: FiltrosClientes) {
     })),
     opciones: {
       personas: personas.map((p) => ({ id: p.id, nombre: p.username })),
-      tipos: tipos.map((t) => t.client_type!).filter(Boolean),
+      tipos: [...TIPOS_CLIENTE],
       clientes: todos.map((c) => ({ id: c.id, nombre: c.name })),
     },
   };
@@ -85,10 +84,11 @@ function nombreValido(crudo: unknown): { nombre: string; clave: string } {
   return { nombre, clave };
 }
 
+/* El tipo es uno de los tres de lib/clientes/tipos.ts, o ninguno. */
 function tipoValido(crudo: unknown): string | null {
-  const t = typeof crudo === "string" ? nombreLimpio(crudo) : "";
-  if (t.length > MAX_TIPO) throw new ErrorApi(400, `El tipo no puede pasar de ${MAX_TIPO} caracteres.`);
-  return t || null;
+  const t = leerTipoCliente(crudo);
+  if (!t.ok) throw new ErrorApi(400, t.error);
+  return t.valor;
 }
 
 async function liderValido(crudo: unknown): Promise<number | null> {

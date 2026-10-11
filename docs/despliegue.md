@@ -32,7 +32,7 @@ docker run -p 3000:3000 --env-file web.env newlink-web
 | `SESSION_SECRET` | Sella las cookies de sesión: 32 caracteres o más, secreto. Cambiarlo cierra todas las sesiones. Obligatoria |
 | `ANALYTICS_URL` | **Raíz** de `analisis` (p. ej. `http://analisis:5000`), sin `/api/interno` |
 | `ANALYTICS_TOKEN` | Mismo valor que en `analisis`: es la llave entre servicios |
-| `ADMIN_EMAIL` | Cuenta de administración principal (no se edita y es la única que puede *ver como* otra persona). Por defecto `admin@dataintel.com` |
+| `ADMIN_EMAIL` | Cuenta de administración principal (no se edita y nadie puede *ver como* ella). Por defecto `admin@dataintel.com` |
 | `DB_POOL_MAX` | Conexiones a la base por proceso (por defecto 10). Con una base que limita conexiones, baja este número |
 | `HEALTHZ_DB_TTL` | Segundos de actividad tras los que `/healthz` deja de preguntar a la base (por defecto 120; 0 = siempre) |
 | `PLANTILLAS_DIR` | Carpeta con las plantillas `.pptx` del repositorio, solo para listarlas en Administración |
@@ -64,7 +64,8 @@ Variables como hasta ahora (`DATABASE_URL`, `SECRET_KEY`, `ANALYTICS_TOKEN`…).
 ### Qué cambia para quien usa la aplicación
 
 - Cerrar una tarea recurrente crea la siguiente (antes la serie se precalculaba). Cerrar desde Flask una serie creada en la app nueva **no** crea la siguiente: otro motivo para no mantener las dos interfaces abiertas a la vez.
-- La suplantación es solo de la cuenta principal y deja marca en la actividad.
+- Cualquier administradora puede *ver como* otra persona, pero solo si esa persona no administra; deja marca en la actividad.
+- La migración `0020_roles_y_tipos_de_cliente` convierte `users.role` (antes la disciplina: DI, MW...) en el cargo (coordinador, analista, ejecutiva, gerente, director), deducido de la cadena de mando, y pasa «administrar» a la casilla `users.is_admin`. El valor anterior queda en `users.legacy_role`. Tras migrar, revisar los cargos en Administración > Personas (ejecutiva y coordinación no se pueden deducir).
 
 ## Coolify sobre Hostinger
 

@@ -13,7 +13,7 @@ import type { ActividadDTO, ComentarioDTO, DetalleDTO, ItemChecklistDTO, Observa
 /* El pase de la tarea: detalle, checklist, comentarios, observadores y actividad. */
 
 function unidadDe(p: { role: string; areas: { name: string } | null } | null) {
-  return p?.areas?.name || p?.role || "Sin unidad";
+  return p?.areas?.name || "Sin unidad";
 }
 
 export async function detalleTarea(u: UsuarioActual, id: number): Promise<DetalleDTO> {

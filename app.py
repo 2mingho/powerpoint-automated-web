@@ -393,14 +393,14 @@ def ensure_default_admin():
             "Set a strong ADMIN_PASSWORD environment variable."
         )
 
-    existing_admin = User.query.filter_by(role='admin').first()
+    existing_admin = User.query.filter_by(es_admin=True).first()
     if existing_admin:
         return existing_admin
 
     existing_by_email = User.query.filter_by(email=admin_email).first()
     if existing_by_email:
-        if existing_by_email.role != 'admin':
-            existing_by_email.role = 'admin'
+        if not existing_by_email.es_admin:
+            existing_by_email.es_admin = True
             existing_by_email.is_active = True
             db.session.commit()
         return existing_by_email
@@ -409,7 +409,8 @@ def ensure_default_admin():
         username=admin_username,
         email=admin_email,
         password=generate_password_hash(admin_password, method='scrypt'),
-        role='admin',
+        role='director',
+        es_admin=True,
         is_active=True,
     )
     db.session.add(admin_user)
@@ -736,7 +737,7 @@ try:
         raise RuntimeError('startup tasks skipped')
     with app.app_context():
         app.logger.info(f"[startup] Database URL: {db.engine.url.render_as_string(hide_password=True)}")
-        app.logger.info(f"[startup] Admin users: {User.query.filter_by(role='admin').count()}")
+        app.logger.info(f"[startup] Admin users: {User.query.filter_by(es_admin=True).count()}")
 except Exception as e:
     app.logger.warning(f"[startup] DB diagnostics warning: {e}")
 

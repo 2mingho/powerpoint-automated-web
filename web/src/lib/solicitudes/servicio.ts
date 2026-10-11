@@ -194,7 +194,7 @@ async function resolutores(areaId: number): Promise<number[]> {
     select: { user_id: true },
   });
   if (lideres.length) return lideres.map((l) => l.user_id);
-  const admins = await db.users.findMany({ where: { role: "admin", is_active: true }, select: { id: true } });
+  const admins = await db.users.findMany({ where: { is_admin: true, is_active: true }, select: { id: true } });
   return admins.map((a) => a.id);
 }
 

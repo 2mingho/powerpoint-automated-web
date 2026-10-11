@@ -196,7 +196,7 @@ export function diaDb(iso: string) {
 
 /* Area de la tarea a partir de su asignado (_task_area_for_user). La columna mide 20. */
 export function areaDe(asignado: { role: string; area_id: number | null; areas: { name: string } | null }) {
-  return { area: (asignado.areas?.name || asignado.role).slice(0, 20), area_id: asignado.area_id };
+  return { area: (asignado.areas?.name || "Sin unidad").slice(0, 20), area_id: asignado.area_id };
 }
 
 /* Inicio del dia de negocio en UTC (Santo Domingo es UTC-4 todo el ano). */

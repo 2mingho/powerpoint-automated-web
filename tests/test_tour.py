@@ -44,7 +44,7 @@ def usuario(client):
             username='nuevo',
             email='nuevo@ejemplo.com',
             password=generate_password_hash('clave-de-prueba', method='scrypt'),
-            role='DI',
+            role='analista',
             is_active=True,
         )
         user.set_allowed_tools(['tasks'])
@@ -88,7 +88,7 @@ def test_la_marca_es_de_cada_usuario(client, usuario):
         otro = User(
             username='otro', email='otro@ejemplo.com',
             password=generate_password_hash('clave-de-prueba', method='scrypt'),
-            role='DI', is_active=True,
+            role='analista', is_active=True,
         )
         db.session.add(otro)
         db.session.commit()

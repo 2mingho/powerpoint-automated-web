@@ -185,6 +185,9 @@ class Client(db.Model):
     textos que dan la misma clave son el mismo cliente (ver 0016_clientes).
     """
     __tablename__ = 'clients'
+    __table_args__ = (
+        db.CheckConstraint("client_type IS NULL OR client_type IN ('Privado', 'Público', 'Interno')", name='ck_clients_type'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -360,12 +363,20 @@ class UnitLead(db.Model):
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
+    __table_args__ = (
+        db.CheckConstraint("role IN ('coordinador', 'analista', 'ejecutiva', 'gerente', 'director')", name='ck_users_role'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default='DI')
+    # Cargo: coordinador, analista, ejecutiva, gerente o director (0020). Administrar es aparte: `es_admin`.
+    role = db.Column(db.String(20), nullable=False, default='analista')
+    # La columna se llama is_admin; el atributo, es_admin, porque `is_admin` es la propiedad que usa todo el codigo.
+    es_admin = db.Column('is_admin', db.Boolean, nullable=False, default=False, server_default=false())
+    # El valor que tenia `role` antes de 0020 (la disciplina: DI, COM, MW...).
+    legacy_role = db.Column(db.String(20), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     allowed_tools = db.Column(db.Text, nullable=True)  # JSON list, None = all
@@ -403,7 +414,7 @@ class User(UserMixin, db.Model):
 
     @property
     def is_admin(self):
-        return self.role == 'admin'
+        return bool(self.es_admin)
 
     def get_allowed_tools(self):
         """Return list of allowed tool keys. None/empty means all tools."""

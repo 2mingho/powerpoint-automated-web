@@ -25,7 +25,7 @@ export async function escenario(prefijo: string) {
   const alfa = await area("Alfa");
   const beta = await area("Beta");
   const usuario = async (n: string, a: number) => (await sql<{ id: number }>(
-    "INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) VALUES ($1, $2, $3, 'DI', true, now(), $4, '[\"tasks\"]', now()) RETURNING id",
+    "INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) VALUES ($1, $2, $3, 'analista', true, now(), $4, '[\"tasks\"]', now()) RETURNING id",
     [`${n}.${sufijo}`, `${n}.${sufijo}@e2e.test`, hash, a]))[0].id;
   const empleado = await usuario("empleado", alfa);
   const companero = await usuario("companero", alfa);

@@ -26,15 +26,15 @@ def seed_admin(app):
     admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
 
     with app.app_context():
-        existing_admin = User.query.filter_by(role='admin').first()
+        existing_admin = User.query.filter_by(es_admin=True).first()
         if existing_admin:
             print(f"[ok] Admin exists: {existing_admin.username} ({existing_admin.email})")
             return
 
         existing_by_email = User.query.filter_by(email=admin_email).first()
         if existing_by_email:
-            if existing_by_email.role != 'admin':
-                existing_by_email.role = 'admin'
+            if not existing_by_email.es_admin:
+                existing_by_email.es_admin = True
                 existing_by_email.is_active = True
                 db.session.commit()
                 print(f"[ADMIN] Existing user promoted to admin: {existing_by_email.username} ({existing_by_email.email})")
@@ -46,7 +46,8 @@ def seed_admin(app):
             username=admin_username,
             email=admin_email,
             password=generate_password_hash(admin_password, method='scrypt'),
-            role='admin',
+            role='director',
+            es_admin=True,
             is_active=True,
         )
         db.session.add(admin_user)

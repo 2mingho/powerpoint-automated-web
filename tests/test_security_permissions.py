@@ -22,12 +22,14 @@ def _login_as(client, user_id):
         session['_fresh'] = True
 
 
-def _create_user(*, username, email, role='DI', is_active=True, tools=None):
+def _create_user(*, username, email, role='analista', is_active=True, tools=None):
     user = User(
         username=username,
         email=email,
         password=generate_password_hash('test-password-123', method='scrypt'),
-        role=role,
+        # 'admin' en las pruebas = la casilla de administracion; el cargo es aparte (0020).
+        role='director' if role == 'admin' else role,
+        es_admin=role == 'admin',
         is_active=is_active,
     )
     if tools is not None:
@@ -169,13 +171,13 @@ def test_non_admin_cannot_delete_tasks_for_other_unit_by_day(client):
         unit_a_user_id = _create_user(
             username='unit-a-user',
             email='unit-a-user@example.com',
-            role='DI',
+            role='analista',
             tools=['tasks'],
         )
         unit_b_user_id = _create_user(
             username='unit-b-user',
             email='unit-b-user@example.com',
-            role='DI',
+            role='analista',
             tools=['tasks'],
         )
 
@@ -1133,7 +1135,7 @@ def test_soft_deleted_task_hidden_from_api(client):
         user_id = _create_user(
             username='tasks-owner',
             email='tasks-owner@example.com',
-            role='DI',
+            role='analista',
             tools=['tasks'],
         )
         task_id = _create_task(
@@ -1168,7 +1170,7 @@ def test_update_conflict_returns_409(client):
         user_id = _create_user(
             username='tasks-editor',
             email='tasks-editor@example.com',
-            role='DI',
+            role='analista',
             tools=['tasks'],
         )
         task_id = _create_task(

@@ -1,11 +1,11 @@
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { iniciarSesion, selloSesion, sql } from "../comun";
 import { escenario } from "../tareas/apoyo";
-import { ADMIN, contextoCon } from "./ayuda";
+import { ADMIN, ADMIN_2, contextoCon, idDe } from "./ayuda";
 
 /*
- * Ver la aplicacion como otra persona. Solo la cuenta de administracion principal
- * (admin@dataintel.com, ADMIN_EMAIL); la sesion recuerda quien es de verdad.
+ * Ver la aplicacion como otra persona. Cualquier administradora, y solo a personas que no
+ * administran; la sesion recuerda quien es de verdad.
  */
 test.beforeEach(() => {
   test.skip(test.info().project.name !== "escritorio", "contrato de API y flujo de escritorio: una pasada basta");
@@ -16,9 +16,9 @@ const EMAIL_PRINCIPAL = "admin@dataintel.com";
 /* La cuenta principal no viene en la semilla: se crea una vez, con la clave de las demas. */
 async function principal(): Promise<number> {
   const [ya] = await sql<{ id: number }>("SELECT id FROM users WHERE lower(email) = $1", [EMAIL_PRINCIPAL]);
-  if (ya) { await sql("UPDATE users SET is_active = true, force_logout = false, role = 'admin' WHERE id = $1", [ya.id]); return ya.id; }
+  if (ya) { await sql("UPDATE users SET is_active = true, force_logout = false, role = 'director', is_admin = true WHERE id = $1", [ya.id]); return ya.id; }
   const hash = (await sql<{ password: string }>("SELECT password FROM users WHERE email = $1", [ADMIN]))[0].password;
-  return (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, allowed_tools, tour_completed_at) VALUES ('Administrador principal', $1, $2, 'admin', true, now(), NULL, now()) RETURNING id", [EMAIL_PRINCIPAL, hash]))[0].id;
+  return (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_admin, is_active, created_at, allowed_tools, tour_completed_at) VALUES ('Administrador principal', $1, $2, 'director', true, true, now(), NULL, now()) RETURNING id", [EMAIL_PRINCIPAL, hash]))[0].id;
 }
 async function contextoPrincipal(browser: import("@playwright/test").Browser) {
   const id = await principal();
@@ -31,18 +31,44 @@ const token = async (id: number) => (await sql<{ t: string | null }>("SELECT ses
 const actividad = (accion: string, userId: number) => sql<{ detail: string; user_id: number }>("SELECT detail, user_id FROM activity_logs WHERE action = $1 AND user_id = $2 ORDER BY id DESC", [accion, userId]);
 
 test.describe("quien puede", () => {
-  test("solo la cuenta principal: otra administradora, una persona comun o nadie reciben 403/401", async ({ browser, request }) => {
+  test("cualquier administradora puede; una persona comun o nadie, no", async ({ browser, request }) => {
     const e = await escenario("sup-quien");
-    const { ctx: otraAdmin } = await contextoCon(browser, ADMIN); // administradora, pero no la principal
+    // Una administradora que NO es la cuenta principal.
+    const { ctx: otraAdmin } = await contextoCon(browser, ADMIN);
     const r1 = await suplantar(otraAdmin, e.empleado);
-    expect(r1.status()).toBe(403);
-    expect((await r1.json()).error).toContain("administrador principal");
+    expect(r1.status(), await r1.text()).toBe(200);
+    expect((await actividad("impersonate_start", await idDe(ADMIN)))[0].detail).toContain(`empleado.${e.sufijo}`);
+    // Una persona comun, no.
     const comun = await browser.newContext();
     await iniciarSesion(comun, e.empleado, { rotar: true });
     expect((await suplantar(comun, e.companero)).status()).toBe(403);
+    // Sin sesion, tampoco.
     expect((await request.post(`/api/admin/usuarios/${e.empleado}/suplantar`, { data: {} })).status()).toBe(401);
-    // Nada cambio en la sesion de quien lo intento.
-    expect((await otraAdmin.request.get("/api/admin/usuarios")).status()).toBe(200);
+  });
+
+  test("a otra administradora no se la puede ver: ni a la principal ni a cualquier otra", async ({ browser }) => {
+    const { ctx } = await contextoCon(browser, ADMIN);
+    const otra = await idDe(ADMIN_2);
+    const r = await suplantar(ctx, otra);
+    expect(r.status()).toBe(403);
+    expect((await r.json()).error).toContain("otra persona administradora");
+    const principal2 = await principal();
+    expect((await suplantar(ctx, principal2)).status()).toBe(403);
+    // La sesion de quien lo intento no cambio.
+    expect((await ctx.request.get("/api/admin/usuarios")).status()).toBe(200);
+  });
+
+  test("quien administra por la casilla, aunque su cargo sea otro, puede; quien deja de administrar, ya no", async ({ browser }) => {
+    const e = await escenario("sup-casilla");
+    await sql("UPDATE users SET role = 'gerente', is_admin = true WHERE id = $1", [e.companero]);
+    const ctx = await browser.newContext();
+    await iniciarSesion(ctx, e.companero, { rotar: true });
+    expect((await suplantar(ctx, e.empleado)).status()).toBe(200);
+    await ctx.close();
+    await sql("UPDATE users SET is_admin = false WHERE id = $1", [e.companero]);
+    const ctx2 = await browser.newContext();
+    await iniciarSesion(ctx2, e.companero, { rotar: true });
+    expect((await suplantar(ctx2, e.empleado)).status()).toBe(403);
   });
 
   test("no a si misma, ni a una cuenta desactivada, ni a una que no existe, ni dos veces seguidas", async ({ browser }) => {
@@ -55,6 +81,7 @@ test.describe("quien puede", () => {
     expect((await suplantar(ctx, e.empleado)).status()).toBe(200);
     // Ya viendo como el empleado, no se encadena otra suplantacion (y el empleado ni siquiera es administrador).
     expect((await suplantar(ctx, e.companero)).status()).toBe(403);
+    // Ni se suplanta a una persona administradora.
   });
 });
 
@@ -142,23 +169,30 @@ test.describe("viendo como otra persona", () => {
     expect((await ctx.request.get("/api/tareas")).status()).toBe(401);
   });
 
-  test("una cookie copiada de la sesion normal no permite suplantar a quien no es la cuenta principal", async ({ browser }) => {
+  test("una sesion normal (sin ser administradora) no puede suplantar aunque conozca la ruta", async ({ browser }) => {
     const e = await escenario("sup-falsa");
-    const { ctx: admin } = await contextoCon(browser, ADMIN);
-    // La cookie de otra administradora no trae `suplantadoPor`, y la API se lo niega aunque sea administradora.
-    expect((await suplantar(admin, e.empleado)).status()).toBe(403);
-    expect((await admin.request.get("/api/admin/usuarios")).status()).toBe(200);
+    const comun = await browser.newContext();
+    await iniciarSesion(comun, e.empleado, { rotar: true });
+    expect((await suplantar(comun, e.companero)).status()).toBe(403);
+    expect((await comun.request.get("/api/admin/usuarios")).status()).toBe(403);
   });
 });
 
 test.describe("en pantalla", () => {
-  test("el boton aparece solo para la cuenta principal y lleva a ver como esa persona", async ({ browser }) => {
+  test("el boton aparece para cualquier administradora, solo en personas que no administran, y lleva a ver como esa persona", async ({ browser }) => {
     const e = await escenario("sup-pantalla");
     const nombre = `empleado.${e.sufijo}`;
-    // Otra administradora: ni el boton.
+    // Una administradora que no es la principal: tiene el boton con una persona comun...
     const { page: otra } = await contextoCon(browser, ADMIN);
     await otra.goto(`/admin/personas?q=${encodeURIComponent(nombre)}`);
     await otra.getByRole("button", { name: `Editar a ${nombre}` }).click();
+    await expect(otra.getByRole("button", { name: "Forzar cierre de sesión" })).toBeVisible();
+    await expect(otra.getByRole("button", { name: "Ver como esta persona" })).toBeVisible();
+    // ...y no lo tiene con otra administradora.
+    await sql("UPDATE users SET is_admin = true WHERE id = $1", [e.companero]);
+    const otraAdmin = `companero.${e.sufijo}`;
+    await otra.goto(`/admin/personas?q=${encodeURIComponent(otraAdmin)}`);
+    await otra.getByRole("button", { name: `Editar a ${otraAdmin}` }).click();
     await expect(otra.getByRole("button", { name: "Forzar cierre de sesión" })).toBeVisible();
     await expect(otra.getByRole("button", { name: "Ver como esta persona" })).toHaveCount(0);
 

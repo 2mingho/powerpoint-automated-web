@@ -11,7 +11,7 @@ test.beforeEach(({}, info) => { test.skip(info.project.name !== "escritorio", "U
 
 test("las vencidas que cuenta la base son exactamente las visibles que lista la API", async ({ context }) => {
   const e = await escenario("vis-sql");
-  const lider = (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'DI', true, now(), $3, '[\"tasks\"]', now() FROM users WHERE id = $4 RETURNING id",
+  const lider = (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'analista', true, now(), $3, '[\"tasks\"]', now() FROM users WHERE id = $4 RETURNING id",
     [`lider.${e.sufijo}`, `lider.${e.sufijo}@e2e.test`, e.alfa, e.empleado]))[0].id;
   await sql("INSERT INTO unit_leads (user_id, area_id) VALUES ($1, $2)", [lider, e.alfa]);
   // Vencidas en las dos unidades, una de la unidad propia asignada a quien no es de ella, y una borrada.

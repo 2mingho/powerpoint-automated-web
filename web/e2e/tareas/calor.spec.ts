@@ -21,7 +21,7 @@ async function tareaDeHoy(e: Esc, asignado: number, area: number, horas: number 
 
 async function conLider() {
   const e = await escenario("calor");
-  const lider = (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'DI', true, now(), $3, '[\"tasks\"]', now() FROM users WHERE id = $4 RETURNING id",
+  const lider = (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'analista', true, now(), $3, '[\"tasks\"]', now() FROM users WHERE id = $4 RETURNING id",
     [`lider.${e.sufijo}`, `lider.${e.sufijo}@e2e.test`, e.alfa, e.empleado]))[0].id;
   await sql("INSERT INTO unit_leads (user_id, area_id) VALUES ($1, $2)", [lider, e.alfa]);
   return { e, lider };

@@ -40,7 +40,7 @@ def _usuario(username, area_id, admin=False):
         username=username,
         email=f'{username}@ejemplo.com',
         password=generate_password_hash('clave-de-prueba', method='scrypt'),
-        role=('admin' if admin else 'DI'),
+        role='director' if admin else 'analista', es_admin=admin,
         is_active=True,
         area_id=area_id,
     )

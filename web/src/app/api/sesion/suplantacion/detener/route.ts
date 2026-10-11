@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { origenAjeno } from "@/lib/api";
 import { registrarActividad } from "@/lib/actividad";
-import { esAdminProtegido } from "@/lib/admin/protegido";
 import { obtenerSesion } from "@/lib/auth/session";
 
 /*
@@ -15,8 +14,8 @@ export async function POST(req: Request) {
   const sesion = await obtenerSesion();
   const origen = sesion.suplantadoPor;
   if (!origen) return new Response(null, { status: 303, headers: { Location: "/" } });
-  const a = await db.users.findUnique({ where: { id: origen.id }, select: { id: true, username: true, email: true, role: true, is_active: true, force_logout: true, session_token: true } });
-  if (!a || !a.is_active || a.force_logout || a.role !== "admin" || !esAdminProtegido(a.email) || !a.session_token || a.session_token !== origen.token) {
+  const a = await db.users.findUnique({ where: { id: origen.id }, select: { id: true, username: true, is_admin: true, is_active: true, force_logout: true, session_token: true } });
+  if (!a || !a.is_active || a.force_logout || !a.is_admin || !a.session_token || a.session_token !== origen.token) {
     sesion.destroy();
     return new Response(null, { status: 303, headers: { Location: "/login" } });
   }

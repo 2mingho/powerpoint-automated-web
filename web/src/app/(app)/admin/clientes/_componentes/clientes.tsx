@@ -198,10 +198,14 @@ function FormularioCliente({ cliente, opciones, onCerrar, onGuardado }: {
           {(a) => <Entrada {...a} autoFocus value={nombre} maxLength={100} onChange={(e) => setNombre(e.target.value)} autoComplete="off" />}
         </Campo>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Campo etiqueta="Tipo" ayuda="Libre: Corporativo, Gobierno…">
-            {(a) => <Entrada {...a} list="tipos-cliente" value={tipo} maxLength={40} onChange={(e) => setTipo(e.target.value)} autoComplete="off" />}
+          <Campo etiqueta="Tipo">
+            {(a) => (
+              <Selector {...a} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+                <option value="">Sin tipo</option>
+                {opciones.tipos.map((t) => <option key={t} value={t}>{t}</option>)}
+              </Selector>
+            )}
           </Campo>
-          <datalist id="tipos-cliente">{opciones.tipos.map((t) => <option key={t} value={t} />)}</datalist>
           <Campo etiqueta="Líder de cuenta">
             {(a) => (
               <Selector {...a} value={lider} onChange={(e) => setLider(e.target.value)}>

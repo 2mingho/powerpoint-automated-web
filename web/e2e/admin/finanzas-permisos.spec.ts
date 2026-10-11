@@ -88,7 +88,7 @@ test.describe("conceder desde Personas", () => {
   test("una cuenta de administracion no recibe concesiones (ya edita todo), pero vaciar es valido", async ({ browser }) => {
     const { page } = await contextoCon(browser, ADMIN);
     const e = await escenario("fin-admin");
-    await sql("UPDATE users SET role = 'admin' WHERE id = $1", [e.companero]);
+    await sql("UPDATE users SET is_admin = true WHERE id = $1", [e.companero]);
     const r = await page.request.patch(`/api/admin/usuarios/${e.companero}`, { data: { finanzas: { goals: [e.alfa] } } });
     expect(r.status()).toBe(400);
     expect((await page.request.patch(`/api/admin/usuarios/${e.companero}`, { data: { finanzas: { goals: [] } } })).status()).toBe(200);
@@ -228,7 +228,7 @@ test.describe("en pantalla", () => {
   test("a un administrador no se le ofrecen unidades", async ({ browser }) => {
     const { page } = await contextoCon(browser, ADMIN);
     const e = await escenario("fin-pantalla-3");
-    await sql("UPDATE users SET role = 'admin' WHERE id = $1", [e.companero]);
+    await sql("UPDATE users SET is_admin = true WHERE id = $1", [e.companero]);
     await page.goto(`/admin/personas?q=${encodeURIComponent(`companero.${e.sufijo}`)}`);
     await page.getByRole("button", { name: `Editar a companero.${e.sufijo}` }).click();
     await expect(page.getByText("Administración entra a todas.")).toBeVisible();

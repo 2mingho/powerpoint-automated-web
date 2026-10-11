@@ -39,10 +39,20 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/usuarios/[id]">>(async 
   }
   if ("rol" in d) {
     const rol = texto(d.rol, 20);
-    if (!rol) throw new ErrorApi(400, "Elige un rol.");
-    if (id === u.id && rol !== "admin") throw new ErrorApi(400, "No puedes quitarte tu propio rol de administrador.");
-    await validarRol(rol, actual.role);
-    if (rol !== actual.role) { datos.role = rol; cambios.push(`rol: ${actual.role} -> ${rol}`); }
+    if (!rol) throw new ErrorApi(400, "Elige un cargo.");
+    validarRol(rol);
+    if (rol !== actual.role) { datos.role = rol; cambios.push(`cargo: ${actual.role} -> ${rol}`); }
+  }
+  if ("esAdmin" in d) {
+    if (typeof d.esAdmin !== "boolean") throw new ErrorApi(400, "«Es administrador» debe ser verdadero o falso.");
+    if (d.esAdmin !== actual.is_admin) {
+      if (!d.esAdmin) {
+        // Quien lo hace es administradora activa y distinta de esta persona: siempre queda al menos una.
+        if (id === u.id) throw new ErrorApi(400, "No puedes quitarte tu propio rol de administrador.");
+      }
+      datos.is_admin = d.esAdmin;
+      cambios.push(`administrador: ${d.esAdmin ? "sí" : "no"}`);
+    }
   }
   if ("unidadId" in d) {
     const unidadId = enteroONulo(d.unidadId);
@@ -81,8 +91,8 @@ export const PATCH = conUsuario<RouteContext<"/api/admin/usuarios/[id]">>(async 
 
   if (Object.keys(datos).length) await db.users.update({ where: { id }, data: datos });
   if (finanzas?.ok) {
-    const rolFinal = (datos.role as string | undefined) ?? actual.role;
-    const hechos = await fijarConcesiones(u, { id, username: (datos.username as string | undefined) ?? actual.username, isAdmin: rolFinal === "admin" }, finanzas.valor);
+    const esAdminFinal = (datos.is_admin as boolean | undefined) ?? actual.is_admin;
+    const hechos = await fijarConcesiones(u, { id, username: (datos.username as string | undefined) ?? actual.username, isAdmin: esAdminFinal }, finanzas.valor);
     if (hechos.length) cambios.push("permisos de ingresos actualizados");
   }
   await registrarActividad(u.id, "admin_edit_user", `Editó usuario #${id}: ${cambios.length ? cambios.join(", ") : "sin cambios"}`, { tipo: "user", id });

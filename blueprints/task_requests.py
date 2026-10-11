@@ -53,7 +53,7 @@ def _resolutores(area_id):
     ).filter(UnitLead.area_id == area_id, User.is_active.is_(True)).all()
     if lideres:
         return lideres
-    return User.query.filter(User.role == 'admin', User.is_active.is_(True)).all()
+    return User.query.filter(User.es_admin.is_(True), User.is_active.is_(True)).all()
 
 
 # ─────────────────────────────────────────────────────────────

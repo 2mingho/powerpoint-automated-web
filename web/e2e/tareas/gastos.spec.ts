@@ -12,7 +12,7 @@ type Esc = Awaited<ReturnType<typeof escenario>>;
 const ANIO = Number(HOY.slice(0, 4));
 
 async function nuevaPersona(e: Esc, nombre: string, area: number | null, manager: number | null = null) {
-  return (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, manager_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'DI', true, now(), $3, $4, '[\"tasks\"]', now() FROM users WHERE id = $5 RETURNING id",
+  return (await sql<{ id: number }>("INSERT INTO users (username, email, password, role, is_active, created_at, area_id, manager_id, allowed_tools, tour_completed_at) SELECT $1, $2, password, 'analista', true, now(), $3, $4, '[\"tasks\"]', now() FROM users WHERE id = $5 RETURNING id",
     [`${nombre}.${e.sufijo}`, `${nombre}.${e.sufijo}@e2e.test`, area, manager, e.empleado]))[0].id;
 }
 

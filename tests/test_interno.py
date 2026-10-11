@@ -44,10 +44,10 @@ def client(monkeypatch):
     app.config.pop('INTERNO_SINCRONO', None)
 
 
-def _usuario(nombre, herramientas=('reports',), role='DI', activo=True):
+def _usuario(nombre, herramientas=('reports',), role='analista', activo=True):
     user = User(username=nombre, email=f'{nombre}@ejemplo.com',
                 password=generate_password_hash('clave', method='scrypt'),
-                role=role, is_active=activo)
+                role='director' if role == 'admin' else role, es_admin=role == 'admin', is_active=activo)
     user.set_allowed_tools(list(herramientas))
     db.session.add(user)
     db.session.commit()

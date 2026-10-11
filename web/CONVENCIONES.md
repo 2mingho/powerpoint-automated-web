@@ -51,6 +51,19 @@ Producto y diseño: `../PRODUCT.md` (quién lo usa y qué no se puede romper) y 
 - La meta de la dirección (`goals.area_id` NULL) la fija solo el administrador y la ve quien ve todas las unidades.
 - Un cliente o unidad con contratos no se borra; unir clientes mueve sus contratos.
 
+## Cargos, administración y tipos de cliente
+
+- **Cargo** (`users.role`): uno de cinco, fijos: coordinador, analista, ejecutiva, gerente, director (`lib/roles.ts`; la base lo exige con
+  `ck_users_role`). Es el cargo, no un permiso: lo que cada quien puede hacer sigue saliendo de la estructura (quién lidera una unidad, quién
+  tiene gente a cargo). El catálogo `roles` ya no se edita desde la app.
+- **Administrar** es una casilla aparte, `users.is_admin` («Es administrador»): una gerente puede ser administradora sin dejar de ser gerente.
+  Nadie se la quita a sí mismo. La cuenta protegida (`ADMIN_EMAIL`) no se edita.
+- **Ver como otra persona**: cualquier administradora, y solo a personas que NO administran (así nadie obtiene los permisos de otra
+  administradora ni se encadenan suplantaciones). Queda en la actividad con marca de suplantación.
+- **Tipo de cliente** (`clients.client_type`): Privado, Público o Interno, o sin tipo (`lib/clientes/tipos.ts`; `ck_clients_type`).
+- Migración `0020`: el cargo de quien ya existía se deduce de la cadena de mando (lidera una unidad = gerente; tiene a un líder a su cargo =
+  director; tiene gente a cargo sin líderes = coordinador; el resto, analista) y el valor anterior queda en `users.legacy_role`.
+
 ## Gastos y horas extras de la unidad
 
 Los gestiona quien **lidera** la unidad (`unit_leads`); la dirección que la supervisa (`alcanceUnidades`) los ve sin editar; el

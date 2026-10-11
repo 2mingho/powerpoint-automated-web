@@ -83,9 +83,10 @@
           <td><strong>{{ user.username }}</strong></td>
           <td>{{ user.email }}</td>
           <td>
-            {% if user.role == 'admin' %}
-              <span class="badge badge-warning">{{ user.role }}</span>
-            {% elif user.role == 'DI' %}
+            {% if user.es_admin %}
+              <span class="badge badge-warning">admin</span>
+              <span class="badge badge-neutral">{{ user.role }}</span>
+            {% elif user.role == 'gerente' %}
               <span class="badge badge-primary">{{ user.role }}</span>
             {% else %}
               <span class="badge badge-neutral">{{ user.role }}</span>

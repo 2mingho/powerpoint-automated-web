@@ -449,6 +449,8 @@ model users {
   email                    String                   @unique @db.VarChar(150)
   password                 String                   @db.VarChar(200)
   role                     String                   @db.VarChar(20)
+  is_admin                 Boolean                  @default(false)
+  legacy_role              String?                  @db.VarChar(20)
   is_active                Boolean?
   created_at               DateTime?                @db.Timestamp(6)
   allowed_tools            String?

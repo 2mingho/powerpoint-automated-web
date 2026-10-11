@@ -46,7 +46,7 @@ def _usuario(nombre, herramientas=('reports',)):
         username=nombre,
         email=f'{nombre}@ejemplo.com',
         password=generate_password_hash('clave-de-prueba', method='scrypt'),
-        role='DI',
+        role='analista',
         is_active=True,
     )
     user.set_allowed_tools(list(herramientas))

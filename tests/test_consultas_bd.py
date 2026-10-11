@@ -81,7 +81,7 @@ def equipo(client):
                 username=nombre,
                 email=f'{nombre}@ejemplo.com',
                 password=generate_password_hash('clave-de-prueba', method='scrypt'),
-                role='DI',
+                role='analista',
                 is_active=True,
                 area_id=unidad.id,
             )

@@ -3,14 +3,12 @@ import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { ErrorApi } from "@/lib/api";
 import { esAdminProtegido } from "./consultas";
+import { esRol, ROLES } from "@/lib/roles";
 import { creariaBucle, type PersonaOrg } from "./mando";
 
-/* Un rol vale si es 'admin' o esta en el catalogo de roles. */
-export async function validarRol(rol: string, actual?: string) {
-  if (rol === "admin" || rol === actual) return;
-  if (!(await db.roles.findUnique({ where: { code: rol }, select: { id: true } }))) {
-    throw new ErrorApi(400, `El rol "${rol}" no existe. Créalo antes en Roles.`);
-  }
+/* Un cargo vale si es uno de los cinco (lib/roles.ts). Administrar no es un cargo: es la casilla «Es administrador». */
+export function validarRol(rol: string) {
+  if (!esRol(rol)) throw new ErrorApi(400, `El cargo debe ser uno de: ${ROLES.map((r) => r.nombre).join(", ")}. Para administrar, marca «Es administrador».`);
 }
 
 export async function usuarioEditable(id: number) {

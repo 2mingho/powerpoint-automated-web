@@ -31,10 +31,10 @@ test.describe("alta y validacion", () => {
     const { page } = await contextoCon(browser, ADMIN);
     const n = `Nuevo ${sufijo()}`;
     const lider = (await sql<{ id: number }>("SELECT id FROM users WHERE email = 'laura@equipo.test'"))[0].id;
-    const alta = await page.request.post("/api/admin/clientes", { data: { nombre: `  ${n}  `, tipo: "Gobierno", liderId: lider } });
+    const alta = await page.request.post("/api/admin/clientes", { data: { nombre: `  ${n}  `, tipo: "Público", liderId: lider } });
     expect(alta.status(), await alta.text()).toBe(201);
     const { id } = await alta.json();
-    expect(await cliente(id)).toMatchObject({ name: n, name_key: n.toLowerCase(), client_type: "Gobierno", account_lead_id: lider, is_active: true });
+    expect(await cliente(id)).toMatchObject({ name: n, name_key: n.toLowerCase(), client_type: "Público", account_lead_id: lider, is_active: true });
 
     const repetido = await page.request.post("/api/admin/clientes", { data: { nombre: n.toUpperCase() } });
     expect(repetido.status()).toBe(409);
@@ -97,8 +97,8 @@ test.describe("unir", () => {
     const { page } = await contextoCon(browser, ADMIN);
     const s = sufijo();
     const lider = (await sql<{ id: number }>("SELECT id FROM users WHERE email = 'laura@equipo.test'"))[0].id;
-    const origen = await nuevoCliente(`Claro RD ${s}`, { tipo: "Telecom", lider });
-    const destino = await nuevoCliente(`Claro ${s}`, { tipo: "Corporativo" });
+    const origen = await nuevoCliente(`Claro RD ${s}`, { tipo: "Interno", lider });
+    const destino = await nuevoCliente(`Claro ${s}`, { tipo: "Privado" });
     const { id: t1 } = await tareaDe("Uno", origen, `Claro RD ${s}`);
     const { id: t2 } = await tareaDe("Dos", destino, `Claro ${s}`);
     const antes = await marca(t1);
@@ -107,7 +107,7 @@ test.describe("unir", () => {
     expect(r.status(), await r.text()).toBe(200);
     expect(await r.json()).toEqual({ movidas: 1, destino: `Claro ${s}` });
     expect(await existe(origen)).toBe(false);
-    expect(await cliente(destino)).toMatchObject({ client_type: "Corporativo", account_lead_id: lider });
+    expect(await cliente(destino)).toMatchObject({ client_type: "Privado", account_lead_id: lider });
     for (const t of [t1, t2]) expect((await sql<{ client: string; client_id: number }>("SELECT client, client_id FROM tasks WHERE id = $1", [t]))[0]).toEqual({ client: `Claro ${s}`, client_id: destino });
     expect(await marca(t1)).toBe(antes);
   });

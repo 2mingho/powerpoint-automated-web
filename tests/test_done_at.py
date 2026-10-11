@@ -35,7 +35,7 @@ def usuario(client):
         db.session.add(unidad)
         db.session.commit()
         u = User(username='ana', email='ana@ejemplo.com', password=generate_password_hash('clave-de-prueba', method='scrypt'),
-                 role='DI', is_active=True, area_id=unidad.id)
+                 role='analista', is_active=True, area_id=unidad.id)
         u.set_allowed_tools(['tasks'])
         db.session.add(u)
         db.session.commit()

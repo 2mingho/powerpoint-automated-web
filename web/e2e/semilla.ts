@@ -45,39 +45,39 @@ const TODAS = ["reports", "classification", "file_merge", "csv_analysis", "tasks
 
 type Persona = {
   email: string; nombre: string; rol: string; unidad: Unidad | null; jefe?: string; lidera?: Unidad[];
-  tour?: boolean; activo?: boolean; herramientas?: string[];
+  tour?: boolean; activo?: boolean; herramientas?: string[]; admin?: boolean;
 };
 
 /* El orden importa: cada jefe aparece antes que su gente. */
 export const PERSONAS: Persona[] = [
-  { email: "demo@local.test", nombre: "demo", rol: "admin", unidad: "di" },
-  { email: "admin2@equipo.test", nombre: "Admin Catálogo", rol: "admin", unidad: null },
-  { email: "laura@equipo.test", nombre: "Laura Méndez", rol: "DIR", unidad: null },
-  { email: "carlos@equipo.test", nombre: "Carlos Pérez", rol: "DI", unidad: "di", jefe: "laura@equipo.test", lidera: ["di", "inv"] },
-  { email: "sofia@equipo.test", nombre: "Sofía Ramírez", rol: "COM", unidad: "com", jefe: "laura@equipo.test", lidera: ["com"] },
-  { email: "andres@equipo.test", nombre: "Andrés Gil", rol: "EST", unidad: "est", lidera: ["est"] },
-  { email: "analista@local.test", nombre: "analista", rol: "DI", unidad: "di", jefe: "carlos@equipo.test" },
-  { email: "nuevo@local.test", nombre: "Nuevo Ingreso", rol: "DI", unidad: "di", jefe: "carlos@equipo.test", tour: false },
-  { email: "ana@equipo.test", nombre: "Ana Torres", rol: "DI", unidad: "di", jefe: "carlos@equipo.test" },
-  { email: "luis@equipo.test", nombre: "Luis Gómez", rol: "DI", unidad: "di", jefe: "carlos@equipo.test" },
-  { email: "marta@equipo.test", nombre: "Marta Díaz", rol: "INV", unidad: "inv", jefe: "carlos@equipo.test" },
-  { email: "pedro@equipo.test", nombre: "Pedro Ruiz", rol: "INV", unidad: "inv", jefe: "carlos@equipo.test" },
-  { email: "elena@equipo.test", nombre: "Elena Castro", rol: "COM", unidad: "com", jefe: "sofia@equipo.test" },
-  { email: "jorge@equipo.test", nombre: "Jorge Navarro", rol: "COM", unidad: "com", jefe: "sofia@equipo.test" },
-  { email: "paula@equipo.test", nombre: "Paula Vidal", rol: "EST", unidad: "est", jefe: "andres@equipo.test" },
-  { email: "diego@equipo.test", nombre: "Diego Romero", rol: "EST", unidad: "est", jefe: "andres@equipo.test" },
-  { email: "rosa@equipo.test", nombre: "Rosa Ibáñez", rol: "COM", unidad: "com" },
-  { email: "tomas@equipo.test", nombre: "Tomás Ferrer", rol: "DI", unidad: "di", jefe: "carlos@equipo.test", activo: false },
-  { email: "lider.dis@local.test", nombre: "Gabriela Soto", rol: "DIS", unidad: "dis", lidera: ["dis"] },
-  { email: "miembro.dis@local.test", nombre: "Iván Peralta", rol: "DIS", unidad: "dis", jefe: "lider.dis@local.test" },
-  { email: "externo@local.test", nombre: "Ramón Báez", rol: "COMERCIAL", unidad: "comercial" },
-  { email: "sin.unidad@local.test", nombre: "Sin Unidad", rol: "DI", unidad: null },
+  { email: "demo@local.test", nombre: "demo", rol: "director", admin: true, unidad: "di" },
+  { email: "admin2@equipo.test", nombre: "Admin Catálogo", rol: "director", admin: true, unidad: null },
+  { email: "laura@equipo.test", nombre: "Laura Méndez", rol: "director", unidad: null },
+  { email: "carlos@equipo.test", nombre: "Carlos Pérez", rol: "gerente", unidad: "di", jefe: "laura@equipo.test", lidera: ["di", "inv"] },
+  { email: "sofia@equipo.test", nombre: "Sofía Ramírez", rol: "gerente", unidad: "com", jefe: "laura@equipo.test", lidera: ["com"] },
+  { email: "andres@equipo.test", nombre: "Andrés Gil", rol: "gerente", unidad: "est", lidera: ["est"] },
+  { email: "analista@local.test", nombre: "analista", rol: "analista", unidad: "di", jefe: "carlos@equipo.test" },
+  { email: "nuevo@local.test", nombre: "Nuevo Ingreso", rol: "analista", unidad: "di", jefe: "carlos@equipo.test", tour: false },
+  { email: "ana@equipo.test", nombre: "Ana Torres", rol: "analista", unidad: "di", jefe: "carlos@equipo.test" },
+  { email: "luis@equipo.test", nombre: "Luis Gómez", rol: "analista", unidad: "di", jefe: "carlos@equipo.test" },
+  { email: "marta@equipo.test", nombre: "Marta Díaz", rol: "analista", unidad: "inv", jefe: "carlos@equipo.test" },
+  { email: "pedro@equipo.test", nombre: "Pedro Ruiz", rol: "analista", unidad: "inv", jefe: "carlos@equipo.test" },
+  { email: "elena@equipo.test", nombre: "Elena Castro", rol: "analista", unidad: "com", jefe: "sofia@equipo.test" },
+  { email: "jorge@equipo.test", nombre: "Jorge Navarro", rol: "analista", unidad: "com", jefe: "sofia@equipo.test" },
+  { email: "paula@equipo.test", nombre: "Paula Vidal", rol: "analista", unidad: "est", jefe: "andres@equipo.test" },
+  { email: "diego@equipo.test", nombre: "Diego Romero", rol: "analista", unidad: "est", jefe: "andres@equipo.test" },
+  { email: "rosa@equipo.test", nombre: "Rosa Ibáñez", rol: "analista", unidad: "com" },
+  { email: "tomas@equipo.test", nombre: "Tomás Ferrer", rol: "analista", unidad: "di", jefe: "carlos@equipo.test", activo: false },
+  { email: "lider.dis@local.test", nombre: "Gabriela Soto", rol: "gerente", unidad: "dis", lidera: ["dis"] },
+  { email: "miembro.dis@local.test", nombre: "Iván Peralta", rol: "analista", unidad: "dis", jefe: "lider.dis@local.test" },
+  { email: "externo@local.test", nombre: "Ramón Báez", rol: "analista", unidad: "comercial" },
+  { email: "sin.unidad@local.test", nombre: "Sin Unidad", rol: "analista", unidad: null },
   // Cuentas del modulo Datos: cada spec entra con la suya (una sesion nueva rota el token).
-  { email: "colega.datos@local.test", nombre: "Colega Datos", rol: "DI", unidad: "di", herramientas: ["reports", "classification", "file_merge", "csv_analysis"] },
-  { email: "sin.reportes@local.test", nombre: "Sin Reportes", rol: "DI", unidad: "di", herramientas: ["tasks", "classification"] },
-  { email: "herramientas.datos@local.test", nombre: "Herramientas Datos", rol: "DI", unidad: "di", herramientas: ["classification", "file_merge", "csv_analysis"] },
-  { email: "capturas.datos@local.test", nombre: "Valeria Núñez", rol: "DI", unidad: "di", herramientas: TODAS },
-  { email: "capturas.movil@local.test", nombre: "Valeria Núñez", rol: "DI", unidad: "di", herramientas: TODAS },
+  { email: "colega.datos@local.test", nombre: "Colega Datos", rol: "analista", unidad: "di", herramientas: ["reports", "classification", "file_merge", "csv_analysis"] },
+  { email: "sin.reportes@local.test", nombre: "Sin Reportes", rol: "analista", unidad: "di", herramientas: ["tasks", "classification"] },
+  { email: "herramientas.datos@local.test", nombre: "Herramientas Datos", rol: "analista", unidad: "di", herramientas: ["classification", "file_merge", "csv_analysis"] },
+  { email: "capturas.datos@local.test", nombre: "Valeria Núñez", rol: "analista", unidad: "di", herramientas: TODAS },
+  { email: "capturas.movil@local.test", nombre: "Valeria Núñez", rol: "analista", unidad: "di", herramientas: TODAS },
 ];
 
 const HOY = hoyNegocio();
@@ -122,7 +122,7 @@ async function organizacion(c: PoolClient): Promise<Ctx> {
   }
 
   // Roles.
-  const roles = [["DI", "Data Intelligence"], ["COM", "Comunicación"], ["INV", "Investigación"], ["EST", "Estrategia"], ["DIR", "Dirección"], ["DIS", "Diseño"], ["COMERCIAL", "Comercial"]];
+  const roles = [["coordinador", "Coordinador"], ["analista", "Analista"], ["ejecutiva", "Ejecutiva"], ["gerente", "Gerente"], ["director", "Director"]];
   await q(c, "DELETE FROM roles WHERE code <> ALL($1)", [roles.map((r) => r[0])]);
   for (const [code, nombre] of roles) {
     await q(c, "INSERT INTO roles (code, display_name, created_at) VALUES ($1, $2, now()) ON CONFLICT (code) DO UPDATE SET display_name = $2", [code, nombre]);
@@ -141,13 +141,13 @@ async function organizacion(c: PoolClient): Promise<Ctx> {
   await q(c, "UPDATE users SET manager_id = NULL");
   for (const p of PERSONAS) {
     id[p.email] = (await q<{ id: number }>(c,
-      `INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, force_logout, is_area_lead, manager_id, tour_completed_at, session_token)
-       VALUES ($1, $2, $3, $4, $5, now() - interval '120 days', $6, $7, false, false, $8, CASE WHEN $9 THEN now() END, NULL)
+      `INSERT INTO users (username, email, password, role, is_active, created_at, area_id, allowed_tools, force_logout, is_area_lead, manager_id, tour_completed_at, session_token, is_admin)
+       VALUES ($1, $2, $3, $4, $5, now() - interval '120 days', $6, $7, false, false, $8, CASE WHEN $9 THEN now() END, NULL, $10)
        ON CONFLICT (email) DO UPDATE SET username = $1, password = $3, role = $4, is_active = $5, area_id = $6, allowed_tools = $7,
-         force_logout = false, is_area_lead = false, manager_id = $8, tour_completed_at = CASE WHEN $9 THEN now() END, session_token = NULL
+         force_logout = false, is_area_lead = false, manager_id = $8, tour_completed_at = CASE WHEN $9 THEN now() END, session_token = NULL, is_admin = $10
        RETURNING id`,
       [p.nombre, p.email, hash, p.rol, p.activo !== false, p.unidad ? area[p.unidad] : null,
-        p.herramientas ? JSON.stringify(p.herramientas) : null, p.jefe ? id[p.jefe] : null, p.tour !== false]))[0].id;
+        p.herramientas ? JSON.stringify(p.herramientas) : null, p.jefe ? id[p.jefe] : null, p.tour !== false, p.admin === true]))[0].id;
   }
   // Fuera lo que crearon las pruebas (escenarios de tareas, altas de admin...).
   const ids = Object.values(id);

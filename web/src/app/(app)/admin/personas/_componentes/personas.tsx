@@ -15,7 +15,7 @@ import { fFecha } from "@/lib/admin/formato";
 import type { FilaUsuario, listarUsuarios, opcionesPersonas } from "@/lib/admin/consultas";
 import { BuscadorDiferido, claseCelda, claseFila, Paginacion, Tabla, Th, useListaRemota } from "../../_componentes/comunes";
 import { CLAVES_FINANZAS, TIPOS_FINANZAS, type Concesiones, type TipoFinanzas } from "@/lib/finanzas/concesiones";
-import { Roles } from "./roles";
+import { nombreDeRol, ROL_POR_DEFECTO } from "@/lib/roles";
 
 type Lista = Awaited<ReturnType<typeof listarUsuarios>>;
 type Opciones = Awaited<ReturnType<typeof opcionesPersonas>>;
@@ -82,7 +82,6 @@ export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, p
   }
 
   const hayFiltro = !!(filtros.q || filtros.rol || filtros.unidad || filtros.estado);
-  const rolNombre = (c: string) => c === "admin" ? "Administración" : opciones.roles.find((r) => r.codigo === c)?.nombre ?? c;
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,10 +92,10 @@ export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, p
         cabecera={
           <>
             <BuscadorDiferido valor={filtros.q ?? ""} onCambio={(q) => cambiar({ q })} etiqueta="Buscar por nombre o correo" placeholder="Buscar por nombre o correo" />
-            <Selector aria-label="Rol" value={filtros.rol ?? ""} onChange={(e) => cambiar({ rol: e.target.value })} className="w-full sm:w-44">
-              <option value="">Todos los roles</option>
-              <option value="admin">Administración</option>
-              {opciones.roles.map((r) => <option key={r.id} value={r.codigo}>{r.nombre}</option>)}
+            <Selector aria-label="Cargo" value={filtros.rol ?? ""} onChange={(e) => cambiar({ rol: e.target.value })} className="w-full sm:w-44">
+              <option value="">Todos los cargos</option>
+              <option value="admin">Administradoras ({opciones.adminUsuarios})</option>
+              {opciones.roles.map((r) => <option key={r.codigo} value={r.codigo}>{r.nombre} ({r.usuarios})</option>)}
             </Selector>
             <Selector aria-label="Unidad" value={filtros.unidad ?? ""} onChange={(e) => cambiar({ unidad: e.target.value })} className="w-full sm:w-48">
               <option value="">Todas las unidades</option>
@@ -123,7 +122,7 @@ export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, p
         ) : (
           <table className="w-full border-collapse text-sm">
             <thead className="hidden border-b border-hilo md:table-header-group">
-              <tr><Th>Persona</Th><Th>Rol</Th><Th>Unidad</Th><Th className="hidden lg:table-cell">Superior</Th><Th className="hidden xl:table-cell">Herramientas</Th><Th>Estado</Th><Th className="hidden lg:table-cell">Alta</Th><Th><span className="sr-only">Acciones</span></Th></tr>
+              <tr><Th>Persona</Th><Th>Cargo</Th><Th>Unidad</Th><Th className="hidden lg:table-cell">Superior</Th><Th className="hidden xl:table-cell">Herramientas</Th><Th>Estado</Th><Th className="hidden lg:table-cell">Alta</Th><Th><span className="sr-only">Acciones</span></Th></tr>
             </thead>
             <tbody>
               {datos.filas.map((u) => (
@@ -134,9 +133,11 @@ export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, p
                       <span className="block truncate font-mono text-xs text-texto-3">{u.email}</span>
                     </button>
                   </td>
-                  <td className={cx(claseCelda, "hidden md:table-cell")}>{rolNombre(u.rol)}</td>
+                  <td className={cx(claseCelda, "hidden md:table-cell")}>
+                    {nombreDeRol(u.rol)}{u.esAdmin && <span className="ml-1.5 rounded-sm border border-hilo-fuerte px-1 font-mono text-[0.6875rem] text-texto" title="Administra el sistema">Admin</span>}
+                  </td>
                   <td className="col-span-2 text-texto-2 md:table-cell md:h-11 md:px-4 md:align-middle">
-                    <span className="md:hidden">{rolNombre(u.rol)} · </span>{u.unidad ?? <span className="text-texto-3">Sin unidad</span>}
+                    <span className="md:hidden">{nombreDeRol(u.rol)}{u.esAdmin ? " · Admin" : ""} · </span>{u.unidad ?? <span className="text-texto-3">Sin unidad</span>}
                   </td>
                   <td className={cx(claseCelda, "hidden text-texto-2 lg:table-cell")}>{u.manager ?? <span className="text-texto-3">—</span>}</td>
                   <td className={cx(claseCelda, "hidden xl:table-cell")}>
@@ -165,8 +166,6 @@ export function PantallaPersonas({ inicial, opciones: opcionesIniciales, yoId, p
           </table>
         )}
       </Tabla>
-
-      <Roles roles={opciones.roles} adminUsuarios={opciones.adminUsuarios} onCambio={recargarTodo} />
 
       <FormularioPersona
         abierta={editando !== null}
@@ -297,7 +296,8 @@ function CamposPersona({ persona, opciones, yoId, puedeSuplantar, onGuardada, on
 }) {
   const [nombre, setNombre] = useState(persona?.nombre ?? "");
   const [email, setEmail] = useState(persona?.email ?? "");
-  const [rol, setRol] = useState(persona?.rol ?? opciones.roles[0]?.codigo ?? "DI");
+  const [rol, setRol] = useState<string>(persona?.rol ?? ROL_POR_DEFECTO);
+  const [esAdmin, setEsAdmin] = useState(persona?.esAdmin ?? false);
   const [unidad, setUnidad] = useState(persona?.unidadId ? String(persona.unidadId) : "");
   const [superior, setSuperior] = useState(persona?.managerId ? String(persona.managerId) : "");
   const [capacidad, setCapacidad] = useState(persona?.capacidad != null ? String(persona.capacidad) : "");
@@ -306,7 +306,6 @@ function CamposPersona({ persona, opciones, yoId, puedeSuplantar, onGuardada, on
   const [contrasena, setContrasena] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
-  const esAdmin = rol === "admin";
 
   function validar() {
     const e: Record<string, string> = {};
@@ -324,7 +323,7 @@ function CamposPersona({ persona, opciones, yoId, puedeSuplantar, onGuardada, on
     if (!validar()) return;
     setGuardando(true);
     const cuerpo = {
-      nombre, email, rol, unidadId: unidad ? Number(unidad) : null, herramientas: herr,
+      nombre, email, rol, esAdmin, unidadId: unidad ? Number(unidad) : null, herramientas: herr,
       ...(persona ? { managerId: superior ? Number(superior) : null, capacidad } : {}),
       // Solo si cambio algo: asi guardar otros datos no toca los permisos de ingresos.
       ...(persona && !esAdmin && CLAVES_FINANZAS.some((t) => !mismas(fin[t], persona.finanzas[t])) ? { finanzas: Object.fromEntries(CLAVES_FINANZAS.filter((t) => !mismas(fin[t], persona.finanzas[t])).map((t) => [t, fin[t]])) } : {}),
@@ -352,12 +351,10 @@ function CamposPersona({ persona, opciones, yoId, puedeSuplantar, onGuardada, on
       <Campo etiqueta="Nombre" error={errores.nombre}>{(a) => <Entrada {...a} value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={150} autoComplete="off" />}</Campo>
       <Campo etiqueta="Correo" error={errores.email}>{(a) => <Entrada {...a} type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={150} autoComplete="off" />}</Campo>
       <div className="grid grid-cols-2 gap-3">
-        <Campo etiqueta="Rol" ayuda={persona?.id === yoId ? "No puedes quitarte tu propio rol de administración." : undefined}>
+        <Campo etiqueta="Cargo">
           {(a) => (
-            <Selector {...a} value={rol} onChange={(e) => setRol(e.target.value)} disabled={persona?.id === yoId}>
-              <option value="admin">Administración</option>
-              {opciones.roles.map((r) => <option key={r.id} value={r.codigo}>{r.nombre}</option>)}
-              {persona && persona.rol !== "admin" && !opciones.roles.some((r) => r.codigo === persona.rol) && <option value={persona.rol}>{persona.rol}</option>}
+            <Selector {...a} value={rol} onChange={(e) => setRol(e.target.value)}>
+              {opciones.roles.map((r) => <option key={r.codigo} value={r.codigo}>{r.nombre}</option>)}
             </Selector>
           )}
         </Campo>
@@ -370,6 +367,13 @@ function CamposPersona({ persona, opciones, yoId, puedeSuplantar, onGuardada, on
           )}
         </Campo>
       </div>
+      <label className="flex min-h-10 cursor-pointer items-start gap-3 rounded-sm px-1 hover:bg-superficie-2">
+        <input type="checkbox" className="mt-1 size-4 accent-[var(--texto)]" checked={esAdmin} disabled={persona?.id === yoId} onChange={(e) => setEsAdmin(e.target.checked)} />
+        <span>
+          <span className="block">Es administrador</span>
+          <span className="block text-sm text-texto-3">{persona?.id === yoId ? "No puedes quitarte tu propio rol de administración." : "Entra a todo, gestiona personas, unidades y catálogos, y puede ver la aplicación como otra persona. Su cargo no cambia."}</span>
+        </span>
+      </label>
       {persona && (
         <Campo etiqueta="Reporta a" error={errores.superior} ayuda="Quien está por encima hereda las unidades que esta persona lidera.">
           {(a) => (
@@ -415,7 +419,7 @@ function CamposPersona({ persona, opciones, yoId, puedeSuplantar, onGuardada, on
           <div className="flex flex-col gap-2">
             {persona.activo ? (
               <>
-                {puedeSuplantar && <Suplantar persona={persona} />}
+                {puedeSuplantar && !persona.esAdmin && <Suplantar persona={persona} />}
                 <Boton variante="secundario" icono={<LogOut className="size-4" aria-hidden />} onClick={() => onExpulsar(persona)}>Forzar cierre de sesión</Boton>
                 <Boton variante="peligro" icono={<Power className="size-4" aria-hidden />} onClick={() => onDesactivar(persona)}>Desactivar cuenta</Boton>
               </>
