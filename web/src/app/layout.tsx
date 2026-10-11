@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { Sugerencias } from "@/components/ui/sugerencias";
 
 /*
  * Tres voces, como un panel de salidas: Barlow para leer, Barlow Condensed en
@@ -33,7 +34,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: arranqueTema }} />
       </head>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <Sugerencias />
+      </body>
     </html>
   );
 }

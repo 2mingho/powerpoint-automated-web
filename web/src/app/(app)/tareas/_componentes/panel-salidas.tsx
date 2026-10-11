@@ -179,10 +179,10 @@ function Meta({ t, vencida }: { t: TareaDTO; vencida: boolean }) {
       )}
       {t.bloqueaA > 0 && <span className="hidden items-center gap-1 md:inline-flex" title={`Otras ${t.bloqueaA} esperan por esta`}><Link2 aria-hidden className="size-3" /><span className="font-mono cifras">{t.bloqueaA}</span></span>}
       {t.checklistTotal > 0 && (
-        <span className="inline-flex items-center gap-1"><ListChecks aria-hidden className="size-3" /><span className="font-mono cifras">{t.checklistHechos}/{t.checklistTotal}</span></span>
+        <span className="inline-flex items-center gap-1" title={`Pasos: ${t.checklistHechos} de ${t.checklistTotal} completados`}><ListChecks aria-hidden className="size-3" /><span className="font-mono cifras">{t.checklistHechos}/{t.checklistTotal}</span></span>
       )}
-      {t.comentarios > 0 && <span className="inline-flex items-center gap-1"><MessageSquare aria-hidden className="size-3" /><span className="font-mono cifras">{t.comentarios}</span><span className="sr-only">comentarios</span></span>}
-      {t.recurrente && <Repeat aria-label="Recurrente" className="size-3" />}
+      {t.comentarios > 0 && <span className="inline-flex items-center gap-1" title={`${t.comentarios} ${t.comentarios === 1 ? "comentario" : "comentarios"}`}><MessageSquare aria-hidden className="size-3" /><span className="font-mono cifras">{t.comentarios}</span><span className="sr-only">comentarios</span></span>}
+      {t.recurrente && <Repeat aria-label="Se repite: al cerrarla se crea la siguiente" className="size-3" />}
       {t.etiquetas.slice(0, 3).map((e) => (
         <span key={e.id} className="hidden items-center gap-1 lg:inline-flex"><PuntoTono tono={e.color} />{e.nombre}</span>
       ))}

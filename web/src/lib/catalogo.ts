@@ -50,8 +50,8 @@ async function leerPrioridades(): Promise<Prioridad[]> {
  * proceso; otro proceso lo vera en cuanto caduque.
  */
 const CADUCIDAD_MS = 3000;
-const memoEstados = conCaducidad(leerEstados, CADUCIDAD_MS);
-const memoPrioridades = conCaducidad(leerPrioridades, CADUCIDAD_MS);
+const memoEstados = conCaducidad("catalogo:estados", leerEstados, CADUCIDAD_MS);
+const memoPrioridades = conCaducidad("catalogo:prioridades", leerPrioridades, CADUCIDAD_MS);
 export const estados = (): Promise<Estado[]> => memoEstados.leer();
 export const prioridades = (): Promise<Prioridad[]> => memoPrioridades.leer();
 export function invalidarCatalogo() { memoEstados.invalidar(); memoPrioridades.invalidar(); }

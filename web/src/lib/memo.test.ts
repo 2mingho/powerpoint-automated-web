@@ -31,7 +31,7 @@ describe("conCaducidad", () => {
   it("reutiliza el valor hasta que caduca y despues lo vuelve a leer", async () => {
     vi.useFakeTimers();
     const fn = vi.fn(async () => "x");
-    const c = conCaducidad(fn, 1000);
+    const c = conCaducidad("t1", fn, 1000);
     await c.leer(); await c.leer();
     expect(fn).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(1001);
@@ -42,16 +42,26 @@ describe("conCaducidad", () => {
 
   it("invalidar fuerza una lectura nueva al instante", async () => {
     const fn = vi.fn(async () => "x");
-    const c = conCaducidad(fn, 60_000);
+    const c = conCaducidad("t2", fn, 60_000);
     await c.leer();
     c.invalidar();
     await c.leer();
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it("dos copias del modulo con la misma clave comparten la memoria: invalidar en una la vacia en la otra", async () => {
+    const fn = vi.fn(async () => "x");
+    const a = conCaducidad("compartida", fn, 60_000), b = conCaducidad("compartida", fn, 60_000);
+    await a.leer(); await b.leer();
+    expect(fn).toHaveBeenCalledTimes(1);
+    a.invalidar();
+    await b.leer();
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
   it("un fallo no se guarda", async () => {
     let n = 0;
-    const c = conCaducidad(async () => { if (++n === 1) throw new Error("no"); return n; }, 60_000);
+    const c = conCaducidad("t3", async () => { if (++n === 1) throw new Error("no"); return n; }, 60_000);
     await expect(c.leer()).rejects.toThrow();
     await expect(c.leer()).resolves.toBe(2);
   });
